@@ -22,7 +22,8 @@ import {
   calculateAgingDistribution,
   calculatePreviousWeekAging,
   splitAgingByWeek,
-  filterOpenIncidents
+  filterOpenIncidents,
+  buildRemarksTableData,
 } from '@/lib/aging/calculator';
 import { exportAsPng } from '@/lib/report/export';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
@@ -48,10 +49,19 @@ export function AgingReportWorkflow({
     agingInitialState,
     (baseState) => {
       if (initialReportData) {
+        let populatedData = initialReportData;
+        if (!populatedData.remarksTable && initialRoutedIncidents && initialRoutedIncidents.length > 0) {
+          const remTable = buildRemarksTableData(
+            initialRoutedIncidents,
+            new Date(initialReportData.generatedAt || Date.now()),
+            initialReportData.reportPeriod
+          );
+          populatedData = { ...populatedData, remarksTable: remTable };
+        }
         return {
           ...baseState,
           currentStep: 'report' as AgingStep,
-          reportData: initialReportData,
+          reportData: populatedData,
           routedIncidents: initialRoutedIncidents || [],
           incidents: initialRoutedIncidents || [],
         };
@@ -137,6 +147,9 @@ export function AgingReportWorkflow({
     const agingRows = calculateAgingDistribution(currentWeekOpen, REPORT_TEAMS, referenceDate);
     const agingGrandTotal = agingRows.reduce((acc, row) => acc + row.totalAging, 0);
 
+    // Remarks Table for all open aging incidents (limit removed)
+    const remarksTable = buildRemarksTableData(state.routedIncidents, referenceDate, state.reportPeriod);
+
     const reportData: AgingReportData = {
       reportTitle: 'Aging Incident Report',
       reportPeriod: state.reportPeriod || `Week of ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
@@ -146,6 +159,7 @@ export function AgingReportWorkflow({
       agingRows,
       agingGrandTotal,
       previousWeek: state.previousWeekAging,
+      remarksTable,
       teamOrder: REPORT_TEAMS,
     };
 
@@ -172,8 +186,33 @@ export function AgingReportWorkflow({
     dispatch({ type: 'OPEN_DETAIL_MODAL', title, incidentIds });
   }, []);
 
+  // REMARKS ROW UPDATE
+  const handleUpdateRemarksRow = useCallback(
+    (
+      requestId: string,
+      recentUpdate: string,
+      responsibleOrDependency?: string,
+      department?: string,
+      lastUpdated?: string,
+      updatedBy?: string,
+      isUnsaved?: boolean
+    ) => {
+      dispatch({
+        type: 'UPDATE_REMARKS_ROW',
+        requestId,
+        recentUpdate,
+        responsibleOrDependency,
+        department,
+        lastUpdated,
+        updatedBy,
+        isUnsaved,
+      });
+    },
+    []
+  );
+
   return (
-    <main className="app-main">
+    <main className={`app-main ${state.currentStep === 'report' ? 'aging-fullscreen-dashboard' : ''}`}>
       <header className="app-header">
         <div className="header-content">
           <div className="header-brand">
@@ -227,7 +266,7 @@ export function AgingReportWorkflow({
         </div>
       )}
 
-      <div className="app-content">
+      <div className={`app-content ${state.currentStep === 'report' ? 'aging-report-fullscreen' : ''}`}>
         {state.currentStep === 'upload' && (
           <div className="step-content">
             <div className="step-intro">
@@ -321,6 +360,8 @@ export function AgingReportWorkflow({
               data={state.reportData}
               onCellClick={handleCellClick}
               routedIncidents={state.routedIncidents}
+              onUpdateRemarksRow={handleUpdateRemarksRow}
+              accountName={account.name}
             />
           </div>
         )}

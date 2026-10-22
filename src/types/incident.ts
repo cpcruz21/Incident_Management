@@ -19,6 +19,8 @@ export interface ColumnMapping {
   item?: string;
   department: string;
   requester: string;
+  description?: string;
+  recentUpdate?: string;
 }
 
 /** Default column mapping matching ServiceDesk Plus exports */
@@ -37,6 +39,8 @@ export const DEFAULT_COLUMN_MAPPING: ColumnMapping = {
   item: 'Item',
   department: 'Department',
   requester: 'Requester',
+  description: 'Description',
+  recentUpdate: 'Recent Update',
 };
 
 /** Normalized Incident model — the core internal representation */
@@ -54,6 +58,15 @@ export interface Incident {
 
   /** The incident item */
   item?: string;
+
+  /** Requesting department */
+  department?: string;
+
+  /** Incident description / summary */
+  description?: string;
+
+  /** Manual recent update / status notes */
+  recentUpdate?: string;
 
   /** The final team responsible for SLA reporting (after routing) */
   assignedTeam: string;

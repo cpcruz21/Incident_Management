@@ -1,4 +1,3 @@
-
 export interface RoutingMatrixEntry {
   category: string;
   subCategory: string;
@@ -7,7 +6,7 @@ export interface RoutingMatrixEntry {
   autoAssignedGroup: string;
   targetReportTeam: string;
 }
-
+//Routing based on the Auto-assigned group 
 export const GROUP_TO_REPORT_TEAM: Record<string, string> = {
   'ECS HRAD Group': 'ECS ADMIN',
   'ECS HRAD': 'ECS ADMIN',
@@ -22,8 +21,9 @@ export const GROUP_TO_REPORT_TEAM: Record<string, string> = {
   'ECS ADMIN': 'ECS ADMIN',
 };
 
+//Routing based on the Category & Sub-Category & Item
 export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
-  //  Facility & Environment Issues 
+  //Facility & Environment Issues 
   {
     category: 'Facility & Environment Issues',
     subCategory: 'Facility Issue',

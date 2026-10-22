@@ -61,6 +61,17 @@ export type AgingAction =
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'OPEN_DETAIL_MODAL'; title: string; incidentIds: string[] }
   | { type: 'CLOSE_DETAIL_MODAL' }
+  | {
+      type: 'UPDATE_REMARKS_ROW';
+      requestId: string;
+      recentUpdate: string;
+      responsibleOrDependency?: string;
+      department?: string;
+      lastUpdated?: string;
+      updatedBy?: string;
+      isUnsaved?: boolean;
+    }
+  | { type: 'SET_REMARKS_ROWS'; rows: import('@/types/aging').AgingRemarksRow[] }
   | { type: 'LOAD_STORED_REPORT'; data: AgingReportData; incidents?: Incident[] }
   | { type: 'RESET' };
 
@@ -161,6 +172,51 @@ export function agingReducer(state: AgingState, action: AgingAction): AgingState
         ...state,
         detailModal: { isOpen: false, title: '', incidentIds: [] },
       };
+
+    case 'UPDATE_REMARKS_ROW': {
+      if (!state.reportData || !state.reportData.remarksTable) return state;
+      const updatedRows = state.reportData.remarksTable.rows.map((row) => {
+        if (row.requestId === action.requestId) {
+          return {
+            ...row,
+            recentUpdate: action.recentUpdate,
+            ...(action.responsibleOrDependency !== undefined
+              ? { responsibleOrDependency: action.responsibleOrDependency }
+              : {}),
+            ...(action.department !== undefined ? { department: action.department } : {}),
+            ...(action.lastUpdated !== undefined ? { lastUpdated: action.lastUpdated } : {}),
+            ...(action.updatedBy !== undefined ? { updatedBy: action.updatedBy } : {}),
+            ...(action.isUnsaved !== undefined ? { isUnsaved: action.isUnsaved } : {}),
+          };
+        }
+        return row;
+      });
+      return {
+        ...state,
+        reportData: {
+          ...state.reportData,
+          remarksTable: {
+            ...state.reportData.remarksTable,
+            rows: updatedRows,
+          },
+        },
+      };
+    }
+
+    case 'SET_REMARKS_ROWS': {
+      if (!state.reportData || !state.reportData.remarksTable) return state;
+      return {
+        ...state,
+        reportData: {
+          ...state.reportData,
+          remarksTable: {
+            ...state.reportData.remarksTable,
+            rows: action.rows,
+            totalRecords: action.rows.length,
+          },
+        },
+      };
+    }
 
     case 'LOAD_STORED_REPORT':
       return {

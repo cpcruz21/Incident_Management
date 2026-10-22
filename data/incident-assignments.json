@@ -1,0 +1,66 @@
+{
+  "IR-53184": {
+    "requestId": "IR-53184",
+    "department": "ECS ISS",
+    "responsibleOrDependency": "ECS HRAD",
+    "recentUpdate": "10/19 - Same Update\n10/13 -As per Sir Jay, the matter is currently on hold due to two factors,\nA comprehensive plan for upgrading all UPS units is currently being developed and is pending finalization.",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-54781": {
+    "requestId": "IR-54781",
+    "department": "ECS ISS",
+    "responsibleOrDependency": "ISS MT",
+    "recentUpdate": "10/19 - Same Update\n9/24- As per Sir Jun, pending action is on ALGO’s side and no further intervention is required from ISS.",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-55020": {
+    "requestId": "IR-55020",
+    "department": "Not Assigned",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "As per vina, still monitoring the production testing.",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-55641": {
+    "requestId": "IR-55641",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "SDS",
+    "recentUpdate": "10/19 - Same update\n\n9/29 - As per Ms. Karla, The deployment is still pending with Sir Edmund of MHSI.",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-55897": {
+    "requestId": "IR-55897",
+    "department": "ECS Field Servicing",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "As per Sir Cres, the depot setup is still ongoing",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56064": {
+    "requestId": "IR-56064",
+    "department": "ECS POS Repair",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "As per Sir Cres, The Deployment of the fix in Production is on October 20, 2026",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56149": {
+    "requestId": "IR-56149",
+    "department": "ECS ISS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "As Sir Dennis, under the current ISS operations, tickets will remain on hold until the issues are fully resolved.",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56448": {
+    "requestId": "IR-56448",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "As per Sir Rundel, waiting for the replacement parts from Lenovo.",
+    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "updatedBy": "SMAC"
+  }
+}

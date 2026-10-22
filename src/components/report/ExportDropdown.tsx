@@ -49,7 +49,7 @@ export function ExportDropdown({
         exportToPDF();
         break;
       case 'xls':
-        exportToXLS(incidents, `${filename}.xls`);
+        exportToXLS(incidents, reportData, `${filename}.xls`);
         break;
       case 'xlsx':
         exportToXLSX(incidents, reportData, `${filename}.xlsx`);

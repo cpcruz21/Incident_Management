@@ -11,7 +11,7 @@ export const REPORT_TEAMS = [
   'ECS ISMS Support',
 ];
 
-// Default routing rules
+// Default routing rules — ordered by priority (lower number = checked first)
 export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
   {
     id: 'facility-to-admin',
@@ -27,10 +27,34 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     enabled: true,
   },
   {
+    id: 'hardware-to-iss',
+    name: 'Hardware → ECS ISS',
+    description: 'Hardware-related incidents are always assigned to ECS ISS',
+    priority: 2,
+    conditions: {
+      categories: ['Hardware'],
+      categoryMatch: 'contains',
+    },
+    assignedTeam: 'ECS ISS',
+    enabled: true,
+  },
+  {
+    id: 'network-to-iss',
+    name: 'Network → ECS ISS',
+    description: 'Network-related incidents are always assigned to ECS ISS',
+    priority: 3,
+    conditions: {
+      categories: ['Network'],
+      categoryMatch: 'contains',
+    },
+    assignedTeam: 'ECS ISS',
+    enabled: true,
+  },
+  {
     id: 'hr-routing',
     name: 'HR Issues → ECS HR',
     description: 'HR-related incidents are assigned to ECS HR',
-    priority: 2,
+    priority: 4,
     conditions: {
       categories: ['HR', 'Human Resource'],
       categoryMatch: 'contains',
@@ -42,7 +66,7 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     id: 'isms-routing',
     name: 'ISMS → ECS ISMS Support',
     description: 'ISMS/Security incidents are assigned to ECS ISMS Support',
-    priority: 3,
+    priority: 5,
     conditions: {
       categories: ['ISMS', 'Security', 'Information Security'],
       categoryMatch: 'contains',
@@ -54,7 +78,7 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     id: 'sds-routing',
     name: 'SDS → ECS SDS',
     description: 'SDS-related incidents are assigned to ECS SDS',
-    priority: 4,
+    priority: 6,
     conditions: {
       categories: ['SDS', 'Service Desk'],
       categoryMatch: 'contains',
@@ -66,7 +90,7 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     id: 'psd-routing',
     name: 'PSD → ECS PSD',
     description: 'PSD-related incidents are assigned to ECS PSD',
-    priority: 5,
+    priority: 7,
     conditions: {
       categories: ['PSD', 'Professional Service'],
       categoryMatch: 'contains',

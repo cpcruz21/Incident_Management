@@ -32,7 +32,36 @@ import type { StoredReport } from '@/lib/storage/report-storage';
 
 export default function HomePage() {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
+  const [currentAccount, setCurrentAccount] = useState<Account | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('smac_active_session');
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch {}
+    }
+    return null;
+  });
+
+  const handleLogin = useCallback((account: Account) => {
+    setCurrentAccount(account);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('smac_active_session', JSON.stringify(account));
+      } catch {}
+    }
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setCurrentAccount(null);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('smac_active_session');
+      } catch {}
+    }
+  }, []);
+
   const [activeView, setActiveView] = useState<DashboardView>('dashboard');
   const [agingStoredReport, setAgingStoredReport] = useState<{
     data: AgingReportData;
@@ -174,7 +203,7 @@ export default function HomePage() {
 
   // 1) Not logged in → PIN screen
   if (!currentAccount) {
-    return <PinLogin onLogin={setCurrentAccount} />;
+    return <PinLogin onLogin={handleLogin} />;
   }
 
   // 2) Dashboard
@@ -185,7 +214,7 @@ export default function HomePage() {
         onSelectReport={handleSelectReport}
         onOpenStoredReport={handleOpenStoredReport}
         onLogout={() => {
-          setCurrentAccount(null);
+          handleLogout();
           setActiveView('dashboard');
           dispatch({ type: 'RESET' });
           setAgingStoredReport(null);
@@ -207,7 +236,7 @@ export default function HomePage() {
             <div className="db-brand">
               <span className="db-brand-title">📊 Weekly SLA Report Generator</span>
             </div>
-            <button className="header-user-badge" onClick={() => setCurrentAccount(null)}>
+            <button className="header-user-badge" onClick={handleLogout}>
               👤 {currentAccount.name}
               {isAdmin(currentAccount) && <span className="badge-role">Admin</span>}
             </button>
@@ -287,7 +316,7 @@ export default function HomePage() {
             {/* Logged-in user badge */}
             <button
               className="header-user-badge"
-              onClick={() => setCurrentAccount(null)}
+              onClick={handleLogout}
               title="Click to log out"
             >
               👤 {currentAccount.name}

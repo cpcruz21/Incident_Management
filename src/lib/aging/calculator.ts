@@ -6,15 +6,29 @@ import type {
   AgingSLARow,
   AgingSLATotals,
   PreviousWeekAging,
+  AgingRemarksRow,
+  RemarksTableData,
 } from '@/types/aging';
 import { AGING_BUCKET_ORDER } from '@/types/aging';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
 
 
+// Helper to safely convert any Date, string, or number to a valid Date object
+export function toValidDate(val: unknown): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const d = new Date(val as string | number);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Determine which aging bucket an incident falls into based on its age in calendar days
-function classifyAge(createdTime: Date, referenceDate: Date): AgingBucket {
-  const diffMs = referenceDate.getTime() - createdTime.getTime();
+function classifyAge(createdTime: unknown, referenceDate: unknown): AgingBucket {
+  const created = toValidDate(createdTime);
+  const ref = toValidDate(referenceDate) || new Date();
+  if (!created) return 'sameday';
+
+  const diffMs = ref.getTime() - created.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
   if (diffDays > 30) return '>1month';
@@ -243,7 +257,7 @@ export function splitAgingByWeek(
 ): { currentWeek: Incident[]; previousWeek: Incident[] } {
   let maxDate = new Date(0);
   for (const inc of incidents) {
-    const d = inc.createdTime;
+    const d = toValidDate(inc.createdTime);
     if (d && d > maxDate) maxDate = d;
   }
 
@@ -268,7 +282,7 @@ export function splitAgingByWeek(
   const previousWeek: Incident[] = [];
 
   for (const inc of incidents) {
-    const d = inc.createdTime;
+    const d = toValidDate(inc.createdTime);
     if (!d) continue;
 
     // If created before the end of current week and still not completed, it's aging in current week
@@ -282,3 +296,206 @@ export function splitAgingByWeek(
 
   return { currentWeek, previousWeek };
 }
+
+/** Calculate exact aging days between incident creation date and reference date */
+export function calculateAgingDays(createdTime: unknown, referenceDate: unknown = new Date()): number {
+  const created = toValidDate(createdTime);
+  const ref = toValidDate(referenceDate) || new Date();
+  if (!created) return 0;
+  const diffMs = ref.getTime() - created.getTime();
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+/**
+ * Format Responsible or Dependency based on routing final assigned team + ticket context.
+ * Returns the sub-team name (ISS MT, POS DB, SDS, etc.) — not the ECS-level team.
+ *
+ * Mapping:
+ *   ECS ISS          → ISS Binondo (if "binondo" in context) or ISS MT
+ *   ECS SDS          → POS DB (if POS/terminal in context) or SDS
+ *   ECS ADMIN        → ECS HRAD
+ *   ECS HR           → HR
+ *   ECS ISMS Support → ISMS Support
+ *   ECS PSD          → PSD
+ */
+export function formatResponsibleOrDependency(incident: Incident): string {
+  const assignedTeam = incident.assignedTeam || incident.sourceTeam || 'Not Assigned';
+
+  // Build context string from all available text fields for sub-team detection
+  const allText = [
+    incident.sourceTeam,
+    incident.category,
+    incident.subCategory,
+    incident.description,
+    incident.department,
+    String(incident.rawData?.['Description'] || ''),
+    String(incident.rawData?.['Subject'] || ''),
+    String(incident.rawData?.['Location'] || ''),
+    String(incident.rawData?.['Branch'] || ''),
+    String(incident.rawData?.['Site'] || ''),
+    String(incident.rawData?.['Technician'] || ''),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  // Route to sub-team based on assigned ECS team + context
+  switch (assignedTeam) {
+    case 'ECS ISS':
+      return allText.includes('binondo') ? 'ISS Binondo' : 'ISS MT';
+
+    case 'ECS SDS':
+      // If POS-related content, assign to POS DB; otherwise SDS
+      if (allText.includes('pos') || allText.includes('terminal'))
+        return 'POS DB';
+      return 'SDS';
+
+    case 'ECS ADMIN':
+      return 'ECS HRAD';
+
+    case 'ECS HR':
+      return 'HR';
+
+    case 'ECS ISMS Support':
+      return 'ISMS Support';
+
+    case 'ECS PSD':
+      return 'PSD';
+
+    default:
+      break;
+  }
+
+  // Handle legacy / unmapped source team names
+  const lower = assignedTeam.toLowerCase();
+  if (lower.includes('iss')) return allText.includes('binondo') ? 'ISS Binondo' : 'ISS MT';
+  if (lower.includes('pos') || lower === 'pos db') return 'POS DB';
+  if (lower === 'sds') return 'SDS';
+  if (lower === 'hrad' || lower === 'hr admin' || lower === 'admin') return 'ECS HRAD';
+  if (lower === 'isms support') return 'ISMS Support';
+  if (lower === 'psd') return 'PSD';
+  if (lower === 'hr') return 'HR';
+
+  return assignedTeam;
+}
+
+/**
+ * Build the complete Remarks Table data for all open aging incidents (limit removed for comprehensive live checking)
+ */
+export function buildRemarksTableData(
+  incidents: Incident[],
+  referenceDate: unknown = new Date(),
+  reportPeriod?: string,
+  minAgingDays: number = 0
+): RemarksTableData {
+  const refDate = toValidDate(referenceDate) || new Date();
+
+  // Only open incidents from the raw dataset are included (excluding CABS or RRG)
+  const openIncidents = filterOpenIncidents(incidents).filter((inc) => {
+    const rawStr = JSON.stringify(inc.rawData || {}).toUpperCase();
+    const metaStr = `${inc.category || ''} ${inc.subCategory || ''} ${inc.department || ''} ${inc.description || ''}`.toUpperCase();
+    if (rawStr.includes('CABS') || rawStr.includes('RRG') || metaStr.includes('CABS') || metaStr.includes('RRG')) {
+      return false;
+    }
+    return true;
+  });
+
+  // All open aging incidents sorted by aging days descending (no >= 8 restriction, counted accordingly)
+  const eligible = openIncidents
+    .map((inc) => {
+      const created = toValidDate(inc.createdTime) || refDate;
+      const days = calculateAgingDays(created, refDate);
+      return { inc, days };
+    })
+    .filter((item) => item.days >= minAgingDays)
+    .sort((a, b) => b.days - a.days); // Sort descending by aging days
+
+  const rows: AgingRemarksRow[] = eligible.map(({ inc, days }) => {
+    // 1. Request ID
+    const requestId = inc.requestId;
+
+    // 2. Department
+    const department =
+      inc.department ||
+      String(inc.rawData['Department'] || inc.rawData['department'] || inc.rawData['Dept'] || '').trim() ||
+      'Not Assigned';
+
+    // 3. Category
+    const category = inc.category || '';
+
+    // 4. Sub Category
+    const subCategory =
+      inc.subCategory ||
+      String(inc.rawData['Sub Category'] || inc.rawData['Subcategory'] || inc.rawData['subcategory'] || '').trim();
+
+    // 5. Description
+    const description =
+      inc.description ||
+      String(
+        inc.rawData['Description'] ||
+        inc.rawData['description'] ||
+        inc.rawData['Subject'] ||
+        inc.rawData['subject'] ||
+        inc.rawData['Summary'] ||
+        ''
+      ).trim();
+
+    // 6. Aging Days
+    const agingDays = days;
+
+    // 7. Recent Update (preserved if exists in uploaded data)
+    const recentUpdate =
+      inc.recentUpdate ||
+      String(
+        inc.rawData['Recent Update'] ||
+        inc.rawData['recent update'] ||
+        inc.rawData['Remarks'] ||
+        inc.rawData['remarks'] ||
+        inc.rawData['Latest Update'] ||
+        ''
+      ).trim();
+
+    // 8. Responsible or Dependency (automatically based on routing final technician)
+    const responsibleOrDependency = formatResponsibleOrDependency(inc);
+
+    return {
+      requestId,
+      department,
+      category,
+      subCategory,
+      description,
+      agingDays,
+      recentUpdate,
+      responsibleOrDependency,
+    };
+  });
+
+  // Calculate Header Dates matching Screenshot 1
+  const createdOnFormatted = refDate.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  });
+
+  const toDate = new Date(refDate);
+  const fromDate = new Date(refDate);
+  fromDate.setDate(fromDate.getDate() - 7);
+
+  const formatWithTime = (d: Date) => {
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const hh = '13';
+    const min = '00';
+    return `${mm}-${dd}-${yyyy} ${hh}:${min}`;
+  };
+
+  return {
+    createdOn: createdOnFormatted,
+    periodFrom: formatWithTime(fromDate),
+    periodTo: formatWithTime(toDate),
+    totalRecords: rows.length,
+    rows,
+  };
+}
+

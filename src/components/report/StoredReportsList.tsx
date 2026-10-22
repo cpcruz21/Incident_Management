@@ -37,10 +37,17 @@ export function StoredReportsList({ onOpenReport }: StoredReportsListProps) {
             📋
           </div>
           <div>
-            <h3 className="m-0 text-lg font-bold text-white tracking-tight">
+            <p
+              className="m-0 text-[15px] font-bold uppercase tracking-[.12em] leading-5"
+              style={{ color: "rgba(254, 149, 87, 1)" }}
+            >
               Stored Reports Archive
-            </h3>
-            <p className="m-0 text-xs text-slate-300">
+            </p>
+
+            <p
+              className="m-0 text-base leading-5"
+              style={{ color: "rgba(245, 250, 247, 1)" }}
+            >
               Access and view previously generated reports here.
             </p>
           </div>
@@ -77,7 +84,7 @@ export function StoredReportsList({ onOpenReport }: StoredReportsListProps) {
                         : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                         }`}
                     >
-                      {isWeekly ? 'Weekly SLA' : 'Aging Trend'}
+                      {isWeekly ? 'Weekly SLA' : 'First Response & Resolution SLA'}
                     </span>
                     <span className="text-[11px] text-slate-400" title={report.savedAt}>
                       {report.savedAtFormatted}

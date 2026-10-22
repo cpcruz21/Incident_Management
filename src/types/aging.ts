@@ -78,6 +78,30 @@ export interface PreviousWeekAging {
   grandTotal: number | null;
 }
 
+/** A single row in the Remarks Table */
+export interface AgingRemarksRow {
+  requestId: string;
+  department: string;
+  category: string;
+  subCategory: string;
+  description: string;
+  agingDays: number;
+  recentUpdate: string;
+  responsibleOrDependency: string;
+  lastUpdated?: string;
+  updatedBy?: string;
+  isUnsaved?: boolean;
+}
+
+/** Remarks Table complete metadata and rows */
+export interface RemarksTableData {
+  createdOn: string;
+  periodFrom: string;
+  periodTo: string;
+  totalRecords: number;
+  rows: AgingRemarksRow[];
+}
+
 /** Complete Aging Report data combining all tables */
 export interface AgingReportData {
   reportTitle: string;
@@ -94,6 +118,9 @@ export interface AgingReportData {
 
   /** Previous week totals for comparison */
   previousWeek: PreviousWeekAging;
+
+  /** Remarks Table data for all open aging incidents */
+  remarksTable?: RemarksTableData;
 
   /** Ordered list of teams */
   teamOrder: string[];

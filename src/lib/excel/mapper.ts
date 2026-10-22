@@ -18,8 +18,10 @@ export function autoDetectMapping(columns: string[]): Partial<ColumnMapping> {
     { field: 'category', patterns: [/^category$/i, /incident\s*category/i, /^type$/i] },
     { field: 'subCategory', patterns: [/sub\s*category/i, /^subcategory$/i, /sub-category/i, /sub_category/i] },
     { field: 'item', patterns: [/^item$/i, /^items$/i, /item\s*name/i, /asset\s*item/i, /^item\s*description$/i] },
-    { field: 'department', patterns: [/department/i, /dept/i] },
+    { field: 'department', patterns: [/department/i, /^dept$/i, /^dept\b/i] },
     { field: 'requester', patterns: [/requester/i, /requested\s*by/i, /caller/i, /reported\s*by/i] },
+    { field: 'description', patterns: [/^description$/i, /incident\s*description/i, /^subject$/i, /^summary$/i, /short\s*description/i, /^details$/i] },
+    { field: 'recentUpdate', patterns: [/^recent\s*update/i, /^latest\s*update/i, /^remarks$/i, /^update$/i, /^notes$/i] },
   ];
 
   for (const col of columns) {
@@ -90,6 +92,23 @@ export function mapRowToIncident(
   const subCategory = mapping.subCategory ? String(row[mapping.subCategory] || '').trim() : undefined;
   const item = mapping.item ? String(row[mapping.item] || '').trim() : undefined;
 
+  // Extract department
+  const department = mapping.department ? String(row[mapping.department] || '').trim() : undefined;
+
+  // Extract description (from mapped column or scan row keys)
+  let description = mapping.description ? String(row[mapping.description] || '').trim() : '';
+  if (!description) {
+    const descKey = Object.keys(row).find((k) => /^(description|subject|summary|incident\s*description)$/i.test(k.trim()));
+    if (descKey) description = String(row[descKey] || '').trim();
+  }
+
+  // Extract recent update if present in raw row
+  let recentUpdate = mapping.recentUpdate ? String(row[mapping.recentUpdate] || '').trim() : '';
+  if (!recentUpdate) {
+    const updateKey = Object.keys(row).find((k) => /^(recent\s*update|latest\s*update|remarks)$/i.test(k.trim()));
+    if (updateKey) recentUpdate = String(row[updateKey] || '').trim();
+  }
+
   const createdTime = parseDate(row[mapping.createdTime]);
   const respondedDate = parseDate(row[mapping.respondedDate]);
   const completedTime = parseDate(row[mapping.completedTime]);
@@ -110,6 +129,9 @@ export function mapRowToIncident(
     category,
     subCategory: subCategory || undefined,
     item: item || undefined,
+    department: department || undefined,
+    description: description || undefined,
+    recentUpdate: recentUpdate || undefined,
     assignedTeam: technician,
     routingReason: 'Default assignment',
     wasReassigned: false,

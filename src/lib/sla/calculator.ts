@@ -1,6 +1,7 @@
 import type { Incident } from '@/types/incident';
 import type { TeamSLAResult, SLAReport, WeeklyCompletion } from '@/types/sla';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
+import { toValidDate } from '@/lib/aging/calculator';
 
 
 export type PriorityLevel = 'P1' | 'P2' | 'P3' | 'P4';
@@ -160,18 +161,19 @@ export function evaluateFirstResponseOverdue(
   }
 
   // 2. Compute from timestamps using SLA matrix
-  if (!inc.createdTime) return false;
+  const created = toValidDate(inc.createdTime);
+  if (!created) return false;
 
   const thresholdMins = getSLAThreshold(inc.priority, 'firstResponse');
-  const endDate = inc.respondedDate || inc.completedTime || referenceDate;
+  const end = toValidDate(inc.respondedDate) || toValidDate(inc.completedTime) || toValidDate(referenceDate) || new Date();
   let elapsedMins = 0;
 
   if (teamName === 'ECS ISS') {
     // 24/7 SLA
-    elapsedMins = (endDate.getTime() - inc.createdTime.getTime()) / 60000;
+    elapsedMins = (end.getTime() - created.getTime()) / 60000;
   } else {
     // Office Hours (8:30 AM - 5:30 PM, Mon-Fri)
-    elapsedMins = getBusinessMinutes(inc.createdTime, endDate);
+    elapsedMins = getBusinessMinutes(created, end);
   }
 
   return elapsedMins > thresholdMins;
@@ -202,11 +204,12 @@ export function evaluateResolutionOverdue(
   }
 
   // 2. Compute from timestamps using SLA matrix (24/7 calendar elapsed minutes)
-  if (!inc.createdTime) return false;
+  const created = toValidDate(inc.createdTime);
+  if (!created) return false;
 
   const thresholdMins = getSLAThreshold(inc.priority, 'resolution');
-  const endDate = inc.completedTime || referenceDate;
-  const elapsedMins = (endDate.getTime() - inc.createdTime.getTime()) / 60000;
+  const end = toValidDate(inc.completedTime) || toValidDate(referenceDate) || new Date();
+  const elapsedMins = (end.getTime() - created.getTime()) / 60000;
 
   return elapsedMins > thresholdMins;
 }

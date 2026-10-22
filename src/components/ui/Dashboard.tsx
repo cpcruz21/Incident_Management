@@ -171,7 +171,6 @@ export function Dashboard({ account, onSelectReport, onOpenStoredReport, onLogou
                   <span>Open report</span><i data-lucide="arrow-right" style={{ width: 16, height: 16 }}></i>
                 </button>
               </article>
-
             </div>
 
             {/* Stored Reports Section */}
@@ -186,6 +185,13 @@ export function Dashboard({ account, onSelectReport, onOpenStoredReport, onLogou
             </div>
           </section>
         </main>
+        <footer className="mt-8 border-t border-slate-600/60 px-6 py-4">
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="m-0 text-[10px] leading-4 text-slate-500">
+              ©SMAC-S 2026.
+            </p>
+          </div>
+        </footer>
       </div>
     </>
   );
