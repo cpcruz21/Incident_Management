@@ -3,6 +3,8 @@ import { toPng } from 'html-to-image';
 import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingReportData } from '@/types/aging';
+import type { MonthlyReportData } from '@/types/monthly';
+import { ALL_TICKETS_COLUMNS, CLOSED_TICKETS_COLUMNS, getIncidentMonthlyValue } from '@/types/monthly';
 
 export function buildExtractedIncidentRows(incidents: Incident[]): Record<string, unknown>[] {
   return incidents.map((inc) => {
@@ -28,6 +30,80 @@ export function buildExtractedIncidentRows(incidents: Incident[]): Record<string
   });
 }
 
+function appendMonthlySheets(
+  wb: XLSX.WorkBook,
+  reportData: MonthlyReportData,
+  fallbackIncidents: Incident[]
+): void {
+  // 1. SLA Dashboard sheet
+  const slaAOA: (string | number)[][] = [
+    ['SLA'],
+    [],
+    ['', 'KPI', 'Count of Passed', 'Total IRs', 'Percentage Value Result'],
+    ...reportData.kpis.map((kpi) => [
+      kpi.label,
+      `${kpi.targetPercent}%`,
+      kpi.countOfPassed,
+      kpi.totalIRs,
+      `${kpi.percentageResult.toFixed(2)}%`,
+    ]),
+    [],
+    ['Technician', 'First Response', '', '', '', 'Resolution Time', '', '', ''],
+    ['', 'Total # of IRs', 'Failed', 'Passed', 'SLA Pass Rate', 'Total # of IRs', 'Failed', 'Passed', 'SLA Pass Rate'],
+    ...reportData.technicianSLA.map((r) => [
+      r.technician,
+      r.frTotal,
+      r.frFailed,
+      r.frPassed,
+      r.frPassRate !== null ? `${r.frPassRate.toFixed(2)}%` : '—',
+      r.rtTotal,
+      r.rtFailed,
+      r.rtPassed,
+      r.rtPassRate !== null ? `${r.rtPassRate.toFixed(2)}%` : '—',
+    ]),
+    [
+      'Total',
+      reportData.technicianTotals.frTotal,
+      reportData.technicianTotals.frFailed,
+      reportData.technicianTotals.frPassed,
+      '',
+      reportData.technicianTotals.rtTotal,
+      reportData.technicianTotals.rtFailed,
+      reportData.technicianTotals.rtPassed,
+      '',
+    ],
+    [],
+    ['Remarks for overall result'],
+    ...reportData.remarks.split('\n').map((line) => [line]),
+  ];
+  const wsSLA = XLSX.utils.aoa_to_sheet(slaAOA);
+  XLSX.utils.book_append_sheet(wb, wsSLA, 'SLA');
+
+  const makeSheet = (incidents: Incident[], columns: readonly string[]) => {
+    const rows = incidents.map((inc) => {
+      const obj: Record<string, string> = {};
+      for (const col of columns) {
+        obj[col.replace(/\n/g, ' ')] = getIncidentMonthlyValue(inc, col);
+      }
+      return obj;
+    });
+    return XLSX.utils.json_to_sheet(rows);
+  };
+
+  const allInc = reportData.allTickets || fallbackIncidents;
+  const closedInc = reportData.closedTickets || allInc.filter((i) => (i.requestStatus || '').toLowerCase().includes('clos'));
+  const acceptableFR = allInc.filter((i) => !i.firstResponseOverdue);
+
+  // 2. All Tickets sheet
+  XLSX.utils.book_append_sheet(wb, makeSheet(allInc, ALL_TICKETS_COLUMNS), 'All Tickets');
+
+  // 3. Closed Tickets sheet
+  XLSX.utils.book_append_sheet(wb, makeSheet(closedInc, CLOSED_TICKETS_COLUMNS), 'Closed Tickets');
+
+  // 4. Acceptable First Response sheet
+  XLSX.utils.book_append_sheet(wb, makeSheet(acceptableFR, ALL_TICKETS_COLUMNS), 'Acceptable First Response');
+}
+
 function downloadBlob(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -42,10 +118,17 @@ function downloadBlob(content: string, filename: string, mimeType: string): void
 
 export function exportToXLSX(
   incidents: Incident[],
-  reportData?: WeeklyReportData | AgingReportData | null,
+  reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null,
   filename: string = 'Extracted_Incidents.xlsx'
 ): void {
   const wb = XLSX.utils.book_new();
+
+  // If Monthly Report Data
+  if (reportData && 'technicianSLA' in reportData) {
+    appendMonthlySheets(wb, reportData as MonthlyReportData, incidents);
+    XLSX.writeFile(wb, filename);
+    return;
+  }
 
   // If Remarks Table exists in an Aging Report, place it as the first sheet
   if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
@@ -92,10 +175,16 @@ export function exportToXLSX(
  */
 export function exportToXLS(
   incidents: Incident[],
-  reportData?: WeeklyReportData | AgingReportData | null,
+  reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null,
   filename: string = 'Extracted_Incidents.xls'
 ): void {
   const wb = XLSX.utils.book_new();
+
+  if (reportData && 'technicianSLA' in reportData) {
+    appendMonthlySheets(wb, reportData as MonthlyReportData, incidents);
+    XLSX.writeFile(wb, filename, { bookType: 'biff8' });
+    return;
+  }
 
   if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
     const rt = reportData.remarksTable;
@@ -153,7 +242,7 @@ export function exportToCSV(
  */
 export function exportToHTML(
   incidents: Incident[],
-  reportData?: WeeklyReportData | AgingReportData | null,
+  reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null,
   filename: string = 'Extracted_Incidents.html'
 ): void {
   const rows = buildExtractedIncidentRows(incidents);
@@ -161,7 +250,42 @@ export function exportToHTML(
   const htmlTable = XLSX.utils.sheet_to_html(ws);
 
   let remarksHtml = '';
-  if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
+  if (reportData && 'technicianSLA' in reportData) {
+    const md = reportData as MonthlyReportData;
+    remarksHtml = `
+    <div style="margin-bottom: 30px;">
+      <h2 style="background: #fff2cc; color: #000; padding: 8px 16px; border: 1px solid #d6b656; font-size: 18px; margin-bottom: 16px; text-align: center;">SLA Summary</h2>
+      
+      <table style="border-collapse: collapse; max-width: 550px; margin-bottom: 24px; font-size: 13px;">
+        <thead>
+          <tr style="background: #d9e1f2;">
+            <th style="border: 1px solid #b4c6e7; padding: 6px 12px;"></th>
+            <th style="border: 1px solid #b4c6e7; padding: 6px 12px;">KPI</th>
+            <th style="border: 1px solid #b4c6e7; padding: 6px 12px;">Count of Passed</th>
+            <th style="border: 1px solid #b4c6e7; padding: 6px 12px;">Total IRs</th>
+            <th style="border: 1px solid #b4c6e7; padding: 6px 12px;">Percentage Value Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${md.kpis.map((k) => `
+            <tr>
+              <td style="border: 1px solid #d1d5db; padding: 6px 12px; font-weight: bold;">${k.label}</td>
+              <td style="border: 1px solid #d1d5db; padding: 6px 12px; text-align: center; color: #0066cc; font-weight: bold;">${k.targetPercent}%</td>
+              <td style="border: 1px solid #d1d5db; padding: 6px 12px; text-align: center; font-weight: bold;">${k.countOfPassed}</td>
+              <td style="border: 1px solid #d1d5db; padding: 6px 12px; text-align: center; font-weight: bold;">${k.totalIRs}</td>
+              <td style="border: 1px solid #d1d5db; padding: 6px 12px; text-align: center; font-weight: bold; color: ${k.percentageResult >= k.targetPercent ? '#16a34a' : '#dc2626'};">${k.percentageResult.toFixed(2)}%</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <h3 style="color: #1f4e79; margin-bottom: 8px;">Remarks for overall result</h3>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; line-height: 1.6;">
+        ${md.remarks.split('\n').map((line) => line ? `<p style="margin: 4px 0;">${line}</p>` : '<br/>').join('')}
+      </div>
+    </div>
+    `;
+  } else if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
     const rt = reportData.remarksTable;
     remarksHtml = `
     <div style="margin-bottom: 30px;">

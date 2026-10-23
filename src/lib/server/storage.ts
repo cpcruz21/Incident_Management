@@ -7,6 +7,7 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const MAPPINGS_FILE = path.join(DATA_DIR, 'department-mappings.json');
 const ASSIGNMENTS_FILE = path.join(DATA_DIR, 'incident-assignments.json');
 const AGING_REPORTS_FILE = path.join(DATA_DIR, 'aging-reports.json');
+const MONTHLY_REPORTS_FILE = path.join(DATA_DIR, 'monthly-reports.json');
 
 import {
   DepartmentMappingConfig,
@@ -183,3 +184,32 @@ export function saveServerStoredAgingReport(report: Record<string, unknown>): vo
   const updated = [{ ...report, id: reportId, serverSavedAt: new Date().toISOString() }, ...filtered];
   fs.writeFileSync(AGING_REPORTS_FILE, JSON.stringify(updated, null, 2), 'utf-8');
 }
+
+/**
+ * Get server-persisted monthly reports
+ */
+export function getServerStoredMonthlyReports(): Record<string, unknown>[] {
+  ensureDataDir();
+  try {
+    if (fs.existsSync(MONTHLY_REPORTS_FILE)) {
+      const content = fs.readFileSync(MONTHLY_REPORTS_FILE, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (error) {
+    console.error('Error reading stored monthly reports:', error);
+  }
+  return [];
+}
+
+/**
+ * Save server-persisted monthly report
+ */
+export function saveServerStoredMonthlyReport(report: Record<string, unknown>): void {
+  ensureDataDir();
+  const existing = getServerStoredMonthlyReports();
+  const reportId = String(report.id || `monthly-${Date.now()}`);
+  const filtered = existing.filter((r) => String(r.id) !== reportId);
+  const updated = [{ ...report, id: reportId, serverSavedAt: new Date().toISOString() }, ...filtered];
+  fs.writeFileSync(MONTHLY_REPORTS_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+}
+

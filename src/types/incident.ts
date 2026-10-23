@@ -98,6 +98,10 @@ export interface Incident {
 
   /** Original raw data for traceability */
   rawData: RawIncidentRow;
+
+  /** Revised Root Cause adjustments (admin manual input) */
+  revisedRootCauseType?: string;
+  revisedIdentifiedRootCause?: string;
 }
 
 /** Validation result for a single incident */

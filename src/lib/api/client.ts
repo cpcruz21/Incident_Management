@@ -135,3 +135,31 @@ export async function persistServerAgingReport(report: Record<string, unknown>):
   }
 }
 
+export async function fetchServerMonthlyReports(): Promise<Record<string, unknown>[]> {
+  try {
+    const res = await fetch('/api/reports/monthly');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.reports) {
+        return data.reports;
+      }
+    }
+  } catch (error) {
+    console.warn('API fetchServerMonthlyReports failed:', error);
+  }
+  return [];
+}
+
+export async function persistServerMonthlyReport(report: Record<string, unknown>): Promise<boolean> {
+  try {
+    const res = await fetch('/api/reports/monthly', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+

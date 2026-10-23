@@ -6,18 +6,19 @@
 import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingReportData } from '@/types/aging';
+import type { MonthlyReportData } from '@/types/monthly';
 
 const STORAGE_KEY = 'smac_incident_stored_reports';
 
 export interface StoredReport {
   id: string;
-  type: 'weekly' | 'aging';
+  type: 'weekly' | 'aging' | 'monthly';
   title: string;
   period: string;
   savedAt: string; // ISO date string
   savedAtFormatted: string;
   author?: string;
-  reportData: WeeklyReportData | AgingReportData;
+  reportData: WeeklyReportData | AgingReportData | MonthlyReportData;
   routedIncidents?: Incident[];
 }
 
@@ -48,11 +49,11 @@ export function getStoredReports(): StoredReport[] {
  */
 export function saveReport(params: {
   id?: string;
-  type: 'weekly' | 'aging';
+  type: 'weekly' | 'aging' | 'monthly';
   title: string;
   period: string;
   author?: string;
-  reportData: WeeklyReportData | AgingReportData;
+  reportData: WeeklyReportData | AgingReportData | MonthlyReportData;
   routedIncidents?: Incident[];
 }): StoredReport {
   if (typeof window === 'undefined') {

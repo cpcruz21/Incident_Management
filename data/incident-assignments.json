@@ -62,5 +62,13 @@
     "recentUpdate": "As per Sir Rundel, waiting for the replacement parts from Lenovo.",
     "updatedAt": "2026-10-20T06:30:11.369Z",
     "updatedBy": "SMAC"
+  },
+  "IR-56158": {
+    "requestId": "IR-56158",
+    "department": "ECS ISS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "HHH",
+    "updatedAt": "2026-10-22T06:34:43.563Z",
+    "updatedBy": "SMAC"
   }
 }

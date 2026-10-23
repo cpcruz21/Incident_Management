@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useReducer, useCallback, useState } from 'react';
+import React, { useReducer, useCallback, useState, useEffect } from 'react';
 import { PinLogin } from '@/components/ui/PinLogin';
 import { Dashboard } from '@/components/ui/Dashboard';
 import type { DashboardView } from '@/components/ui/Dashboard';
@@ -17,6 +17,7 @@ import { SLAReportTable } from '@/components/report/SLAReportTable';
 import { ExportDropdown } from '@/components/report/ExportDropdown';
 import { DetailModal } from '@/components/report/DetailModal';
 import { AgingReportWorkflow } from '@/components/aging/AgingReportWorkflow';
+import { MonthlyReportWorkflow } from '@/components/monthly/MonthlyReportWorkflow';
 
 import { parseFile } from '@/lib/excel/parser';
 import { autoDetectMapping, mapAllRows } from '@/lib/excel/mapper';
@@ -32,17 +33,18 @@ import type { StoredReport } from '@/lib/storage/report-storage';
 
 export default function HomePage() {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [currentAccount, setCurrentAccount] = useState<Account | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('smac_active_session');
-        if (stored) {
-          return JSON.parse(stored);
-        }
-      } catch {}
-    }
-    return null;
-  });
+  const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    try {
+      const stored = localStorage.getItem('smac_active_session');
+      if (stored) {
+        setCurrentAccount(JSON.parse(stored));
+      }
+    } catch {}
+  }, []);
 
   const handleLogin = useCallback((account: Account) => {
     setCurrentAccount(account);
@@ -67,6 +69,11 @@ export default function HomePage() {
     data: AgingReportData;
     incidents?: Incident[];
   } | null>(null);
+  const [monthlyStoredReport, setMonthlyStoredReport] = useState<{
+    data: import('@/types/monthly').MonthlyReportData;
+    incidents?: Incident[];
+    period?: string;
+  } | null>(null);
 
   const handleOpenStoredReport = useCallback((storedReport: StoredReport) => {
     if (storedReport.type === 'weekly') {
@@ -82,6 +89,13 @@ export default function HomePage() {
         incidents: storedReport.routedIncidents,
       });
       setActiveView('aging');
+    } else if (storedReport.type === 'monthly') {
+      setMonthlyStoredReport({
+        data: storedReport.reportData as import('@/types/monthly').MonthlyReportData,
+        incidents: storedReport.routedIncidents,
+        period: storedReport.period,
+      });
+      setActiveView('monthly');
     }
   }, []);
 
@@ -201,8 +215,8 @@ export default function HomePage() {
     }
   }, []);
 
-  // 1) Not logged in → PIN screen
-  if (!currentAccount) {
+  // 1) Not logged in or mounting → PIN screen
+  if (!mounted || !currentAccount) {
     return <PinLogin onLogin={handleLogin} />;
   }
 
@@ -218,45 +232,24 @@ export default function HomePage() {
           setActiveView('dashboard');
           dispatch({ type: 'RESET' });
           setAgingStoredReport(null);
+          setMonthlyStoredReport(null);
         }}
       />
     );
   }
 
-  // 3) Coming soon (Monthly / Triannual)
-  if (activeView === 'monthly' || activeView === 'triannual') {
-    const labels: Record<string, string> = {
-      monthly: 'Monthly Incident Report',
-      triannual: 'Triannual Incident Report',
-    };
+  // 3) Monthly Report Module
+  if (activeView === 'monthly') {
     return (
-      <div className="db-shell">
-        <header className="db-topbar">
-          <div className="db-topbar-inner">
-            <div className="db-brand">
-              <span className="db-brand-title">📊 Weekly SLA Report Generator</span>
-            </div>
-            <button className="header-user-badge" onClick={handleLogout}>
-              👤 {currentAccount.name}
-              {isAdmin(currentAccount) && <span className="badge-role">Admin</span>}
-            </button>
-          </div>
-        </header>
-        <main className="db-page-wrap" style={{ textAlign: 'center', paddingTop: '5rem' }}>
-          <p className="db-eyebrow" style={{ marginBottom: '1rem' }}>{labels[activeView]}</p>
-          <h2 className="db-heading" style={{ marginBottom: '0.75rem' }}>🚧 Coming Soon</h2>
-          <p className="db-subheading" style={{ margin: '0 auto 2rem' }}>
-            This report type is not yet available. Check back in a future update.
-          </p>
-          <button
-            className="db-open-btn"
-            style={{ width: 'auto', display: 'inline-flex' }}
-            onClick={() => setActiveView('dashboard')}
-          >
-            ← Back to dashboard
-          </button>
-        </main>
-      </div>
+      <MonthlyReportWorkflow
+        account={currentAccount}
+        initialStoredReport={monthlyStoredReport}
+        onBack={() => {
+          setActiveView('dashboard');
+          dispatch({ type: 'RESET' });
+          setMonthlyStoredReport(null);
+        }}
+      />
     );
   }
 

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingReportData } from '@/types/aging';
+import type { MonthlyReportData } from '@/types/monthly';
 import {
   exportToHTML,
   exportToPDF,
@@ -14,7 +15,7 @@ import {
 
 interface ExportDropdownProps {
   incidents: Incident[];
-  reportData?: WeeklyReportData | AgingReportData | null;
+  reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null;
   baseFilename?: string;
 }
 
