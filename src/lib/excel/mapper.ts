@@ -1,5 +1,6 @@
 
 import type { RawIncidentRow, ColumnMapping, Incident } from '@/types/incident';
+import { toValidDate } from '@/lib/aging/calculator';
 
 
 export function autoDetectMapping(columns: string[]): Partial<ColumnMapping> {
@@ -43,22 +44,7 @@ export function autoDetectMapping(columns: string[]): Partial<ColumnMapping> {
 
 function parseDate(value: string | number | Date | undefined): Date | undefined {
   if (value === undefined || value === null || value === '') return undefined;
-
-  if (value instanceof Date) return value;
-
-  const strVal = String(value).trim();
-  if (!strVal) return undefined;
-
-  const parsed = new Date(strVal);
-  if (!isNaN(parsed.getTime())) return parsed;
-
-  const ddmmMatch = strVal.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (ddmmMatch) {
-    const [, day, month, year, hour, min, sec] = ddmmMatch;
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(min), parseInt(sec || '0'));
-  }
-
-  return undefined;
+  return toValidDate(value) ?? undefined;
 }
 
 function isOverdue(value: string | number | undefined): boolean {

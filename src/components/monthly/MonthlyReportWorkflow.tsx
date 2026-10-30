@@ -49,11 +49,11 @@ type MonthlyAction =
   | { type: 'SET_PROCESSING'; val: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | {
-      type: 'UPDATE_INCIDENT_FIELD';
-      requestId: string;
-      field: 'Revised Root Cause Type' | 'Revised Identified Root Cause';
-      value: string;
-    }
+    type: 'UPDATE_INCIDENT_FIELD';
+    requestId: string;
+    field: 'Revised Root Cause Type' | 'Revised Identified Root Cause';
+    value: string;
+  }
   | { type: 'OPEN_MODAL'; title: string; ids: string[] }
   | { type: 'CLOSE_MODAL' }
   | { type: 'RESET' };
@@ -109,10 +109,10 @@ function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
         incidents: updateList(state.incidents),
         reportData: state.reportData
           ? {
-              ...state.reportData,
-              allTickets: updateList(state.reportData.allTickets),
-              closedTickets: updateList(state.reportData.closedTickets),
-            }
+            ...state.reportData,
+            allTickets: updateList(state.reportData.allTickets),
+            closedTickets: updateList(state.reportData.closedTickets),
+          }
           : null,
       };
     }
@@ -291,7 +291,7 @@ export function MonthlyReportWorkflow({
           bc.postMessage({ type: 'report_saved', reportType: 'monthly', id });
           bc.close();
         }
-      } catch {}
+      } catch { }
 
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3500);
@@ -440,28 +440,12 @@ export function MonthlyReportWorkflow({
                   + New Report
                 </button>
               </div>
-              <div className="report-export-buttons" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className={`btn ${saveStatus === 'saved' ? 'btn-success' : 'btn-primary'}`}
-                  onClick={handleSaveAndPublish}
-                  disabled={saveStatus === 'saving'}
-                  title="Save and publish this report to the Live Dashboard"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
-                >
-                  <span>{saveStatus === 'saved' ? '✓' : '💾'}</span>
-                  <span>
-                    {saveStatus === 'saving'
-                      ? 'Publishing...'
-                      : saveStatus === 'saved'
-                      ? 'Published to Live Dashboard'
-                      : 'Publish to Live Dashboard'}
-                  </span>
-                </button>
+              <div>
                 <ExportDropdown
                   incidents={state.incidents}
                   reportData={state.reportData as any}
                   baseFilename="SMAC_Monthly_Incident_Report"
+                  targetElementId="monthly-report-canvas"
                 />
               </div>
             </div>
@@ -472,6 +456,9 @@ export function MonthlyReportWorkflow({
               routedIncidents={state.incidents}
               isAdmin={isAdmin(account)}
               onUpdateIncident={handleUpdateIncident}
+              onArchiveReport={handleSaveAndPublish}
+              onSaveReport={handleSaveAndPublish}
+              isArchived={saveStatus === 'saved'}
             />
           </div>
         )}

@@ -26,18 +26,15 @@ export interface RoutingRule {
   enabled: boolean;
 }
 
-/** Complete routing configuration */
 export interface RoutingConfig {
   rules: RoutingRule[];
 
-  /** Default team mapping when no rule matches */
   defaultTeamMapping: Record<string, string>;
 
   /** Known report teams */
   reportTeams: string[];
 }
 
-/** Result of applying routing to an incident */
 export interface RoutingResult {
   requestId: string;
   sourceTeam: string;

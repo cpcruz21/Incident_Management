@@ -163,3 +163,31 @@ export async function persistServerMonthlyReport(report: Record<string, unknown>
   }
 }
 
+export async function fetchServerIRAnalytics(): Promise<{ batches: unknown[]; tickets: unknown[] } | null> {
+  try {
+    const res = await fetch('/api/reports/ir-analytics');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.data) {
+        return data.data;
+      }
+    }
+  } catch (error) {
+    console.warn('API fetchServerIRAnalytics failed:', error);
+  }
+  return null;
+}
+
+export async function persistServerIRAnalytics(data: Record<string, unknown>): Promise<boolean> {
+  try {
+    const res = await fetch('/api/reports/ir-analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+

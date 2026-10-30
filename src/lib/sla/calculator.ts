@@ -1,7 +1,7 @@
 import type { Incident } from '@/types/incident';
 import type { TeamSLAResult, SLAReport, WeeklyCompletion } from '@/types/sla';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
-import { toValidDate } from '@/lib/aging/calculator';
+import { toValidDate, isCreatedOutsideOfficeHours, isISSTeam } from '@/lib/aging/calculator';
 
 
 export type PriorityLevel = 'P1' | 'P2' | 'P3' | 'P4';
@@ -137,13 +137,23 @@ export function isStatusOverdue(value: unknown): boolean | null {
 
 /**
  * Evaluates First Response SLA for an incident.
- * Uses SDP raw overdue status if present; otherwise accurately computes against SLA matrix.
+ * For non-ISS teams: if the ticket was created outside office hours (before 8:30 AM or after 5:30 PM)
+ * or on a weekend, it is excused under the acceptable hours policy and NOT considered failed.
+ * For ISS teams (24/7): no after-hours exception applies.
  */
 export function evaluateFirstResponseOverdue(
   inc: Incident,
   teamName: string,
   referenceDate: Date = new Date()
 ): boolean {
+  const iss = isISSTeam(teamName, inc);
+
+  // For non-ISS teams: tickets created outside office hours or on weekends
+  // have acceptable hours exception — they must NOT be counted as failed!
+  if (!iss && isCreatedOutsideOfficeHours(inc)) {
+    return false;
+  }
+
   // 1. Check raw SDP status
   const rawStatus = isStatusOverdue(inc.rawFirstResponseStatus);
   if (rawStatus !== null) {
@@ -168,7 +178,7 @@ export function evaluateFirstResponseOverdue(
   const end = toValidDate(inc.respondedDate) || toValidDate(inc.completedTime) || toValidDate(referenceDate) || new Date();
   let elapsedMins = 0;
 
-  if (teamName === 'ECS ISS') {
+  if (iss) {
     // 24/7 SLA
     elapsedMins = (end.getTime() - created.getTime()) / 60000;
   } else {

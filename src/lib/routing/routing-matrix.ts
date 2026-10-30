@@ -11,6 +11,7 @@ export const GROUP_TO_REPORT_TEAM: Record<string, string> = {
   'ECS HRAD Group': 'ECS ADMIN',
   'ECS HRAD': 'ECS ADMIN',
   'ECS ISS Binondo': 'ECS ISS',
+  'ECS ISS MT': 'ECS ISS',
   'ECS ISS': 'ECS ISS',
   'ECS PSD Group': 'ECS PSD',
   'ECS PSD': 'ECS PSD',

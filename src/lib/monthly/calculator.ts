@@ -18,6 +18,7 @@ import type {
   RootCauseRow,
 } from '@/types/monthly';
 import { calculateSLAReport } from '@/lib/sla/calculator';
+import { isCreatedOutsideOfficeHours, isISSTeam } from '@/lib/aging/calculator';
 
 export const MONTHLY_DEFAULT_TECHNICIANS = [
   'ECS HRAD',
@@ -47,6 +48,11 @@ export function getTechnician(inc: Incident): string {
 
 /** Check if First Response failed from raw data column or calculation */
 export function isFirstResponseFailed(inc: Incident): boolean {
+  // If non-ISS and created outside office hours / weekend -> excused (acceptable / NOT failed)
+  if (!isISSTeam(inc.assignedTeam || inc.sourceTeam, inc) && isCreatedOutsideOfficeHours(inc)) {
+    return false;
+  }
+
   if (inc.rawData) {
     for (const [k, v] of Object.entries(inc.rawData)) {
       if (/first\s*response\s*overdue/i.test(k)) {
@@ -73,10 +79,10 @@ export function isResolutionFailed(inc: Incident): boolean {
   return inc.resolutionOverdue;
 }
 
-/** Filter incidents that are "closed" / "resolved" */
+
 export function filterClosedTickets(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
-    // Check rawData first for Request Status
+
     if (inc.rawData) {
       for (const [k, v] of Object.entries(inc.rawData)) {
         if (/request\s*status/i.test(k)) {
@@ -96,9 +102,40 @@ export function filterClosedTickets(incidents: Incident[]): Incident[] {
   });
 }
 
-/** Filter incidents that have acceptable first response (not overdue) */
+/**
+ * Determine whether a given technician is an ISS 24/7 team.
+ * These teams do NOT get the after-hours / weekend exception.
+ */
+export function isISS24x7(inc: Incident): boolean {
+  return isISSTeam(inc.assignedTeam || inc.sourceTeam, inc);
+}
+export { isCreatedOutsideOfficeHours };
+
+/**
+ * Filter incidents that have acceptable first response.
+ *
+ * A ticket is "acceptable" when:
+ *   1. First Response Overdue Status = FALSE  (always acceptable), OR
+ *   2. First Response Overdue Status = TRUE **but** the ticket was created
+ *      outside office hours (before 8:30 AM / after 5:30 PM) or on a weekend
+ *      — ONLY for non-ISS departments.
+ *
+ * ISS teams (ECS ISS Binondo, ECS ISS MT) run 24/7; they receive no
+ * after-hours exception.
+ */
 export function filterAcceptableFirstResponse(incidents: Incident[]): Incident[] {
-  return incidents.filter((inc) => !isFirstResponseFailed(inc));
+  return incidents.filter((inc) => {
+    // If first response is not overdue → always acceptable
+    if (!isFirstResponseFailed(inc)) return true;
+
+    // First response IS overdue — check for after-hours exception
+    // ISS 24/7 teams get NO exception
+    if (isISS24x7(inc)) return false;
+
+    // Non-ISS: if the ticket was created outside office hours / weekend
+    // the overdue is excused → still acceptable
+    return isCreatedOutsideOfficeHours(inc);
+  });
 }
 
 /** Group incidents directly by their Technician */

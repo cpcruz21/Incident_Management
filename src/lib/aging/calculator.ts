@@ -18,8 +18,122 @@ import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 export function toValidDate(val: unknown): Date | null {
   if (!val) return null;
   if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
-  const d = new Date(val as string | number);
-  return isNaN(d.getTime()) ? null : d;
+  if (typeof val === 'number') {
+    // Excel numeric date (days since Dec 30, 1899)
+    if (val > 20000 && val < 60000) {
+      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  const strVal = String(val).trim();
+  if (!strVal || strVal === 'Not Assigned' || strVal === '—' || strVal === '-') return null;
+
+  // Try direct Date constructor
+  const d = new Date(strVal);
+  if (!isNaN(d.getTime())) return d;
+
+  // Match formats: DD-MM-YYYY, MM-DD-YYYY, or YYYY-MM-DD with / or -
+  const match = strVal.match(
+    /^(\d{1,4})[-/](\d{1,2})[-/](\d{1,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?)?/i
+  );
+  if (match) {
+    const [, p1, p2, p3, hourStr, minStr, secStr, ampm] = match;
+    let year: number;
+    let month: number;
+    let day: number;
+
+    const n1 = parseInt(p1, 10);
+    const n2 = parseInt(p2, 10);
+    const n3 = parseInt(p3, 10);
+
+    if (n1 > 1000) {
+      // YYYY-MM-DD
+      year = n1;
+      month = n2;
+      day = n3;
+    } else if (n3 > 1000) {
+      year = n3;
+      if (n1 > 12) {
+        // Must be DD-MM-YYYY
+        day = n1;
+        month = n2;
+      } else {
+        // In SDP default is MM-DD-YYYY (e.g. 10-19-2026)
+        month = n1;
+        day = n2;
+      }
+    } else {
+      return null;
+    }
+
+    let hour = parseInt(hourStr || '0', 10);
+    const min = parseInt(minStr || '0', 10);
+    const sec = parseInt(secStr || '0', 10);
+
+    if (ampm) {
+      if (ampm.toUpperCase() === 'PM' && hour < 12) hour += 12;
+      if (ampm.toUpperCase() === 'AM' && hour === 12) hour = 0;
+    }
+
+    const parsed = new Date(year, month - 1, day, hour, min, sec);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  return null;
+}
+
+/**
+ * Determine whether a team or incident belongs to ISS (24/7 SLA, no after-hours exception).
+ */
+export function isISSTeam(teamName?: string | null, inc?: Incident): boolean {
+  const t = (teamName || inc?.assignedTeam || inc?.sourceTeam || '').toLowerCase().trim();
+  const tech = (
+    (typeof inc?.rawData?.['Technician'] === 'string' ? inc.rawData['Technician'] : '') ||
+    (typeof inc?.rawData?.['technician'] === 'string' ? inc.rawData['technician'] : '') ||
+    inc?.sourceTeam ||
+    ''
+  ).toLowerCase().trim();
+
+  return (
+    t === 'ecs iss' ||
+    t.includes('iss') ||
+    tech.includes('iss')
+  );
+}
+
+export function isCreatedOutsideOfficeHours(inc: Incident): boolean {
+  let created: Date | null = null;
+
+  // 1. Check raw "Created Time"
+  if (inc.rawData?.['Created Time']) {
+    created = toValidDate(inc.rawData['Created Time']);
+  }
+  // Check any rawData key matching created time
+  if (!created && inc.rawData) {
+    for (const [k, v] of Object.entries(inc.rawData)) {
+      if (/created\s*time/i.test(k) && v) {
+        created = toValidDate(v);
+        if (created) break;
+      }
+    }
+  }
+  // 2. Fall back to inc.createdTime
+  if (!created && inc.createdTime) {
+    created = toValidDate(inc.createdTime);
+  }
+
+  if (!created) return false;
+
+  const day = created.getDay(); // 0 = Sunday, 6 = Saturday
+  if (day === 0 || day === 6) return true; // Weekend
+
+  const hours = created.getHours();
+  const minutes = created.getMinutes();
+  const timeInMinutes = hours * 60 + minutes;
+
+  // Office hours: 8:30 AM (510 min) – 5:30 PM (1050 min)
+  return timeInMinutes < 510 || timeInMinutes >= 1050;
 }
 
 // Determine which aging bucket an incident falls into based on its age in calendar days
@@ -39,19 +153,36 @@ function classifyAge(createdTime: unknown, referenceDate: unknown): AgingBucket 
   return 'sameday';
 }
 
-// Filter incidents to only open/pending (not completed) 
+// Filter incidents to only open/pending (not completed or resolved) following ITIL standards
 export function filterOpenIncidents(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
-    // If there's no completedTime, the incident is still open
-    if (!inc.completedTime) return true;
-
-    // Also include if status text indicates open/pending
-    const status = (inc.requestStatus || '').toLowerCase();
-    if (status.includes('open') || status.includes('pending') || status.includes('in progress')) {
-      return true;
+    // 1. Check rawData request status if available
+    let statusText = (inc.requestStatus || '').toLowerCase().trim();
+    if (!statusText && inc.rawData) {
+      for (const [k, v] of Object.entries(inc.rawData)) {
+        if (/request\s*status|status/i.test(k)) {
+          statusText = String(v ?? '').toLowerCase().trim();
+          if (statusText) break;
+        }
+      }
     }
 
-    return false;
+    // Explicitly closed / resolved / cancelled statuses are NOT open
+    if (
+      statusText.includes('close') ||
+      statusText.includes('resolve') ||
+      statusText.includes('cancel') ||
+      statusText.includes('completed')
+    ) {
+      return false;
+    }
+
+    // If marked completed with a valid date and no open status override, it is closed
+    if (inc.completedTime && !statusText.includes('open') && !statusText.includes('pending') && !statusText.includes('progress')) {
+      return false;
+    }
+
+    return true;
   });
 }
 
@@ -392,10 +523,25 @@ export function buildRemarksTableData(
 
   // Only open incidents from the raw dataset are included (excluding CABS or RRG)
   const openIncidents = filterOpenIncidents(incidents).filter((inc) => {
-    const rawStr = JSON.stringify(inc.rawData || {}).toUpperCase();
-    const metaStr = `${inc.category || ''} ${inc.subCategory || ''} ${inc.department || ''} ${inc.description || ''}`.toUpperCase();
-    if (rawStr.includes('CABS') || rawStr.includes('RRG') || metaStr.includes('CABS') || metaStr.includes('RRG')) {
+    const isExcluded = (val: unknown): boolean => {
+      if (!val) return false;
+      const s = String(val).toUpperCase();
+      return s.includes('CABS') || s.includes('RRG');
+    };
+
+    if (
+      isExcluded(inc.category) ||
+      isExcluded(inc.subCategory) ||
+      isExcluded(inc.department) ||
+      isExcluded(inc.description)
+    ) {
       return false;
+    }
+
+    if (inc.rawData) {
+      for (const val of Object.values(inc.rawData)) {
+        if (isExcluded(val)) return false;
+      }
     }
     return true;
   });

@@ -11,18 +11,25 @@ import {
   exportToXLS,
   exportToXLSX,
   exportToCSV,
+  exportReassignedToXLSX,
+  exportReassignedToCSV,
+  exportAsPng,
 } from '@/lib/report/export';
 
 interface ExportDropdownProps {
   incidents: Incident[];
   reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null;
   baseFilename?: string;
+  targetElementId?: string;
+  onExportPng?: () => void;
 }
 
 export function ExportDropdown({
   incidents,
   reportData,
   baseFilename = 'Extracted_Incidents',
+  targetElementId,
+  onExportPng,
 }: ExportDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -37,26 +44,23 @@ export function ExportDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelect = (type: 'html' | 'pdf' | 'xls' | 'xlsx' | 'csv') => {
+  const handleSelect = (
+    type: 'html' | 'pdf' | 'xls' | 'xlsx' | 'csv' | 'reassigned-xlsx' | 'reassigned-csv' | 'png'
+  ) => {
     setIsOpen(false);
     const dateStr = new Date().toISOString().split('T')[0];
     const filename = `${baseFilename}_${dateStr}`;
 
     switch (type) {
-      case 'html':
-        exportToHTML(incidents, reportData, `${filename}.html`);
-        break;
-      case 'pdf':
-        exportToPDF();
-        break;
-      case 'xls':
-        exportToXLS(incidents, reportData, `${filename}.xls`);
-        break;
       case 'xlsx':
-        exportToXLSX(incidents, reportData, `${filename}.xlsx`);
+        exportReassignedToXLSX(incidents, `${filename}xlsx`);
         break;
-      case 'csv':
-        exportToCSV(incidents, `${filename}.csv`);
+      case 'png':
+        if (onExportPng) {
+          onExportPng();
+        } else if (targetElementId) {
+          exportAsPng(targetElementId, `${filename}.png`);
+        }
         break;
     }
   };
@@ -95,6 +99,49 @@ export function ExportDropdown({
           <button
             type="button"
             className="export-dropdown-item"
+            onClick={() => handleSelect('xlsx')}
+            role="menuitem"
+          >
+            XLSX file (All Sheets)
+          </button>
+          <button
+            type="button"
+            className="export-dropdown-item export-dropdown-subitem"
+            onClick={() => handleSelect('reassigned-xlsx')}
+            role="menuitem"
+            title="Export only re-assigned technician incidents raw data in XLSX"
+          >
+            ↳ Re-assigned Technician (XLSX)
+          </button>
+          <button
+            type="button"
+            className="export-dropdown-item"
+            onClick={() => handleSelect('csv')}
+            role="menuitem"
+          >
+            CSV file (All Incidents)
+          </button>
+          <button
+            type="button"
+            className="export-dropdown-item export-dropdown-subitem"
+            onClick={() => handleSelect('reassigned-csv')}
+            role="menuitem"
+            title="Export only re-assigned technician incidents raw data in CSV"
+          >
+            ↳ Re-assigned Technician (CSV)
+          </button>
+          <div style={{ height: 1, background: '#e5e7eb', margin: '4px 0' }} />
+          <button
+            type="button"
+            className="export-dropdown-item"
+            onClick={() => handleSelect('xls')}
+            role="menuitem"
+          >
+            XLS file
+          </button>
+          <button
+            type="button"
+            className="export-dropdown-item"
             onClick={() => handleSelect('html')}
             role="menuitem"
           >
@@ -108,29 +155,14 @@ export function ExportDropdown({
           >
             PDF file
           </button>
+          <div style={{ height: 1, background: '#e5e7eb', margin: '4px 0' }} />
           <button
             type="button"
             className="export-dropdown-item"
-            onClick={() => handleSelect('xls')}
+            onClick={() => handleSelect('png')}
             role="menuitem"
           >
-            XLS file
-          </button>
-          <button
-            type="button"
-            className="export-dropdown-item"
-            onClick={() => handleSelect('xlsx')}
-            role="menuitem"
-          >
-            XLSX file
-          </button>
-          <button
-            type="button"
-            className="export-dropdown-item"
-            onClick={() => handleSelect('csv')}
-            role="menuitem"
-          >
-            CSV file
+            PNG Image
           </button>
         </div>
       )}

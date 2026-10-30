@@ -3,64 +3,64 @@
     "requestId": "IR-53184",
     "department": "ECS ISS",
     "responsibleOrDependency": "ECS HRAD",
-    "recentUpdate": "10/19 - Same Update\n10/13 -As per Sir Jay, the matter is currently on hold due to two factors,\nA comprehensive plan for upgrading all UPS units is currently being developed and is pending finalization.",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "10/27- Same Update.\n\n10/13 -As per Sir Jay, the matter is currently on hold due to two factors,\nA comprehensive plan for upgrading all UPS units is currently being developed and is pending finalization.",
+    "updatedAt": "2026-10-28T05:15:05.727Z",
     "updatedBy": "SMAC"
   },
   "IR-54781": {
     "requestId": "IR-54781",
     "department": "ECS ISS",
     "responsibleOrDependency": "ISS MT",
-    "recentUpdate": "10/19 - Same Update\n9/24- As per Sir Jun, pending action is on ALGO’s side and no further intervention is required from ISS.",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "10/27 - No Update.\n\n9/24- As per Sir Jun, pending approval in Algo for the EI proposal.",
+    "updatedAt": "2026-10-28T05:15:05.727Z",
     "updatedBy": "SMAC"
   },
   "IR-55020": {
     "requestId": "IR-55020",
     "department": "Not Assigned",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "As per vina, still monitoring the production testing.",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "10/27 - Closed.\n\nAs per vina, the production testing is completed and already endorsed to BDO for validation.",
+    "updatedAt": "2026-10-28T05:52:52.913Z",
     "updatedBy": "SMAC"
   },
   "IR-55641": {
     "requestId": "IR-55641",
     "department": "ECS SDS",
     "responsibleOrDependency": "SDS",
-    "recentUpdate": "10/19 - Same update\n\n9/29 - As per Ms. Karla, The deployment is still pending with Sir Edmund of MHSI.",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "10/27 - Resolved.\n\n9/29 - As per Ms. Karla, The deployment is still pending with Sir Edmund of MHSI.",
+    "updatedAt": "2026-10-28T05:53:02.722Z",
     "updatedBy": "SMAC"
   },
   "IR-55897": {
     "requestId": "IR-55897",
     "department": "ECS Field Servicing",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "As per Sir Cres, the depot setup is still ongoing",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "As per Vina, Deployment is on hold due to environment unavailability and the prioritization of QA testing.",
+    "updatedAt": "2026-10-27T09:11:27.138Z",
     "updatedBy": "SMAC"
   },
   "IR-56064": {
     "requestId": "IR-56064",
     "department": "ECS POS Repair",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "As per Sir Cres, The Deployment of the fix in Production is on October 20, 2026",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "As per Mar, production deployment was delayed due to Dev’s pending Vulnerability Scan request in SDP. The fix is now endorsed for UAT, and coordination with the team is ongoing to confirm the updated deployment schedule.",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
     "updatedBy": "SMAC"
   },
   "IR-56149": {
     "requestId": "IR-56149",
     "department": "ECS ISS",
     "responsibleOrDependency": "ISS Binondo",
-    "recentUpdate": "As Sir Dennis, under the current ISS operations, tickets will remain on hold until the issues are fully resolved.",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "As per Sir Dennis, the target date for installation is on or before October 30, 2026.",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
     "updatedBy": "SMAC"
   },
   "IR-56448": {
     "requestId": "IR-56448",
     "department": "ECS SDS",
     "responsibleOrDependency": "ISS Binondo",
-    "recentUpdate": "As per Sir Rundel, waiting for the replacement parts from Lenovo.",
-    "updatedAt": "2026-10-20T06:30:11.369Z",
+    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-10-28T05:15:05.727Z",
     "updatedBy": "SMAC"
   },
   "IR-56158": {
@@ -69,6 +69,102 @@
     "responsibleOrDependency": "ISS Binondo",
     "recentUpdate": "HHH",
     "updatedAt": "2026-10-22T06:34:43.563Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56501": {
+    "requestId": "IR-56501",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-57243": {
+    "requestId": "IR-57243",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "awdafdrhgrthxccsd",
+    "updatedAt": "2026-10-23T07:07:04.391Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-57026": {
+    "requestId": "IR-57026",
+    "department": "ECS Field Servicing",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-57008": {
+    "requestId": "IR-57008",
+    "department": "ECS Field Servicing",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56913": {
+    "requestId": "IR-56913",
+    "department": "ECS Field Servicing",
+    "responsibleOrDependency": "PSD",
+    "recentUpdate": "",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56836": {
+    "requestId": "IR-56836",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "ISS MT",
+    "recentUpdate": "wa",
+    "updatedAt": "2026-10-23T07:07:04.391Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56706": {
+    "requestId": "IR-56706",
+    "department": "ECS POS Repair",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56687": {
+    "requestId": "IR-56687",
+    "department": "ECS ISS",
+    "responsibleOrDependency": "ECS HRAD",
+    "recentUpdate": "",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56482": {
+    "requestId": "IR-56482",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56500": {
+    "requestId": "IR-56500",
+    "department": "ECS SDS",
+    "responsibleOrDependency": "ISS Binondo",
+    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56581": {
+    "requestId": "IR-56581",
+    "department": "ECS FS Admin",
+    "responsibleOrDependency": "ECS HRAD",
+    "recentUpdate": "As per Sir Jay, the quote has already been provided and submitted to management for approval.",
+    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56620": {
+    "requestId": "IR-56620",
+    "department": "ECS Field Servicing",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "",
+    "updatedAt": "2026-10-28T08:45:28.900Z",
     "updatedBy": "SMAC"
   }
 }

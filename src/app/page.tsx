@@ -43,7 +43,7 @@ export default function HomePage() {
       if (stored) {
         setCurrentAccount(JSON.parse(stored));
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const handleLogin = useCallback((account: Account) => {
@@ -51,7 +51,7 @@ export default function HomePage() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('smac_active_session', JSON.stringify(account));
-      } catch {}
+      } catch { }
     }
   }, []);
 
@@ -60,7 +60,7 @@ export default function HomePage() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem('smac_active_session');
-      } catch {}
+      } catch { }
     }
   }, []);
 
@@ -431,10 +431,9 @@ export default function HomePage() {
                   incidents={state.routedIncidents}
                   reportData={state.reportData}
                   baseFilename="SMAC_Incident_Report"
+                  targetElementId="weekly-closed-incident-report-card"
+                  onExportPng={handleExportPng}
                 />
-                <button className="btn btn-export" onClick={handleExportPng}>
-                  📷 Download PNG
-                </button>
               </div>
             </div>
 
@@ -454,6 +453,25 @@ export default function HomePage() {
         incidentIds={state.detailModal.incidentIds}
         onClose={() => dispatch({ type: 'CLOSE_DETAIL_MODAL' })}
       />
+
+      {/* Footer */}
+      <footer style={{
+        marginTop: '60px',
+        borderTop: '1px solid rgba(37,99,235,0.18)',
+        background: 'linear-gradient(180deg, #091426 0%, #050b16 100%)',
+        padding: '24px 20px',
+        textAlign: 'center',
+      }}>
+        <p style={{
+          margin: 0,
+          fontSize: '12px',
+          color: '#94a3b8',
+          letterSpacing: '0.02em',
+          fontWeight: 500,
+        }}>
+          &copy; 2026 Equitable Computer Services Inc. All rights reserved.
+        </p>
+      </footer>
     </main>
   );
 }

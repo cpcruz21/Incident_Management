@@ -88,36 +88,78 @@ export const CLOSED_TICKETS_COLUMNS = [
   'Remarks',
 ] as const;
 
-/** Acceptable First Response columns — same as All Tickets */
-export const FIRST_RESPONSE_COLUMNS = ALL_TICKETS_COLUMNS;
+/** Acceptable First Response specific columns */
+export const FIRST_RESPONSE_COLUMNS = [
+  'Request ID',
+  'Technician',
+  'Category',
+  'Sub Cat',
+  'Status',
+  'Created Time',
+  'Response Time',
+  'First Response Overdue Status',
+  'Did it exceed 24 hrs ? FALSE',
+] as const;
 
 /** Helper: extract column value from an incident */
 export function getIncidentMonthlyValue(inc: Incident, colName: string): string {
+  const lc = colName.toLowerCase().replace(/[\r\n\s:?_]/g, '');
+
+  // Special overrides for First Response metrics
+  if (lc === 'firstresponseoverduestatus') {
+    return inc.firstResponseOverdue ? 'TRUE' : 'FALSE';
+  }
+  if (lc.includes('exceed') && lc.includes('24')) {
+    if (inc.rawData) {
+      for (const [k, v] of Object.entries(inc.rawData)) {
+        if (/exceed.*24/i.test(k)) {
+          return String(v ?? '');
+        }
+      }
+    }
+    return 'FALSE';
+  }
+
   if (inc.rawData) {
     if (inc.rawData[colName] !== undefined && inc.rawData[colName] !== null) {
       return String(inc.rawData[colName]);
     }
-    const lc = colName.toLowerCase().replace(/[\r\n\s:]/g, '');
     for (const [k, v] of Object.entries(inc.rawData)) {
-      if (k.toLowerCase().replace(/[\r\n\s:]/g, '') === lc) {
+      if (k.toLowerCase().replace(/[\r\n\s:?_]/g, '') === lc) {
         return v !== undefined && v !== null ? String(v) : '';
       }
     }
+    // Match common column aliases
+    if (lc === 'subcat') {
+      const v = inc.rawData['Sub Category'] || inc.rawData['SubCategory'] || inc.rawData['Sub-Category'];
+      if (v !== undefined && v !== null) return String(v);
+    }
+    if (lc === 'status') {
+      const v = inc.rawData['Request Status'] || inc.rawData['Status'];
+      if (v !== undefined && v !== null) return String(v);
+    }
+    if (lc === 'responsetime') {
+      const v = inc.rawData['Responded Date'] || inc.rawData['Response Time'];
+      if (v !== undefined && v !== null) return String(v);
+    }
   }
 
-  const key = colName.toLowerCase().replace(/[\r\n\s:]/g, '');
+  const key = lc;
   switch (key) {
     case 'requestid': return inc.requestId || '';
     case 'technician': return inc.assignedTeam || inc.sourceTeam || '';
     case 'category': return inc.category || '';
+    case 'subcat':
     case 'subcategory': return inc.subCategory || '';
     case 'item': return inc.item || '';
     case 'priority': return inc.priority || '';
     case 'description': return inc.description || '';
+    case 'status':
     case 'requeststatus': return inc.requestStatus || '';
-    case 'createdtime': return inc.createdTime ? inc.createdTime.toLocaleString() : '';
-    case 'respondeddate': return inc.respondedDate ? inc.respondedDate.toLocaleString() : '';
-    case 'completedtime': return inc.completedTime ? inc.completedTime.toLocaleString() : '';
+    case 'createdtime': return inc.rawData?.['Created Time'] ? String(inc.rawData['Created Time']) : (inc.createdTime ? inc.createdTime.toLocaleString() : '');
+    case 'responsetime':
+    case 'respondeddate': return inc.rawData?.['Responded Date'] ? String(inc.rawData['Responded Date']) : (inc.respondedDate ? inc.respondedDate.toLocaleString() : '');
+    case 'completedtime': return inc.rawData?.['Completed Time'] ? String(inc.rawData['Completed Time']) : (inc.completedTime ? inc.completedTime.toLocaleString() : '');
     case 'firstresponseoverduestatus': return inc.firstResponseOverdue ? 'TRUE' : 'FALSE';
     case 'overduestatus': return inc.resolutionOverdue ? 'TRUE' : 'FALSE';
     case 'revisedrootcausetype': return inc.revisedRootCauseType || '';

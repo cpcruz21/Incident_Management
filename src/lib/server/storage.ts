@@ -8,6 +8,7 @@ const MAPPINGS_FILE = path.join(DATA_DIR, 'department-mappings.json');
 const ASSIGNMENTS_FILE = path.join(DATA_DIR, 'incident-assignments.json');
 const AGING_REPORTS_FILE = path.join(DATA_DIR, 'aging-reports.json');
 const MONTHLY_REPORTS_FILE = path.join(DATA_DIR, 'monthly-reports.json');
+const IR_ANALYTICS_FILE = path.join(DATA_DIR, 'ir-analytics.json');
 
 import {
   DepartmentMappingConfig,
@@ -180,7 +181,13 @@ export function saveServerStoredAgingReport(report: Record<string, unknown>): vo
   ensureDataDir();
   const existing = getServerStoredAgingReports();
   const reportId = String(report.id || `aging-${Date.now()}`);
-  const filtered = existing.filter((r) => String(r.id) !== reportId);
+  const reportPeriod = String(report.period || '');
+
+  // Remove any existing entry with the same ID or the same period
+  // (publishing the same week again replaces the old entry)
+  const filtered = existing.filter(
+    (r) => String(r.id) !== reportId && (reportPeriod === '' || String(r.period) !== reportPeriod)
+  );
   const updated = [{ ...report, id: reportId, serverSavedAt: new Date().toISOString() }, ...filtered];
   fs.writeFileSync(AGING_REPORTS_FILE, JSON.stringify(updated, null, 2), 'utf-8');
 }
@@ -208,8 +215,43 @@ export function saveServerStoredMonthlyReport(report: Record<string, unknown>): 
   ensureDataDir();
   const existing = getServerStoredMonthlyReports();
   const reportId = String(report.id || `monthly-${Date.now()}`);
-  const filtered = existing.filter((r) => String(r.id) !== reportId);
+  const reportPeriod = String(report.period || '');
+
+  // Remove any existing entry with the same ID or the same period
+  // (publishing the same month again replaces the old entry)
+  const filtered = existing.filter(
+    (r) => String(r.id) !== reportId && (reportPeriod === '' || String(r.period) !== reportPeriod)
+  );
   const updated = [{ ...report, id: reportId, serverSavedAt: new Date().toISOString() }, ...filtered];
   fs.writeFileSync(MONTHLY_REPORTS_FILE, JSON.stringify(updated, null, 2), 'utf-8');
 }
+
+/**
+ * Get server-persisted IR analytics data
+ */
+export function getServerStoredIRAnalytics(): Record<string, unknown> | null {
+  ensureDataDir();
+  try {
+    if (fs.existsSync(IR_ANALYTICS_FILE)) {
+      const content = fs.readFileSync(IR_ANALYTICS_FILE, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (error) {
+    console.error('Error reading stored IR analytics:', error);
+  }
+  return null;
+}
+
+/**
+ * Save server-persisted IR analytics data
+ */
+export function saveServerStoredIRAnalytics(data: Record<string, unknown>): void {
+  ensureDataDir();
+  fs.writeFileSync(
+    IR_ANALYTICS_FILE,
+    JSON.stringify({ ...data, serverSavedAt: new Date().toISOString() }, null, 2),
+    'utf-8'
+  );
+}
+
 

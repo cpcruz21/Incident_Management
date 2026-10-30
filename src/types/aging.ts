@@ -12,7 +12,6 @@ export const AGING_BUCKET_LABELS: Record<AgingBucket, string> = {
   'sameday': 'same day',
 };
 
-/** Ordered list of buckets (oldest → newest) */
 export const AGING_BUCKET_ORDER: AgingBucket[] = [
   '>1month',
   '2-4weeks',

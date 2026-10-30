@@ -2,17 +2,19 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Incident } from '@/types/incident';
-import type { MonthlyReportData } from '@/types/monthly';
+import type { MonthlyReportData, MonthlyTechnicianSLA } from '@/types/monthly';
 import {
   ALL_TICKETS_COLUMNS,
   CLOSED_TICKETS_COLUMNS,
+  FIRST_RESPONSE_COLUMNS,
   getIncidentMonthlyValue as getRawValue,
   ROOT_CAUSE_FACTORS,
   ROOT_CAUSE_TYPES,
   findRootCauseType,
 } from '@/types/monthly';
 import { formatSLAPercentage } from '@/lib/sla/calculator';
-import { exportAsPng } from '@/lib/report/export';
+import { saveReport } from '@/lib/storage/report-storage';
+import { filterAcceptableFirstResponse } from '@/lib/monthly/calculator';
 
 // ─── Sub-component interfaces ───────────────────────────────
 
@@ -26,9 +28,13 @@ interface MonthlyReportTableProps {
     field: 'Revised Root Cause Type' | 'Revised Identified Root Cause',
     value: string
   ) => void;
+  onArchiveReport?: () => void;
+  onSaveReport?: () => void;
+  isArchived?: boolean;
+  isPublicView?: boolean;
 }
 
-type TabId = 'all-tickets' | 'closed-tickets' | 'first-response' | 'sla-dashboard';
+type TabId = 'sla-dashboard' | 'all-tickets' | 'closed-tickets' | 'first-response' | 'powerbi';
 
 // ─── Editable Revised Cell Component ────────────────────────
 
@@ -58,7 +64,6 @@ function EditableRevisedCell({
     if (onSave) {
       onSave(requestId, field, newVal);
 
-      // Auto-set Revised Root Cause Type if an identified root cause is chosen
       if (!isTypeField && newVal) {
         const parentType = findRootCauseType(newVal);
         if (parentType && (!currentType || currentType !== parentType)) {
@@ -70,78 +75,574 @@ function EditableRevisedCell({
 
   if (!isAdmin) {
     return (
-      <td className="cell-revised-highlight" title={value || 'No adjustment'}>
-        <span className={value ? 'revised-value-text' : 'revised-empty-text'}>
-          {value || '—'}
-        </span>
+      <td style={{ padding: '10px 14px', color: value ? '#60a5fa' : '#64748b' }} title={value || 'No adjustment'}>
+        <span style={{ fontSize: '11px', fontWeight: 600 }}>{value || '—'}</span>
       </td>
     );
   }
 
   return (
-    <td
-      className="cell-revised-highlight is-editable"
-      title={`${field} (Manual Checker Dropdown)`}
-    >
-      <div className="revised-select-wrapper">
-        <select
-          className={`revised-select-input ${value ? 'has-value' : 'is-empty'} ${isTypeField ? 'is-type-select' : 'is-cause-select'}`}
-          value={value || ''}
-          onChange={handleChange}
-          aria-label={field}
-          title={value || `Select ${field}`}
-        >
-          <option value="">
-            {isTypeField ? '-- Select Root Cause Type --' : '-- Select Identified Root Cause --'}
-          </option>
-
-          {isTypeField ? (
-            <>
-              {value && !ROOT_CAUSE_TYPES.includes(value) && (
-                <option value={value}>{value} (Current)</option>
-              )}
-              {ROOT_CAUSE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </>
-          ) : (
-            <>
-              {value &&
-                !Object.values(ROOT_CAUSE_FACTORS).some((arr) => arr.includes(value)) && (
-                  <option value={value}>{value} (Current)</option>
-                )}
-              {currentType && ROOT_CAUSE_FACTORS[currentType] ? (
-                ROOT_CAUSE_FACTORS[currentType].map((cause) => (
-                  <option key={cause} value={cause} title={cause}>
-                    {cause}
-                  </option>
-                ))
-              ) : (
-                Object.entries(ROOT_CAUSE_FACTORS).map(([type, causes]) => (
-                  <optgroup key={type} label={type}>
-                    {causes.map((cause) => (
-                      <option key={cause} value={cause} title={cause}>
-                        {cause}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))
-              )}
-            </>
-          )}
-        </select>
-      </div>
+    <td style={{ padding: '8px 12px' }} title={`${field} (Manual Checker Dropdown)`}>
+      <select
+        style={{
+          width: '100%',
+          background: '#091426',
+          border: '1px solid #1e3a5f',
+          color: value ? '#93c5fd' : '#64748b',
+          borderRadius: '6px',
+          padding: '4px 8px',
+          fontSize: '11px',
+          outline: 'none',
+        }}
+        value={value || ''}
+        onChange={handleChange}
+        aria-label={field}
+      >
+        <option value="">{isTypeField ? '-- Select Root Cause Type --' : '-- Select Identified Root Cause --'}</option>
+        {isTypeField ? (
+          <>
+            {value && !ROOT_CAUSE_TYPES.includes(value) && <option value={value}>{value} (Current)</option>}
+            {ROOT_CAUSE_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </>
+        ) : (
+          <>
+            {value && !Object.values(ROOT_CAUSE_FACTORS).some((arr) => arr.includes(value)) && (
+              <option value={value}>{value} (Current)</option>
+            )}
+            {Object.entries(ROOT_CAUSE_FACTORS).map(([type, causes]) => (
+              <optgroup key={type} label={type}>
+                {causes.map((cause) => (
+                  <option key={cause} value={cause} title={cause}>{cause}</option>
+                ))}
+              </optgroup>
+            ))}
+          </>
+        )}
+      </select>
     </td>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ticket Table Component
+// Enhanced Modern SLA Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TicketTable({
+function EnhancedSLADashboard({
+  data,
+  onCellClick,
+}: {
+  data: MonthlyReportData;
+  onCellClick?: (title: string, ids: string[]) => void;
+}) {
+  const handleClick = (title: string, ids: string[]) => {
+    if (onCellClick && ids && ids.length > 0) onCellClick(title, ids);
+  };
+
+  const [techSearch, setTechSearch] = useState('');
+
+  const frKPI = data.kpis.find((k) => k.label.toLowerCase().includes('first response')) || data.kpis[0];
+  const rtKPI = data.kpis.find((k) => k.label.toLowerCase().includes('resolution')) || data.kpis[1];
+
+  const filteredTechs = useMemo(() => {
+    if (!techSearch.trim()) return data.technicianSLA;
+    const q = techSearch.toLowerCase().trim();
+    return data.technicianSLA.filter((t) => t.technician.toLowerCase().includes(q));
+  }, [data.technicianSLA, techSearch]);
+
+  const getRateBadge = (rate: number | null, target = 85) => {
+    if (rate === null) return <span style={{ color: '#64748b' }}>—</span>;
+    const isMet = rate >= target;
+    const isWarn = rate >= 70 && rate < target;
+    const bg = isMet ? '#00b050' : isWarn ? '#ffc000' : '#ff0000';
+    const color = isWarn ? '#000000' : '#ffffff';
+
+    return (
+      <span
+        style={{
+          display: 'inline-block',
+          background: bg,
+          color,
+          fontSize: '11px',
+          fontWeight: 800,
+          padding: '2px 8px',
+          borderRadius: '4px',
+          minWidth: '50px',
+          textAlign: 'center',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      >
+        {rate.toFixed(1)}%
+      </span>
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* ══ Executive Hero KPI Cards ══ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+        {/* Total Evaluated */}
+        <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Incidents</span>
+            <span style={{ fontSize: '16px' }}>🎫</span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 900, color: '#f8fafc', lineHeight: 1 }}>{data.technicianTotals.rtTotal}</div>
+          <span style={{ fontSize: '11px', color: '#64748b' }}>Overall monthly ticket volume</span>
+        </div>
+
+        {/* First Response Pass Rate */}
+        <div
+          onClick={() => handleClick('All First Response Passed', data.technicianTotals.frPassedIds)}
+          style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '6px', cursor: 'pointer' }}
+          title="Click to view all passed First Response incidents"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First Response SLA</span>
+            <span style={{ fontSize: '16px' }}>⚡</span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 900, color: (frKPI?.percentageResult ?? 0) >= 85 ? '#34d399' : '#f87171', lineHeight: 1 }}>
+            {frKPI ? `${frKPI.percentageResult.toFixed(1)}%` : formatSLAPercentage(data.technicianTotals.frPassRate)}
+          </div>
+          <span style={{ fontSize: '11px', color: (frKPI?.percentageResult ?? 0) >= 85 ? '#10b981' : '#f87171', fontWeight: 600 }}>
+            {(frKPI?.percentageResult ?? 0) >= 85 ? '✓ Target Met (85%)' : '⚠️ Below Target (85%)'}
+          </span>
+        </div>
+
+        {/* Resolution Time Pass Rate */}
+        <div
+          onClick={() => handleClick('All Resolution Time Passed', data.technicianTotals.rtPassedIds)}
+          style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '6px', cursor: 'pointer' }}
+          title="Click to view all passed Resolution Time incidents"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Resolution SLA</span>
+            <span style={{ fontSize: '16px' }}>⏱️</span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 900, color: (rtKPI?.percentageResult ?? 0) >= 85 ? '#34d399' : '#f87171', lineHeight: 1 }}>
+            {rtKPI ? `${rtKPI.percentageResult.toFixed(1)}%` : formatSLAPercentage(data.technicianTotals.rtPassRate)}
+          </div>
+          <span style={{ fontSize: '11px', color: (rtKPI?.percentageResult ?? 0) >= 85 ? '#10b981' : '#f87171', fontWeight: 600 }}>
+            {(rtKPI?.percentageResult ?? 0) >= 85 ? '✓ Target Met (85%)' : '⚠️ Below Target (85%)'}
+          </span>
+        </div>
+
+        {/* Target Benchmark */}
+        <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Target Standard</span>
+            <span style={{ fontSize: '16px' }}>🎯</span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 900, color: '#60a5fa', lineHeight: 1 }}>85.0%</div>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>Contractual threshold</span>
+        </div>
+      </div>
+
+      {/* ══ TABLE 1: KPI Objective Summary Table (Modern Dark Presentation) ══ */}
+      <div
+        style={{
+          background: '#111c30',
+          border: '1px solid #1e293b',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid #1e293b', background: 'linear-gradient(145deg, #17243a, #111c30)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '15px' }}>🎯</span>
+            <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Monthly KPI Objectives &amp; Compliance Results
+            </h3>
+          </div>
+          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+            Official service level agreement benchmarks and actual performance metrics
+          </p>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', border: '2px solid #000000' }}>
+            <thead>
+              <tr style={{ background: '#ffffcc', borderBottom: '2px solid #000000' }}>
+                <th style={{ padding: '10px 16px', textAlign: 'left', background: '#ffffcc', color: '#000000', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #000000' }}>
+                  KPI Description
+                </th>
+                <th style={{ padding: '10px 14px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #000000' }}>
+                  Target
+                </th>
+                <th style={{ padding: '10px 14px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #000000' }}>
+                  Count of Passed
+                </th>
+                <th style={{ padding: '10px 14px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #000000' }}>
+                  Total IRs
+                </th>
+                <th style={{ padding: '10px 16px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #000000' }}>
+                  Percentage Value Result
+                </th>
+                <th style={{ padding: '10px 14px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #000000' }}>
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.kpis.map((kpi) => {
+                const isMet = kpi.percentageResult >= kpi.targetPercent;
+                return (
+                  <tr
+                    key={kpi.label}
+                    style={{ borderBottom: '1px solid #000000' }}
+                  >
+                    <td style={{ padding: '12px 16px', fontWeight: 800, background: '#ffffcc', color: '#000000', border: '1px solid #000000' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>{kpi.label.includes('First') ? '⚡' : '⏱️'}</span>
+                        <span>{kpi.label}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 14px', textAlign: 'center', background: '#ffffff', color: '#ff0000', fontWeight: 800, fontSize: '13px', border: '1px solid #000000' }}>
+                      {kpi.targetPercent}%
+                    </td>
+                    <td style={{ padding: '12px 14px', textAlign: 'center', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #000000' }}>
+                      {kpi.countOfPassed}
+                    </td>
+                    <td style={{ padding: '12px 14px', textAlign: 'center', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #000000' }}>
+                      {kpi.totalIRs}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', background: isMet ? '#00b050' : '#ff0000', color: '#ffffff', fontWeight: 900, fontSize: '14px', border: '1px solid #000000' }}>
+                      {kpi.percentageResult.toFixed(1)}%
+                    </td>
+                    <td style={{ padding: '12px 14px', textAlign: 'center', background: isMet ? '#00b050' : '#ff0000', color: '#ffffff', fontWeight: 800, border: '1px solid #000000' }}>
+                      {isMet ? '✓ ON TARGET' : '⚠️ BELOW TARGET'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ══ TABLE 2: Technician SLA Breakdown Table (Modern Dark Presentation) ══ */}
+      <div
+        style={{
+          background: '#111c30',
+          border: '1px solid #1e293b',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        }}
+      >
+        {/* Table Title and Quick Search */}
+        <div
+          style={{
+            padding: '16px 22px',
+            borderBottom: '1px solid #1e293b',
+            background: 'linear-gradient(145deg, #17243a, #111c30)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px' }}>👥</span>
+              <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Technician SLA Performance Breakdown
+              </h3>
+            </div>
+            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+              Detailed counts for First Response and Resolution Time compliance per technician
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: '#64748b' }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Filter technician…"
+              value={techSearch}
+              onChange={(e) => setTechSearch(e.target.value)}
+              style={{
+                background: '#091426',
+                border: '1px solid #1e293b',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '11px',
+                color: '#f8fafc',
+                outline: 'none',
+                width: '160px',
+              }}
+            />
+            {techSearch && (
+              <button
+                type="button"
+                onClick={() => setTechSearch('')}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', border: '2px solid #000000' }}>
+            <thead>
+              {/* Main Group Headers */}
+              <tr>
+                <th
+                  rowSpan={2}
+                  style={{
+                    padding: '10px 16px',
+                    textAlign: 'left',
+                    background: '#ffffcc',
+                    color: '#000000',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    border: '1px solid #000000',
+                    width: '200px',
+                  }}
+                >
+                  TECHNICIAN
+                </th>
+                <th
+                  colSpan={4}
+                  style={{
+                    padding: '10px 14px',
+                    textAlign: 'center',
+                    background: '#00ffff',
+                    color: '#000000',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    border: '1px solid #000000',
+                  }}
+                >
+                  ⚡ FIRST RESPONSE
+                </th>
+                <th
+                  colSpan={4}
+                  style={{
+                    padding: '10px 14px',
+                    textAlign: 'center',
+                    background: '#00ff00',
+                    color: '#000000',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    border: '1px solid #000000',
+                  }}
+                >
+                  ⏱️ RESOLUTION TIME
+                </th>
+              </tr>
+              {/* Sub-column Headers */}
+              <tr>
+                {/* First Response Sub-cols */}
+                <th style={{ padding: '8px 12px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>Total IRs</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>Failed</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>Passed</th>
+                <th style={{ padding: '8px 14px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>SLA Pass Rate</th>
+
+                {/* Resolution Time Sub-cols */}
+                <th style={{ padding: '8px 12px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>Total IRs</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>Failed</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>Passed</th>
+                <th style={{ padding: '8px 14px', textAlign: 'center', background: '#ffffcc', color: '#000000', fontSize: '10px', fontWeight: 800, border: '1px solid #000000' }}>SLA Pass Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTechs.map((row) => (
+                <tr
+                  key={row.technician}
+                  style={{ borderBottom: '1px solid #000000' }}
+                >
+                  {/* Technician Name */}
+                  <td style={{ padding: '9px 16px', fontWeight: 800, background: '#ffff00', color: '#000000', border: '1px solid #000000', whiteSpace: 'nowrap' }}>
+                    {row.technician}
+                  </td>
+
+                  {/* First Response Columns */}
+                  <td
+                    style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #000000' }}
+                    onClick={() => handleClick(`${row.technician} — First Response — Total`, row.frTotalIds)}
+                    title="Click to view First Response total incidents"
+                  >
+                    {row.frTotal > 0 ? row.frTotal : '—'}
+                  </td>
+                  <td
+                    style={{
+                      padding: '9px 12px',
+                      textAlign: 'center',
+                      cursor: row.frFailed > 0 ? 'pointer' : 'default',
+                      background: row.frFailed > 0 ? '#fce4ec' : '#ffffff',
+                      color: row.frFailed > 0 ? '#cc0000' : '#000000',
+                      fontWeight: row.frFailed > 0 ? 800 : 500,
+                      border: '1px solid #000000',
+                    }}
+                    onClick={() => handleClick(`${row.technician} — First Response — Failed`, row.frFailedIds)}
+                    title="Click to view First Response failed incidents"
+                  >
+                    {row.frFailed > 0 ? row.frFailed : 0}
+                  </td>
+                  <td
+                    style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #000000' }}
+                    onClick={() => handleClick(`${row.technician} — First Response — Passed`, row.frPassedIds)}
+                    title="Click to view First Response passed incidents"
+                  >
+                    {row.frPassed}
+                  </td>
+                  <td style={{ padding: '9px 14px', textAlign: 'center', background: '#ffffff', border: '1px solid #000000' }}>
+                    {getRateBadge(row.frPassRate)}
+                  </td>
+
+                  {/* Resolution Time Columns */}
+                  <td
+                    style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #000000' }}
+                    onClick={() => handleClick(`${row.technician} — Resolution — Total`, row.rtTotalIds)}
+                    title="Click to view Resolution total incidents"
+                  >
+                    {row.rtTotal > 0 ? row.rtTotal : '—'}
+                  </td>
+                  <td
+                    style={{
+                      padding: '9px 12px',
+                      textAlign: 'center',
+                      cursor: row.rtFailed > 0 ? 'pointer' : 'default',
+                      background: row.rtFailed > 0 ? '#fce4ec' : '#ffffff',
+                      color: row.rtFailed > 0 ? '#cc0000' : '#000000',
+                      fontWeight: row.rtFailed > 0 ? 800 : 500,
+                      border: '1px solid #000000',
+                    }}
+                    onClick={() => handleClick(`${row.technician} — Resolution — Failed`, row.rtFailedIds)}
+                    title="Click to view Resolution failed incidents"
+                  >
+                    {row.rtFailed > 0 ? row.rtFailed : 0}
+                  </td>
+                  <td
+                    style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #000000' }}
+                    onClick={() => handleClick(`${row.technician} — Resolution — Passed`, row.rtPassedIds)}
+                    title="Click to view Resolution passed incidents"
+                  >
+                    {row.rtPassed}
+                  </td>
+                  <td style={{ padding: '9px 14px', textAlign: 'center', background: '#ffffff', border: '1px solid #000000' }}>
+                    {getRateBadge(row.rtPassRate)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {/* Summary Totals Row */}
+            <tfoot>
+              <tr style={{ background: '#ffd966', fontWeight: 900, border: '2px solid #000000' }}>
+                <td style={{ padding: '10px 16px', background: '#ffd966', color: '#000000', fontSize: '11px', textTransform: 'uppercase', border: '1px solid #000000' }}>
+                  TOTAL
+                </td>
+                {/* FR Totals */}
+                <td
+                  style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', cursor: 'pointer', border: '1px solid #000000' }}
+                  onClick={() => handleClick('Total — First Response — Total', data.technicianTotals.frTotalIds)}
+                >
+                  {data.technicianTotals.frTotal}
+                </td>
+                <td
+                  style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: data.technicianTotals.frFailed > 0 ? '#cc0000' : '#000000', cursor: 'pointer', border: '1px solid #000000' }}
+                  onClick={() => handleClick('Total — First Response — Failed', data.technicianTotals.frFailedIds)}
+                >
+                  {data.technicianTotals.frFailed}
+                </td>
+                <td
+                  style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', cursor: 'pointer', border: '1px solid #000000' }}
+                  onClick={() => handleClick('Total — First Response — Passed', data.technicianTotals.frPassedIds)}
+                >
+                  {data.technicianTotals.frPassed}
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'center', background: '#ffd966', border: '1px solid #000000' }}>
+                  {getRateBadge(data.technicianTotals.frPassRate)}
+                </td>
+
+                {/* RT Totals */}
+                <td
+                  style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', cursor: 'pointer', border: '1px solid #000000' }}
+                  onClick={() => handleClick('Total — Resolution — Total', data.technicianTotals.rtTotalIds)}
+                >
+                  {data.technicianTotals.rtTotal}
+                </td>
+                <td
+                  style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: data.technicianTotals.rtFailed > 0 ? '#cc0000' : '#000000', cursor: 'pointer', border: '1px solid #000000' }}
+                  onClick={() => handleClick('Total — Resolution — Failed', data.technicianTotals.rtFailedIds)}
+                >
+                  {data.technicianTotals.rtFailed}
+                </td>
+                <td
+                  style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', cursor: 'pointer', border: '1px solid #000000' }}
+                  onClick={() => handleClick('Total — Resolution — Passed', data.technicianTotals.rtPassedIds)}
+                >
+                  {data.technicianTotals.rtPassed}
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'center', background: '#ffd966', border: '1px solid #000000' }}>
+                  {getRateBadge(data.technicianTotals.rtPassRate)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* ══ Executive Remarks & Observations (Card Layout) ══ */}
+      {data.remarks && (
+        <div
+          style={{
+            background: '#111c30',
+            border: '1px solid #1e293b',
+            borderRadius: '16px',
+            padding: '20px 24px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+            <span style={{ fontSize: '16px' }}>📝</span>
+            <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Executive Remarks &amp; Strategic Observations
+            </h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#cbd5e1', lineHeight: 1.6 }}>
+            {data.remarks.split('\n').map((line, i) => {
+              const trimmed = line.trim();
+              if (!trimmed) return null;
+              const isHeader = trimmed.startsWith('Target ') || trimmed.startsWith('Observations:') || trimmed.startsWith('Recommendation:');
+              return (
+                <p
+                  key={i}
+                  style={{
+                    margin: 0,
+                    fontWeight: isHeader ? 800 : 400,
+                    color: isHeader ? '#93c5fd' : '#cbd5e1',
+                    fontSize: isHeader ? '12px' : '12px',
+                  }}
+                >
+                  {trimmed}
+                </p>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enhanced Modern Ticket Grid
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EnhancedTicketGrid({
   incidents,
   columns,
   title,
@@ -160,19 +661,36 @@ function TicketTable({
     value: string
   ) => void;
 }) {
+  const [searchTerm, setSearchTerm] = useState('');
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const [pageSize, setPageSize] = useState(25);
+
+  const statuses = useMemo(() => {
+    const s = new Set<string>();
+    incidents.forEach((inc) => {
+      const st = inc.requestStatus || getRawValue(inc, 'Request Status');
+      if (st) s.add(st);
+    });
+    return Array.from(s).sort();
+  }, [incidents]);
 
   const filtered = useMemo(() => {
-    if (!searchTerm.trim()) return incidents;
-    const term = searchTerm.toLowerCase();
-    return incidents.filter((inc) =>
-      columns.some((col) => getRawValue(inc, col).toLowerCase().includes(term))
-    );
-  }, [incidents, searchTerm, columns]);
+    let list = incidents;
+
+    if (statusFilter !== 'ALL') {
+      list = list.filter((inc) => (inc.requestStatus || getRawValue(inc, 'Request Status')).toLowerCase() === statusFilter.toLowerCase());
+    }
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter((inc) => columns.some((col) => getRawValue(inc, col).toLowerCase().includes(term)));
+    }
+
+    return list;
+  }, [incidents, statusFilter, searchTerm, columns]);
 
   const sorted = useMemo(() => {
     if (!sortCol) return filtered;
@@ -185,13 +703,12 @@ function TicketTable({
     });
   }, [filtered, sortCol, sortDir]);
 
-  const totalPages = Math.ceil(sorted.length / pageSize);
-  const paginated = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paginated = pageSize === -1 ? sorted : sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleSort = (col: string) => {
-    if (sortCol === col) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
+    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
       setSortCol(col);
       setSortDir('asc');
     }
@@ -199,49 +716,144 @@ function TicketTable({
   };
 
   return (
-    <div className="monthly-ticket-table-wrap">
-      <div className="monthly-ticket-header">
-        <h3 className="monthly-ticket-title">{title}</h3>
-        <div className="monthly-ticket-controls">
-          <span className="monthly-ticket-count">{filtered.length} ticket{filtered.length !== 1 ? 's' : ''}</span>
+    <div
+      style={{
+        background: '#111c30',
+        border: '1px solid #1e293b',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header and Filter Toolbar */}
+      <div
+        style={{
+          padding: '16px 22px',
+          borderBottom: '1px solid #1e293b',
+          background: 'linear-gradient(145deg, #17243a, #111c30)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
+        <div>
+          <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {title}
+          </h3>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+            Showing {filtered.length} of {incidents.length} records
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Search */}
           <input
             type="text"
-            className="monthly-ticket-search"
-            placeholder="Search tickets..."
+            placeholder="Search records…"
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              background: '#091426',
+              border: '1px solid #1e293b',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '11px',
+              color: '#f8fafc',
+              outline: 'none',
+              width: '180px',
+            }}
           />
+
+          {/* Status Filter */}
+          {statuses.length > 0 && (
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                background: '#091426',
+                border: '1px solid #1e293b',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '11px',
+                color: '#94a3b8',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="ALL">Status: All</option>
+              {statuses.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Page Size */}
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            style={{
+              background: '#091426',
+              border: '1px solid #1e293b',
+              borderRadius: '8px',
+              padding: '6px 8px',
+              fontSize: '11px',
+              color: '#94a3b8',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={-1}>All</option>
+          </select>
         </div>
       </div>
 
       {incidents.length === 0 ? (
-        <div className="monthly-empty-state">{emptyMessage}</div>
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>{emptyMessage}</div>
       ) : (
         <>
-          <div className="monthly-table-scroll">
-            <table className="monthly-data-table">
+          <div style={{ overflowX: 'auto', flex: 1 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
               <thead>
-                <tr>
-                  <th className="monthly-row-num">#</th>
+                <tr style={{ background: '#091426', borderBottom: '1px solid #1e293b' }}>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '40px' }}>#</th>
                   {columns.map((col) => {
-                    const isRevisedCol =
-                      col === 'Revised Root Cause Type' ||
-                      col === 'Revised Identified Root Cause';
+                    const isRevisedCol = col === 'Revised Root Cause Type' || col === 'Revised Identified Root Cause';
                     return (
                       <th
                         key={col}
-                        className={`monthly-col-header ${sortCol === col ? 'is-sorted' : ''} ${isRevisedCol ? 'col-header-revised' : ''}`}
                         onClick={() => handleSort(col)}
-                        title={`Sort by ${col}${isRevisedCol && isAdmin ? ' (Admin Editable)' : ''}`}
+                        style={{
+                          padding: '10px 14px',
+                          textAlign: 'left',
+                          color: sortCol === col ? '#60a5fa' : '#64748b',
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.06em',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                          background: isRevisedCol ? 'rgba(37,99,235,0.08)' : 'transparent',
+                        }}
                       >
-                        <div className="monthly-col-header-inner">
-                          {isRevisedCol && (
-                            <span className="revised-badge">{isAdmin ? '✏️ EDITABLE' : 'ADJUSTED'}</span>
-                          )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>{col.replace(/\n/g, ' ')}</span>
-                          {sortCol === col && (
-                            <span className="monthly-sort-arrow">{sortDir === 'asc' ? '▲' : '▼'}</span>
-                          )}
+                          {sortCol === col && <span>{sortDir === 'asc' ? '▲' : '▼'}</span>}
                         </div>
                       </th>
                     );
@@ -250,24 +862,25 @@ function TicketTable({
               </thead>
               <tbody>
                 {paginated.map((inc, idx) => {
-                  const rowIndex = (currentPage - 1) * pageSize + idx + 1;
-                  const isOverdueFR = inc.firstResponseOverdue;
-                  const isOverdueRes = inc.resolutionOverdue;
+                  const rowIndex = (currentPage - 1) * (pageSize === -1 ? 0 : pageSize) + idx + 1;
+                  const isOverdue = inc.firstResponseOverdue || inc.resolutionOverdue;
+
                   return (
                     <tr
                       key={inc.requestId || idx}
-                      className={`monthly-data-row ${isOverdueFR || isOverdueRes ? 'has-overdue' : ''}`}
+                      style={{
+                        borderBottom: '1px solid rgba(30,41,59,0.7)',
+                        background: isOverdue ? 'rgba(239,68,68,0.03)' : 'transparent',
+                        transition: 'background 0.12s ease',
+                      }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'rgba(37,99,235,0.06)')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = isOverdue ? 'rgba(239,68,68,0.03)' : 'transparent')}
                     >
-                      <td className="monthly-row-num">{rowIndex}</td>
+                      <td style={{ padding: '10px 14px', color: '#64748b', fontWeight: 700 }}>{rowIndex}</td>
                       {columns.map((col) => {
-                        if (
-                          col === 'Revised Root Cause Type' ||
-                          col === 'Revised Identified Root Cause'
-                        ) {
+                        if (col === 'Revised Root Cause Type' || col === 'Revised Identified Root Cause') {
                           const val = getRawValue(inc, col);
-                          const currentType =
-                            getRawValue(inc, 'Revised Root Cause Type') ||
-                            getRawValue(inc, 'Root Cause Type');
+                          const currentType = getRawValue(inc, 'Revised Root Cause Type') || getRawValue(inc, 'Root Cause Type');
                           return (
                             <EditableRevisedCell
                               key={col}
@@ -283,19 +896,51 @@ function TicketTable({
 
                         const val = getRawValue(inc, col);
                         const colLower = col.toLowerCase();
-                        let cellClass = '';
-                        if (colLower.includes('first response overdue') && val.toLowerCase() === 'true') {
-                          cellClass = 'cell-overdue-true';
-                        } else if (colLower.includes('overdue status') && val.toLowerCase() === 'true') {
-                          cellClass = 'cell-overdue-true';
-                        } else if (colLower.includes('request status')) {
-                          const status = val.toLowerCase();
-                          if (status === 'closed' || status === 'resolved') cellClass = 'cell-status-closed';
-                          else if (status === 'on hold') cellClass = 'cell-status-hold';
-                          else if (status === 'open') cellClass = 'cell-status-open';
+
+                        if (colLower.includes('request status')) {
+                          const s = val.toLowerCase();
+                          const isClosed = s === 'closed' || s === 'resolved';
+                          return (
+                            <td key={col} style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  background: isClosed ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)',
+                                  color: isClosed ? '#34d399' : '#60a5fa',
+                                  border: `1px solid ${isClosed ? 'rgba(16,185,129,0.3)' : 'rgba(59,130,246,0.3)'}`,
+                                }}
+                              >
+                                {val || '—'}
+                              </span>
+                            </td>
+                          );
                         }
+
+                        if (colLower.includes('overdue status')) {
+                          const isOver = val.toLowerCase() === 'true';
+                          return (
+                            <td key={col} style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  background: isOver ? 'rgba(239,68,68,0.14)' : 'rgba(16,185,129,0.1)',
+                                  color: isOver ? '#f87171' : '#34d399',
+                                }}
+                              >
+                                {isOver ? '⚠️ OVERDUE' : '✓ OK'}
+                              </span>
+                            </td>
+                          );
+                        }
+
                         return (
-                          <td key={col} className={cellClass} title={val}>
+                          <td key={col} style={{ padding: '10px 14px', color: '#e2e8f0', whiteSpace: 'nowrap' }} title={val}>
                             {val || '—'}
                           </td>
                         );
@@ -308,24 +953,46 @@ function TicketTable({
           </div>
 
           {totalPages > 1 && (
-            <div className="monthly-pagination">
-              <button
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-                className="monthly-page-btn"
-              >
-                ← Prev
-              </button>
-              <span className="monthly-page-info">
-                Page {currentPage} of {totalPages}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                Page {currentPage} of {totalPages} ({filtered.length} items)
               </span>
-              <button
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
-                className="monthly-page-btn"
-              >
-                Next →
-              </button>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  style={{
+                    background: '#091426',
+                    border: '1px solid #1e293b',
+                    color: currentPage <= 1 ? '#475569' : '#94a3b8',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: currentPage <= 1 ? 'default' : 'pointer',
+                  }}
+                >
+                  ← Prev
+                </button>
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  style={{
+                    background: '#091426',
+                    border: '1px solid #1e293b',
+                    color: currentPage >= totalPages ? '#475569' : '#94a3b8',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: currentPage >= totalPages ? 'default' : 'pointer',
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           )}
         </>
@@ -334,257 +1001,204 @@ function TicketTable({
   );
 }
 
-// ─── SLA Dashboard Component ────────────────────────────────
-
-function SLADashboard({
-  data,
-  onCellClick,
-}: {
-  data: MonthlyReportData;
-  onCellClick?: (title: string, ids: string[]) => void;
-}) {
-  const handleClick = (title: string, ids: string[]) => {
-    if (onCellClick && ids.length > 0) onCellClick(title, ids);
-  };
-
-  const getPercentClass = (val: number | null): string => {
-    if (val === null) return 'sla-na';
-    if (val >= 90) return 'sla-excellent';
-    if (val >= 85) return 'sla-good';
-    if (val >= 70) return 'sla-warning';
-    return 'sla-critical';
-  };
-
-  const getKPIClass = (result: number, target: number): string => {
-    return result >= target ? 'kpi-met' : 'kpi-failed';
-  };
-
-  return (
-    <div className="monthly-sla-dashboard" id="monthly-report-canvas">
-      {/* ════ SLA TITLE ════ */}
-      <div className="monthly-sla-title-bar">
-        <h2>SLA</h2>
-      </div>
-
-      {/* ════ KPI SUMMARY TABLE ════ */}
-      <div className="monthly-kpi-section">
-        <table className="monthly-kpi-table">
-          <thead>
-            <tr>
-              <th className="kpi-empty"></th>
-              <th className="kpi-header">KPI</th>
-              <th className="kpi-header">Count of Passed</th>
-              <th className="kpi-header">Total IRs</th>
-              <th className="kpi-header">Percentage Value Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.kpis.map((kpi) => (
-              <tr key={kpi.label}>
-                <td className="kpi-label">{kpi.label}</td>
-                <td className="kpi-target">{kpi.targetPercent}%</td>
-                <td className="kpi-value">{kpi.countOfPassed}</td>
-                <td className="kpi-value">{kpi.totalIRs}</td>
-                <td className={`kpi-result ${getKPIClass(kpi.percentageResult, kpi.targetPercent)}`}>
-                  {kpi.percentageResult.toFixed(2)}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ════ PER-TECHNICIAN BREAKDOWN ════ */}
-      <div className="monthly-tech-section">
-        <table className="monthly-tech-table">
-          <thead>
-            <tr className="monthly-tech-header-groups">
-              <th className="tech-name-header" rowSpan={2}>Technician</th>
-              <th className="tech-fr-header" colSpan={4}>First Response</th>
-              <th className="tech-rt-header" colSpan={4}>Resolution Time</th>
-            </tr>
-            <tr className="monthly-tech-header-cols">
-              <th>Total # of IRs</th>
-              <th>Failed</th>
-              <th>Passed</th>
-              <th>SLA Pass Rate</th>
-              <th>Total # of IRs</th>
-              <th>Failed</th>
-              <th>Passed</th>
-              <th>SLA Pass Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.technicianSLA.map((row) => (
-              <tr key={row.technician} className="monthly-tech-data-row">
-                <td className="tech-name-cell">{row.technician}</td>
-                {/* First Response */}
-                <td
-                  className="tech-cell clickable"
-                  onClick={() => handleClick(`${row.technician} — First Response — Total`, row.frTotalIds)}
-                >
-                  {row.frTotal > 0 ? row.frTotal : '—'}
-                </td>
-                <td
-                  className={`tech-cell clickable ${row.frFailed > 0 ? 'has-failures' : ''}`}
-                  onClick={() => handleClick(`${row.technician} — First Response — Failed`, row.frFailedIds)}
-                >
-                  {row.frTotal > 0 ? row.frFailed : '—'}
-                </td>
-                <td
-                  className="tech-cell clickable"
-                  onClick={() => handleClick(`${row.technician} — First Response — Passed`, row.frPassedIds)}
-                >
-                  {row.frTotal > 0 ? row.frPassed : '—'}
-                </td>
-                <td className={`tech-cell tech-rate ${getPercentClass(row.frPassRate)}`}>
-                  {formatSLAPercentage(row.frPassRate)}
-                </td>
-                {/* Resolution Time */}
-                <td
-                  className="tech-cell clickable"
-                  onClick={() => handleClick(`${row.technician} — Resolution — Total`, row.rtTotalIds)}
-                >
-                  {row.rtTotal > 0 ? row.rtTotal : '—'}
-                </td>
-                <td
-                  className={`tech-cell clickable ${row.rtFailed > 0 ? 'has-failures' : ''}`}
-                  onClick={() => handleClick(`${row.technician} — Resolution — Failed`, row.rtFailedIds)}
-                >
-                  {row.rtTotal > 0 ? row.rtFailed : '—'}
-                </td>
-                <td
-                  className="tech-cell clickable"
-                  onClick={() => handleClick(`${row.technician} — Resolution — Passed`, row.rtPassedIds)}
-                >
-                  {row.rtTotal > 0 ? row.rtPassed : '—'}
-                </td>
-                <td className={`tech-cell tech-rate ${getPercentClass(row.rtPassRate)}`}>
-                  {formatSLAPercentage(row.rtPassRate)}
-                </td>
-              </tr>
-            ))}
-
-            {/* Totals Row */}
-            <tr className="monthly-tech-total-row">
-              <td className="tech-name-cell tech-total-label">Total</td>
-              <td className="tech-cell tech-total-val">{data.technicianTotals.frTotal}</td>
-              <td className={`tech-cell tech-total-val ${data.technicianTotals.frFailed > 0 ? 'has-failures' : ''}`}>
-                {data.technicianTotals.frFailed}
-              </td>
-              <td className="tech-cell tech-total-val">{data.technicianTotals.frPassed}</td>
-              <td className="tech-cell tech-total-val">{/* SLA pass rate cell in total is intentionally blank per screenshot */}</td>
-              <td className="tech-cell tech-total-val">{data.technicianTotals.rtTotal}</td>
-              <td className={`tech-cell tech-total-val ${data.technicianTotals.rtFailed > 0 ? 'has-failures' : ''}`}>
-                {data.technicianTotals.rtFailed}
-              </td>
-              <td className="tech-cell tech-total-val">{data.technicianTotals.rtPassed}</td>
-              <td className="tech-cell tech-total-val">{/* Blank for totals */}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* ════ REMARKS ════ */}
-      <div className="monthly-remarks-section">
-        <h3 className="monthly-remarks-title">Remarks for overall result</h3>
-        <div className="monthly-remarks-body">
-          {data.remarks.split('\n').map((line, i) => {
-            if (!line.trim()) return <br key={i} />;
-            const isBold =
-              line.startsWith('Target ') ||
-              line.startsWith('Observations:') ||
-              line.startsWith('Recommendation:');
-            return (
-              <p key={i} className={isBold ? 'remarks-bold' : ''}>
-                {line}
-              </p>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Monthly Report Table Component ────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Monthly Report Table Component
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function MonthlyReportTable({
   data,
   onCellClick,
   routedIncidents,
   isAdmin = false,
+  isPublicView = false,
   onUpdateIncident,
+  onArchiveReport,
+  onSaveReport,
+  isArchived = false,
 }: MonthlyReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabId>('sla-dashboard');
+  const [internalSaved, setInternalSaved] = useState(false);
 
+  const handleSaveReport = useCallback(() => {
+    if (onSaveReport) {
+      onSaveReport();
+    } else if (onArchiveReport) {
+      onArchiveReport();
+    } else {
+      const period = data.reportPeriod || 'Monthly Period';
+      const title = data.reportTitle || `Monthly Overall Ticket Report - ${period}`;
+      const id = `monthly-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
+      saveReport({
+        id,
+        type: 'monthly',
+        title,
+        period,
+        reportData: data,
+        routedIncidents,
+      });
+    }
+    setInternalSaved(true);
+    setTimeout(() => setInternalSaved(false), 4000);
+  }, [onSaveReport, onArchiveReport, data, routedIncidents]);
+
+  const savedState = isArchived || internalSaved;
   const allIncidents = routedIncidents || data.allTickets;
-
-  // Filter for Acceptable First Response (those NOT overdue)
-  const acceptableFR = useMemo(
-    () => allIncidents.filter((inc) => !inc.firstResponseOverdue),
-    [allIncidents]
-  );
+  const acceptableFR = useMemo(() => filterAcceptableFirstResponse(allIncidents), [allIncidents]);
 
   const tabs: { id: TabId; label: string; count: number; icon: string }[] = [
     { id: 'sla-dashboard', label: 'SLA Dashboard', count: 0, icon: '📊' },
     { id: 'all-tickets', label: 'All Tickets', count: allIncidents.length, icon: '📋' },
     { id: 'closed-tickets', label: 'Closed Tickets', count: data.closedTickets.length, icon: '✅' },
     { id: 'first-response', label: 'Acceptable First Response', count: acceptableFR.length, icon: '⏱️' },
+    { id: 'powerbi', label: 'Power BI Dashboard', count: 0, icon: '📈' },
   ];
 
-  const handleExportPng = useCallback(async () => {
-    try {
-      await exportAsPng(
-        'monthly-report-canvas',
-        `Monthly_SLA_Report_${new Date().toISOString().split('T')[0]}.png`
-      );
-    } catch {
-      alert('Failed to export as PNG');
-    }
-  }, []);
-
   return (
-    <div className="monthly-report-wrapper">
-      {/* Report Title */}
-      <div className="monthly-report-title-bar">
-        <h1 className="monthly-report-main-title">Monthly Overall Ticket Report</h1>
-        <p className="monthly-report-period">{data.reportPeriod}</p>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="monthly-tab-bar">
-        <div className="monthly-tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`monthly-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span className="tab-icon">{tab.icon}</span>
-              <span className="tab-label">{tab.label}</span>
-              {tab.count > 0 && <span className="tab-badge">{tab.count}</span>}
-            </button>
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '100%' }} id="monthly-report-canvas">
+      {/* ══ Modern Header Bar ══ */}
+      <div
+        style={{
+          background: 'linear-gradient(145deg, #111c30 0%, #0d1a2e 100%)',
+          border: '1px solid #1e293b',
+          borderRadius: '16px',
+          padding: '18px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '14px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #2563eb, #0891b2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px',
+              boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+            }}
+          >
+            📊
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '-0.01em' }}>
+                Monthly SLA Report
+              </h2>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  background: 'rgba(37,99,235,0.15)',
+                  border: '1px solid rgba(37,99,235,0.3)',
+                  color: '#60a5fa',
+                }}
+              >
+                {data.reportPeriod || 'Monthly Review'}
+              </span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0' }}>
+              First response and resolution time compliance metrics per technician
+            </p>
+          </div>
         </div>
-        {activeTab === 'sla-dashboard' && (
-          <button className="btn btn-export monthly-png-btn" onClick={handleExportPng}>
-            📷 Download PNG
+
+        {/* Right Controls: Save */}
+        {!isPublicView && (
+          <button
+            type="button"
+            onClick={handleSaveReport}
+            style={{
+              background: savedState ? 'rgba(16,185,129,0.15)' : '#2563eb',
+              border: savedState ? '1px solid #10b981' : 'none',
+              color: '#ffffff',
+              padding: '7px 14px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: savedState ? 'none' : '0 2px 10px rgba(37,99,235,0.3)',
+            }}
+          >
+            {savedState ? '✓ Archived' : '💾 Archive Report'}
           </button>
         )}
       </div>
 
-      {/* Tab Content */}
-      <div className="monthly-tab-content">
+      {/* ══ Modern Tab Bar Navigation ══ */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          overflowX: 'auto',
+          paddingBottom: '2px',
+          borderBottom: '1px solid #1e293b',
+        }}
+      >
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                background: isActive ? '#17243a' : 'transparent',
+                color: isActive ? '#60a5fa' : '#94a3b8',
+                fontWeight: isActive ? 800 : 600,
+                fontSize: '12px',
+                cursor: 'pointer',
+                borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
+                transition: 'all 0.12s ease',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{ fontSize: '14px' }}>{tab.icon}</span>
+              <span>{tab.label}</span>
+              {tab.count > 0 && (
+                <span
+                  style={{
+                    background: isActive ? '#2563eb' : '#1e293b',
+                    color: '#ffffff',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                  }}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ══ Active Tab Content ══ */}
+      <div>
         {activeTab === 'sla-dashboard' && (
-          <SLADashboard data={data} onCellClick={onCellClick} />
+          <EnhancedSLADashboard data={data} onCellClick={onCellClick} />
         )}
 
         {activeTab === 'all-tickets' && (
-          <TicketTable
+          <EnhancedTicketGrid
             incidents={allIncidents}
             columns={ALL_TICKETS_COLUMNS}
-            title="All Tickets"
+            title="All Incidents"
             emptyMessage="No tickets found for this period."
             isAdmin={isAdmin}
             onUpdateIncident={onUpdateIncident}
@@ -592,10 +1206,10 @@ export function MonthlyReportTable({
         )}
 
         {activeTab === 'closed-tickets' && (
-          <TicketTable
+          <EnhancedTicketGrid
             incidents={data.closedTickets}
             columns={CLOSED_TICKETS_COLUMNS}
-            title="Closed Tickets"
+            title="Closed Incidents"
             emptyMessage="No closed tickets found for this period."
             isAdmin={isAdmin}
             onUpdateIncident={onUpdateIncident}
@@ -603,36 +1217,47 @@ export function MonthlyReportTable({
         )}
 
         {activeTab === 'first-response' && (
-          <TicketTable
+          <EnhancedTicketGrid
             incidents={acceptableFR}
-            columns={ALL_TICKETS_COLUMNS}
+            columns={FIRST_RESPONSE_COLUMNS}
             title="Acceptable First Response"
             emptyMessage="No tickets with acceptable first response found."
             isAdmin={isAdmin}
             onUpdateIncident={onUpdateIncident}
           />
         )}
-      </div>
 
-      {/* Footer */}
-      <div className="monthly-report-footer">
-        <p>
-          Generated:{' '}
-          {(() => {
-            try {
-              const d = typeof data.generatedAt === 'string' ? new Date(data.generatedAt) : data.generatedAt;
-              return d.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              });
-            } catch {
-              return '';
-            }
-          })()}
-        </p>
+        {activeTab === 'powerbi' && (
+          <div
+            style={{
+              background: '#111c30',
+              border: '1px solid #1e293b',
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '20px' }}>📈</span>
+              <div>
+                <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                  Microsoft Power BI Embedded SLA Report
+                </h3>
+                <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+                  Interactive live reports synced directly with the Power BI Service
+                </p>
+              </div>
+            </div>
+            <div style={{ width: '100%', height: '700px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #1e293b' }}>
+              <iframe
+                title="Monthly Incident Report"
+                src="https://app.powerbi.com/view?r=eyJrIjoiMGMwZjQ2MzItODg0NS00YzhhLThjZTAtYTk1OGI1Y2MzMDRiIiwidCI6IjA0MjUwYzE0LTBiNzAtNGY5Zi04Yzg3LWU5OGZiOTM0NjI4ZiIsImMiOjEwfQ%3D%3D"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                allowFullScreen
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

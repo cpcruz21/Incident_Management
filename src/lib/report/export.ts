@@ -3,13 +3,63 @@ import { toPng } from 'html-to-image';
 import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingReportData } from '@/types/aging';
+import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
 import type { MonthlyReportData } from '@/types/monthly';
-import { ALL_TICKETS_COLUMNS, CLOSED_TICKETS_COLUMNS, getIncidentMonthlyValue } from '@/types/monthly';
+import { ALL_TICKETS_COLUMNS, CLOSED_TICKETS_COLUMNS, FIRST_RESPONSE_COLUMNS, getIncidentMonthlyValue } from '@/types/monthly';
+import { filterAcceptableFirstResponse } from '@/lib/monthly/calculator';
+import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
-export function buildExtractedIncidentRows(incidents: Incident[]): Record<string, unknown>[] {
-  return incidents.map((inc) => {
-    // Preserve the exact raw data uploaded
-    const row: Record<string, unknown> = { ...(inc.rawData || {}) };
+/**
+ * Checks whether an incident was re-assigned/routed away from its initial technician/team.
+ */
+export function isIncidentReassigned(inc: Incident): boolean {
+  if (inc.wasReassigned) return true;
+  const rawRow = inc.rawData || {};
+  const techKey = Object.keys(rawRow).find(
+    (k) =>
+      k.toLowerCase() === 'technician' ||
+      k.toLowerCase() === 'assigned team' ||
+      k.toLowerCase() === 'auto assigned group/technician' ||
+      k.toLowerCase().includes('technician')
+  );
+  const rawTech = techKey && rawRow[techKey] !== undefined && rawRow[techKey] !== null
+    ? String(rawRow[techKey]).trim()
+    : (inc.sourceTeam || '').trim();
+  const assigned = (inc.assignedTeam || '').trim();
+
+  if (rawTech && assigned && rawTech.toLowerCase() !== assigned.toLowerCase()) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Builds raw incident rows with preserved original technician,
+ * re-assigned technician, reassignment status, and routing reason.
+ */
+export function buildExtractedIncidentRows(
+  incidents: Incident[],
+  onlyReassigned: boolean = false
+): Record<string, unknown>[] {
+  const targetIncidents = onlyReassigned
+    ? incidents.filter(isIncidentReassigned)
+    : incidents;
+
+  return targetIncidents.map((inc) => {
+    // Preserve the exact raw data uploaded or fallback to core fields
+    const row: Record<string, unknown> =
+      inc.rawData && Object.keys(inc.rawData).length > 0
+        ? { ...inc.rawData }
+        : {
+            RequestID: inc.requestId,
+            Technician: inc.sourceTeam,
+            Department: inc.department || '',
+            Category: inc.category || '',
+            Subcategory: inc.subCategory || '',
+            Item: inc.item || '',
+            Priority: inc.priority || '',
+            'Request Status': inc.requestStatus || '',
+          };
 
     // Find the technician / assigned team column in the raw data
     const techKey = Object.keys(row).find(
@@ -20,11 +70,23 @@ export function buildExtractedIncidentRows(incidents: Incident[]): Record<string
         k.toLowerCase().includes('technician')
     ) || 'Technician';
 
-    // Update technician to the re-assigned team based on the calculator
-    row[techKey] = inc.assignedTeam;
+    const originalTech =
+      row[techKey] !== undefined && row[techKey] !== null && String(row[techKey]).trim() !== ''
+        ? String(row[techKey])
+        : (inc.sourceTeam || '');
 
-    // Ensure Final Team column is present
-    row['Final Team'] = inc.assignedTeam;
+    const reassigned = isIncidentReassigned(inc);
+
+    // Keep the original raw technician in techKey
+    row[techKey] = originalTech;
+
+    // Explicit clear columns for technician tracking and reporting
+    row['Original Technician'] = originalTech;
+    row['Re-assigned Technician'] = inc.assignedTeam || originalTech;
+    row['Final Team'] = inc.assignedTeam || originalTech;
+    row['Was Reassigned'] = reassigned ? 'TRUE' : 'FALSE';
+    row['Routing Reason'] =
+      inc.routingReason || (reassigned ? 'Reassigned by routing rules' : 'Unchanged');
 
     return row;
   });
@@ -66,11 +128,11 @@ function appendMonthlySheets(
       reportData.technicianTotals.frTotal,
       reportData.technicianTotals.frFailed,
       reportData.technicianTotals.frPassed,
-      '',
+      reportData.technicianTotals.frPassRate !== null ? `${reportData.technicianTotals.frPassRate.toFixed(2)}%` : '—',
       reportData.technicianTotals.rtTotal,
       reportData.technicianTotals.rtFailed,
       reportData.technicianTotals.rtPassed,
-      '',
+      reportData.technicianTotals.rtPassRate !== null ? `${reportData.technicianTotals.rtPassRate.toFixed(2)}%` : '—',
     ],
     [],
     ['Remarks for overall result'],
@@ -92,7 +154,7 @@ function appendMonthlySheets(
 
   const allInc = reportData.allTickets || fallbackIncidents;
   const closedInc = reportData.closedTickets || allInc.filter((i) => (i.requestStatus || '').toLowerCase().includes('clos'));
-  const acceptableFR = allInc.filter((i) => !i.firstResponseOverdue);
+  const acceptableFR = filterAcceptableFirstResponse(allInc);
 
   // 2. All Tickets sheet
   XLSX.utils.book_append_sheet(wb, makeSheet(allInc, ALL_TICKETS_COLUMNS), 'All Tickets');
@@ -101,7 +163,13 @@ function appendMonthlySheets(
   XLSX.utils.book_append_sheet(wb, makeSheet(closedInc, CLOSED_TICKETS_COLUMNS), 'Closed Tickets');
 
   // 4. Acceptable First Response sheet
-  XLSX.utils.book_append_sheet(wb, makeSheet(acceptableFR, ALL_TICKETS_COLUMNS), 'Acceptable First Response');
+  XLSX.utils.book_append_sheet(wb, makeSheet(acceptableFR, FIRST_RESPONSE_COLUMNS), 'Acceptable First Response');
+
+  // 5. Re-assigned Technicians sheet
+  const reassignedRows = buildExtractedIncidentRows(allInc, true);
+  if (reassignedRows.length > 0) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reassignedRows), 'Re-assigned Technicians');
+  }
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string): void {
@@ -116,22 +184,72 @@ function downloadBlob(content: string, filename: string, mimeType: string): void
   URL.revokeObjectURL(url);
 }
 
-export function exportToXLSX(
-  incidents: Incident[],
-  reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null,
-  filename: string = 'Extracted_Incidents.xlsx'
-): void {
-  const wb = XLSX.utils.book_new();
+function appendAgingSheets(wb: XLSX.WorkBook, reportData: AgingReportData, incidents: Incident[]): void {
+  // 1. Aging Distribution Sheet
+  const bucketOrder = AGING_BUCKET_ORDER;
+  const distRows: (string | number)[][] = [
+    ['Aging Incident Report', reportData.reportPeriod || ''],
+    [],
+    [
+      'FINAL TEAM',
+      ...bucketOrder.map((b) => AGING_BUCKET_LABELS[b]),
+      'Total Aging IRs (this week)',
+      'Total Aging IRs (last week)',
+    ],
+    ...reportData.agingRows.map((r) => [
+      r.teamName,
+      ...bucketOrder.map((b) => r.buckets[b] || 0),
+      r.totalAging,
+      reportData.previousWeek?.teamTotals?.[r.teamName] ?? '-',
+    ]),
+    [
+      'Total',
+      ...bucketOrder.map((b) => reportData.agingRows.reduce((sum, r) => sum + (r.buckets[b] || 0), 0)),
+      reportData.agingGrandTotal,
+      reportData.previousWeek?.grandTotal ?? '-',
+    ],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(distRows), 'Aging Distribution');
 
-  // If Monthly Report Data
-  if (reportData && 'technicianSLA' in reportData) {
-    appendMonthlySheets(wb, reportData as MonthlyReportData, incidents);
-    XLSX.writeFile(wb, filename);
-    return;
-  }
+  // 2. SLA Compliance Sheet
+  const slaRows: (string | number)[][] = [
+    ['First Response & Resolution SLA', reportData.reportPeriod || ''],
+    [],
+    [
+      'Final Team',
+      'Total # of IRs',
+      'FR Failed',
+      'FR Passed',
+      'FR Pass Rate',
+      'RT Failed',
+      'RT Passed',
+      'RT Pass Rate',
+    ],
+    ...reportData.slaRows.map((r) => [
+      r.teamName,
+      r.totalIRs,
+      r.firstResponse.failed,
+      r.firstResponse.passed,
+      r.firstResponse.slaPassRate !== null ? `${r.firstResponse.slaPassRate.toFixed(2)}%` : 'N/A',
+      r.resolutionTime.failed,
+      r.resolutionTime.passed,
+      r.resolutionTime.slaPassRate !== null ? `${r.resolutionTime.slaPassRate.toFixed(2)}%` : 'N/A',
+    ]),
+    [
+      'Total',
+      reportData.slaTotals.totalIRs,
+      reportData.slaTotals.firstResponse.failed,
+      reportData.slaTotals.firstResponse.passed,
+      reportData.slaTotals.firstResponse.slaPassRate !== null ? `${reportData.slaTotals.firstResponse.slaPassRate.toFixed(2)}%` : 'N/A',
+      reportData.slaTotals.resolutionTime.failed,
+      reportData.slaTotals.resolutionTime.passed,
+      reportData.slaTotals.resolutionTime.slaPassRate !== null ? `${reportData.slaTotals.resolutionTime.slaPassRate.toFixed(2)}%` : 'N/A',
+    ],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(slaRows), 'SLA Compliance');
 
-  // If Remarks Table exists in an Aging Report, place it as the first sheet
-  if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
+  // 3. Remarks Table Sheet
+  if (reportData.remarksTable) {
     const rt = reportData.remarksTable;
     const remarksSheetRows: (string | number)[][] = [
       ['Created on :', rt.createdOn],
@@ -159,11 +277,145 @@ export function exportToXLSX(
         r.responsibleOrDependency,
       ]),
     ];
-    const wsRemarks = XLSX.utils.aoa_to_sheet(remarksSheetRows);
-    XLSX.utils.book_append_sheet(wb, wsRemarks, 'Remarks Table');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(remarksSheetRows), 'Remarks Table');
   }
 
-  const rows = buildExtractedIncidentRows(incidents);
+  // 4. Re-assigned Technicians Sheet
+  const reassignedRows = buildExtractedIncidentRows(incidents, true);
+  if (reassignedRows.length > 0) {
+    const wsReassigned = XLSX.utils.json_to_sheet(reassignedRows);
+    XLSX.utils.book_append_sheet(wb, wsReassigned, 'Re-assigned Technicians');
+  } else {
+    const wsEmpty = XLSX.utils.aoa_to_sheet([['Note'], ['No incidents were re-assigned in this reporting period']]);
+    XLSX.utils.book_append_sheet(wb, wsEmpty, 'Re-assigned Technicians');
+  }
+
+  // 5. Raw Data Sheet
+  const rows = buildExtractedIncidentRows(incidents, false);
+  const wsIncidents = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, wsIncidents, 'Raw Data');
+}
+
+function appendWeeklySheets(
+  wb: XLSX.WorkBook,
+  reportData: WeeklyReportData,
+  incidents: Incident[]
+): void {
+  // 1. Weekly SLA Summary sheet
+  const teams = reportData.teamOrder || REPORT_TEAMS;
+  const cw = reportData.currentWeek;
+  const pw = reportData.previousWeek;
+
+  const summaryRows: (string | number)[][] = [
+    [reportData.reportTitle || 'Closed Incident Weekly Report', reportData.reportPeriod || ''],
+    [],
+    [
+      'Final Team',
+      'First Response', '', '', '', '',
+      'Resolution Time', '', '', '', '',
+    ],
+    [
+      '',
+      'Total # of IRs',
+      'Failed',
+      'Passed',
+      'SLA Pass Rate this week',
+      'SLA Pass Rate as of last week',
+      'Total # of IRs',
+      'Failed',
+      'Passed',
+      'SLA Pass Rate this week',
+      'SLA Pass Rate as of last week',
+    ],
+    ...teams.map((team) => {
+      const fr = cw.firstResponse.find((r) => r.teamName === team);
+      const rt = cw.resolutionTime.find((r) => r.teamName === team);
+      const frPrev = pw?.firstResponse?.[team];
+      const rtPrev = pw?.resolutionTime?.[team];
+
+      return [
+        team,
+        fr ? fr.total : 0,
+        fr ? fr.failed : 0,
+        fr ? fr.passed : 0,
+        fr && fr.slaPassRate !== null ? `${fr.slaPassRate.toFixed(2)}%` : 'N/A',
+        frPrev !== null && frPrev !== undefined ? `${frPrev.toFixed(2)}%` : '-',
+        rt ? rt.total : 0,
+        rt ? rt.failed : 0,
+        rt ? rt.passed : 0,
+        rt && rt.slaPassRate !== null ? `${rt.slaPassRate.toFixed(2)}%` : 'N/A',
+        rtPrev !== null && rtPrev !== undefined ? `${rtPrev.toFixed(2)}%` : '-',
+      ];
+    }),
+    [
+      'Total',
+      cw.firstResponseTotal.total,
+      cw.firstResponseTotal.failed,
+      cw.firstResponseTotal.passed,
+      cw.firstResponseTotal.slaPassRate !== null ? `${cw.firstResponseTotal.slaPassRate.toFixed(2)}%` : 'N/A',
+      pw?.firstResponseTotal !== null && pw?.firstResponseTotal !== undefined ? `${pw.firstResponseTotal.toFixed(2)}%` : '-',
+      cw.resolutionTimeTotal.total,
+      cw.resolutionTimeTotal.failed,
+      cw.resolutionTimeTotal.passed,
+      cw.resolutionTimeTotal.slaPassRate !== null ? `${cw.resolutionTimeTotal.slaPassRate.toFixed(2)}%` : 'N/A',
+      pw?.resolutionTimeTotal !== null && pw?.resolutionTimeTotal !== undefined ? `${pw.resolutionTimeTotal.toFixed(2)}%` : '-',
+    ],
+  ];
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Weekly SLA Summary');
+
+  // 2. Re-assigned Technicians Sheet
+  const reassignedRows = buildExtractedIncidentRows(incidents, true);
+  if (reassignedRows.length > 0) {
+    const wsReassigned = XLSX.utils.json_to_sheet(reassignedRows);
+    XLSX.utils.book_append_sheet(wb, wsReassigned, 'Re-assigned Technicians');
+  } else {
+    const wsEmpty = XLSX.utils.aoa_to_sheet([['Note'], ['No incidents were re-assigned in this reporting period']]);
+    XLSX.utils.book_append_sheet(wb, wsEmpty, 'Re-assigned Technicians');
+  }
+
+  // 3. Raw Data Sheet (All Incidents)
+  const allRows = buildExtractedIncidentRows(incidents, false);
+  const wsAll = XLSX.utils.json_to_sheet(allRows);
+  XLSX.utils.book_append_sheet(wb, wsAll, 'Raw Data');
+}
+
+export function exportToXLSX(
+  incidents: Incident[],
+  reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null,
+  filename: string = 'Extracted_Incidents.xlsx'
+): void {
+  const wb = XLSX.utils.book_new();
+
+  // If Monthly Report Data
+  if (reportData && 'technicianSLA' in reportData) {
+    appendMonthlySheets(wb, reportData as MonthlyReportData, incidents);
+    XLSX.writeFile(wb, filename);
+    return;
+  }
+
+  // If Aging Report Data
+  if (reportData && 'agingRows' in reportData) {
+    appendAgingSheets(wb, reportData as AgingReportData, incidents);
+    XLSX.writeFile(wb, filename);
+    return;
+  }
+
+  // If Weekly Report Data
+  if (reportData && 'currentWeek' in reportData) {
+    appendWeeklySheets(wb, reportData as WeeklyReportData, incidents);
+    XLSX.writeFile(wb, filename);
+    return;
+  }
+
+  const reassignedRows = buildExtractedIncidentRows(incidents, true);
+  if (reassignedRows.length > 0) {
+    const wsReassigned = XLSX.utils.json_to_sheet(reassignedRows);
+    XLSX.utils.book_append_sheet(wb, wsReassigned, 'Re-assigned Technicians');
+  }
+
+  const rows = buildExtractedIncidentRows(incidents, false);
   const wsIncidents = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, wsIncidents, 'Raw Data');
 
@@ -186,39 +438,25 @@ export function exportToXLS(
     return;
   }
 
-  if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
-    const rt = reportData.remarksTable;
-    const remarksSheetRows: (string | number)[][] = [
-      ['Created on :', rt.createdOn],
-      ['From:', rt.periodFrom, 'To:', rt.periodTo],
-      ['TOTAL RECORDS', rt.totalRecords],
-      [],
-      [
-        'RequestID',
-        'Department',
-        'Category',
-        'Sub Category',
-        'Description',
-        'Aging Days',
-        'Recent Update',
-        'Responsible or Dependency',
-      ],
-      ...rt.rows.map((r) => [
-        r.requestId,
-        r.department,
-        r.category,
-        r.subCategory,
-        r.description,
-        r.agingDays,
-        r.recentUpdate,
-        r.responsibleOrDependency,
-      ]),
-    ];
-    const wsRemarks = XLSX.utils.aoa_to_sheet(remarksSheetRows);
-    XLSX.utils.book_append_sheet(wb, wsRemarks, 'Remarks Table');
+  if (reportData && 'agingRows' in reportData) {
+    appendAgingSheets(wb, reportData as AgingReportData, incidents);
+    XLSX.writeFile(wb, filename, { bookType: 'biff8' });
+    return;
   }
 
-  const rows = buildExtractedIncidentRows(incidents);
+  if (reportData && 'currentWeek' in reportData) {
+    appendWeeklySheets(wb, reportData as WeeklyReportData, incidents);
+    XLSX.writeFile(wb, filename, { bookType: 'biff8' });
+    return;
+  }
+
+  const reassignedRows = buildExtractedIncidentRows(incidents, true);
+  if (reassignedRows.length > 0) {
+    const wsReassigned = XLSX.utils.json_to_sheet(reassignedRows);
+    XLSX.utils.book_append_sheet(wb, wsReassigned, 'Re-assigned Technicians');
+  }
+
+  const rows = buildExtractedIncidentRows(incidents, false);
   const wsIncidents = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, wsIncidents, 'Raw Data');
   XLSX.writeFile(wb, filename, { bookType: 'biff8' });
@@ -231,10 +469,41 @@ export function exportToCSV(
   incidents: Incident[],
   filename: string = 'Extracted_Incidents.csv'
 ): void {
-  const rows = buildExtractedIncidentRows(incidents);
+  const rows = buildExtractedIncidentRows(incidents, false);
   const ws = XLSX.utils.json_to_sheet(rows);
   const csv = XLSX.utils.sheet_to_csv(ws);
   downloadBlob(csv, filename, 'text/csv;charset=utf-8;');
+}
+
+/**
+ * Export ONLY re-assigned technician incidents raw data as CSV
+ */
+export function exportReassignedToCSV(
+  incidents: Incident[],
+  filename: string = 'Reassigned_Technician_Raw_Data.csv'
+): void {
+  const rows = buildExtractedIncidentRows(incidents, true);
+  const ws = XLSX.utils.json_to_sheet(
+    rows.length > 0 ? rows : [{ Note: 'No incidents were re-assigned in this reporting period' }]
+  );
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  downloadBlob(csv, filename, 'text/csv;charset=utf-8;');
+}
+
+/**
+ * Export ONLY re-assigned technician incidents raw data as XLSX
+ */
+export function exportReassignedToXLSX(
+  incidents: Incident[],
+  filename: string = 'Reassigned_Technician_Raw_Data.xlsx'
+): void {
+  const wb = XLSX.utils.book_new();
+  const rows = buildExtractedIncidentRows(incidents, true);
+  const ws = XLSX.utils.json_to_sheet(
+    rows.length > 0 ? rows : [{ Note: 'No incidents were re-assigned in this reporting period' }]
+  );
+  XLSX.utils.book_append_sheet(wb, ws, 'Re-assigned Technicians');
+  XLSX.writeFile(wb, filename);
 }
 
 /**
@@ -245,14 +514,14 @@ export function exportToHTML(
   reportData?: WeeklyReportData | AgingReportData | MonthlyReportData | null,
   filename: string = 'Extracted_Incidents.html'
 ): void {
-  const rows = buildExtractedIncidentRows(incidents);
+  const rows = buildExtractedIncidentRows(incidents, false);
   const ws = XLSX.utils.json_to_sheet(rows);
   const htmlTable = XLSX.utils.sheet_to_html(ws);
 
-  let remarksHtml = '';
+  let summaryHtml = '';
   if (reportData && 'technicianSLA' in reportData) {
     const md = reportData as MonthlyReportData;
-    remarksHtml = `
+    summaryHtml = `
     <div style="margin-bottom: 30px;">
       <h2 style="background: #fff2cc; color: #000; padding: 8px 16px; border: 1px solid #d6b656; font-size: 18px; margin-bottom: 16px; text-align: center;">SLA Summary</h2>
       
@@ -285,9 +554,43 @@ export function exportToHTML(
       </div>
     </div>
     `;
-  } else if (reportData && 'remarksTable' in reportData && reportData.remarksTable) {
-    const rt = reportData.remarksTable;
-    remarksHtml = `
+  } else if (reportData && 'currentWeek' in reportData) {
+    const wd = reportData as WeeklyReportData;
+    summaryHtml = `
+    <div style="margin-bottom: 30px;">
+      <h2 style="color: #1f4e79; margin-bottom: 4px;">${wd.reportTitle || 'Closed Incident Weekly Report'}</h2>
+      <p style="color: #6b7280; font-size: 13px; margin-bottom: 16px;">${wd.reportPeriod || ''}</p>
+      <table style="border-collapse: collapse; width: 100%; max-width: 800px; font-size: 12px; margin-bottom: 24px;">
+        <thead>
+          <tr style="background: #1f4e79; color: #fff;">
+            <th style="padding: 6px 10px; border: 1px solid #d1d5db;">Final Team</th>
+            <th style="padding: 6px 10px; border: 1px solid #d1d5db;">FR Total</th>
+            <th style="padding: 6px 10px; border: 1px solid #d1d5db;">FR Pass Rate</th>
+            <th style="padding: 6px 10px; border: 1px solid #d1d5db;">RT Total</th>
+            <th style="padding: 6px 10px; border: 1px solid #d1d5db;">RT Pass Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(wd.teamOrder || REPORT_TEAMS).map((team) => {
+            const fr = wd.currentWeek.firstResponse.find((r) => r.teamName === team);
+            const rt = wd.currentWeek.resolutionTime.find((r) => r.teamName === team);
+            return `
+              <tr>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; font-weight: bold; color: #1d4ed8;">${team}</td>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: center;">${fr ? fr.total : 0}</td>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: center;">${fr && fr.slaPassRate !== null ? `${fr.slaPassRate.toFixed(2)}%` : 'N/A'}</td>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: center;">${rt ? rt.total : 0}</td>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: center;">${rt && rt.slaPassRate !== null ? `${rt.slaPassRate.toFixed(2)}%` : 'N/A'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    `;
+  } else if (reportData && 'agingRows' in reportData && (reportData as AgingReportData).remarksTable) {
+    const rt = (reportData as AgingReportData).remarksTable!;
+    summaryHtml = `
     <div style="margin-bottom: 30px;">
       <h2 style="color: #000; margin-bottom: 12px;">Remarks Table (Aging Days &ge; 8)</h2>
       <table style="border: 2px solid #000; border-collapse: collapse; max-width: 450px; margin-bottom: 16px;">
@@ -337,6 +640,22 @@ export function exportToHTML(
     `;
   }
 
+  // Re-assigned incidents section in HTML
+  let reassignedHtml = '';
+  const reassignedIncidents = incidents.filter(isIncidentReassigned);
+  if (reassignedIncidents.length > 0) {
+    const reassignedTable = XLSX.utils.sheet_to_html(
+      XLSX.utils.json_to_sheet(buildExtractedIncidentRows(incidents, true))
+    );
+    reassignedHtml = `
+    <div style="margin-bottom: 30px;">
+      <h2 style="color: #0d9488; margin-bottom: 4px;">Re-assigned Technician Raw Incidents (${reassignedIncidents.length})</h2>
+      <p class="meta">Incidents where technician assignment was re-routed based on department/category rules</p>
+      ${reassignedTable}
+    </div>
+    `;
+  }
+
   const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -354,7 +673,8 @@ export function exportToHTML(
   </style>
 </head>
 <body>
-  ${remarksHtml}
+  ${summaryHtml}
+  ${reassignedHtml}
   <h2>Extracted Raw Incident Data</h2>
   <p class="meta">Generated: ${new Date().toLocaleString()}</p>
   ${htmlTable}
@@ -386,7 +706,11 @@ export async function exportAsPng(elementId: string, filename: string = 'sla-rep
       pixelRatio: 2.5,
       backgroundColor: '#ffffff',
       filter: (node: HTMLElement) => {
-        if (node.classList && node.classList.contains('btn-save-report')) {
+        if (node.classList && (
+          node.classList.contains('btn-save-report') ||
+          node.classList.contains('weekly-table-action-bar') ||
+          node.classList.contains('no-export')
+        )) {
           return false;
         }
         return true;
@@ -397,6 +721,10 @@ export async function exportAsPng(elementId: string, filename: string = 'sla-rep
         transform: 'scale(1)',
         transformOrigin: 'top left',
         margin: '0',
+        overflow: 'visible',
+        overflowX: 'visible',
+        overflowY: 'visible',
+        scrollbarWidth: 'none',
       },
     });
 

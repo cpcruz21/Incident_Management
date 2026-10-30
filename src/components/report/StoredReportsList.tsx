@@ -71,6 +71,18 @@ export function StoredReportsList({ onOpenReport }: StoredReportsListProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {reports.map((report) => {
             const isWeekly = report.type === 'weekly';
+            const isMonthly = report.type === 'monthly';
+            const badgeClass = isWeekly
+              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              : isMonthly
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
+            const badgeLabel = isWeekly
+              ? 'Weekly SLA'
+              : isMonthly
+              ? 'Monthly SLA'
+              : 'First Response & Resolution SLA';
+
             return (
               <div
                 key={report.id}
@@ -79,12 +91,9 @@ export function StoredReportsList({ onOpenReport }: StoredReportsListProps) {
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span
-                      className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded ${isWeekly
-                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        }`}
+                      className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded ${badgeClass}`}
                     >
-                      {isWeekly ? 'Weekly SLA' : 'First Response & Resolution SLA'}
+                      {badgeLabel}
                     </span>
                     <span className="text-[11px] text-slate-400" title={report.savedAt}>
                       {report.savedAtFormatted}

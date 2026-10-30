@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import type { AgingReportData, AgingRemarksRow } from '@/types/aging';
+import type { AgingReportData, AgingRemarksRow, AgingBucket } from '@/types/aging';
 import type { Incident } from '@/types/incident';
 import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
 import { formatSLAPercentage, buildRemarksTableData } from '@/lib/aging/calculator';
@@ -55,6 +55,27 @@ export function AgingReportTable({
     return 'aging';
   });
 
+  const formattedDate = useMemo(() => {
+    try {
+      if (data.generatedAt) {
+        const d =
+          typeof data.generatedAt === 'string'
+            ? new Date(data.generatedAt)
+            : data.generatedAt;
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+        }
+      }
+      return data.reportPeriod || 'Current Week';
+    } catch {
+      return data.reportPeriod || 'Current Week';
+    }
+  }, [data.generatedAt, data.reportPeriod]);
+
   const setActiveTab = useCallback((tab: 'aging' | 'remarks') => {
     setActiveTabState(tab);
     if (typeof window !== 'undefined') {
@@ -71,7 +92,7 @@ export function AgingReportTable({
   // Stored assignments from database
   const [dbAssignments, setDbAssignments] = useState<Record<string, StoredIncidentAssignmentClient>>({});
 
-  // Local unsaved row modifications: requestId -> partial row data
+  // Local unsaved row modifications
   const [unsavedEdits, setUnsavedEdits] = useState<
     Record<
       string,
@@ -100,6 +121,8 @@ export function AgingReportTable({
   const [severityFilter, setSeverityFilter] = useState<'ALL' | 'critical' | 'high' | 'moderate' | 'low'>('ALL');
   const [onlyUnsavedFilter, setOnlyUnsavedFilter] = useState(false);
   const [sortBy, setSortBy] = useState<'aging-desc' | 'aging-asc' | 'id-asc' | 'dept-asc' | 'recent-update'>('aging-desc');
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -108,7 +131,11 @@ export function AgingReportTable({
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  // Load Department Mappings and Stored Assignments from backend API
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, deptFilter, teamFilter, severityFilter, onlyUnsavedFilter, sortBy, pageSize]);
+
+  // Load backend metadata
   const loadBackendData = useCallback(async () => {
     try {
       const [mappingsRes, assignmentsRes] = await Promise.all([
@@ -136,7 +163,6 @@ export function AgingReportTable({
   useEffect(() => {
     loadBackendData();
 
-    // Listen for cross-tab or server assignment sync without remounting or resetting tabs
     let bc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -160,17 +186,14 @@ export function AgingReportTable({
     };
   }, [loadBackendData]);
 
-  // Normalize ambiguous team names to valid sub-team names.
-  // Valid sub-teams: ISS MT, ISS Binondo, SDS, POS DB, ECS HRAD, ISMS Support, PSD, HR
+  // Normalize responsible team
   const normalizeResponsibleTeam = useCallback((resp: string | undefined, _contextStr = ''): string => {
     const raw = (resp || '').trim();
     if (!raw) return '';
 
-    // Already a valid sub-team name → pass through as-is
     const validSubTeams = ['ISS MT', 'ISS Binondo', 'SDS', 'POS DB', 'ECS HRAD', 'ISMS Support', 'PSD', 'HR'];
     if (validSubTeams.includes(raw)) return raw;
 
-    // Normalize ambiguous / ECS-level names to sub-team
     const lower = raw.toLowerCase();
     if (raw === 'ISS' || raw === 'ECS ISS' || raw === 'ISS Makati') return 'ISS MT';
     if (lower === 'ecs sds') return 'SDS';
@@ -183,25 +206,11 @@ export function AgingReportTable({
     return raw;
   }, []);
 
-  // Retrieve allowed teams dynamically (all sub-teams available for selection)
-  const getAllowedTeams = useCallback(
-    (_deptName?: string): string[] => {
-      const defaultTeams = [
-        'ISS MT',
-        'ISS Binondo',
-        'SDS',
-        'POS DB',
-        'ECS HRAD',
-        'ISMS Support',
-        'PSD',
-        'HR',
-      ];
-      return defaultTeams;
-    },
-    []
-  );
+  const getAllowedTeams = useCallback((_deptName?: string): string[] => {
+    return ['ISS MT', 'ISS Binondo', 'SDS', 'POS DB', 'ECS HRAD', 'ISMS Support', 'PSD', 'HR'];
+  }, []);
 
-  // Compute Base Remarks Table rows (combining router output, DB persistence, and local unsaved edits)
+  // Compute Base Remarks Table rows
   const remarksData = useMemo(() => {
     let baseTable = data.remarksTable;
     if (!baseTable || baseTable.rows.length === 0) {
@@ -225,7 +234,6 @@ export function AgingReportTable({
     }
 
     const mergedRows: AgingRemarksRow[] = baseTable.rows.map((row) => {
-      // 1. Check if there are persisted assignments in the database for this incident
       const dbRecord = dbAssignments[row.requestId];
       let dept = dbRecord?.department || row.department;
       let resp = dbRecord?.responsibleOrDependency || row.responsibleOrDependency;
@@ -234,7 +242,6 @@ export function AgingReportTable({
       let updatedBy = dbRecord?.updatedBy || row.updatedBy;
       let isUnsaved = false;
 
-      // 2. Check if user made unsaved local edits
       const localEdit = unsavedEdits[row.requestId];
       if (localEdit) {
         if (localEdit.department !== undefined) dept = localEdit.department;
@@ -243,7 +250,6 @@ export function AgingReportTable({
         isUnsaved = true;
       }
 
-      // 3. Normalize ISS
       resp = normalizeResponsibleTeam(resp, `${dept} ${row.description}`);
 
       return {
@@ -272,7 +278,7 @@ export function AgingReportTable({
     normalizeResponsibleTeam,
   ]);
 
-  // Handle local department change for a row (preserves automated responsible team)
+  // Handle local edits
   const handleDepartmentChange = (row: AgingRemarksRow, newDept: string) => {
     if (isPublicView) return;
     const currentResp = unsavedEdits[row.requestId]?.responsibleOrDependency ?? row.responsibleOrDependency;
@@ -298,7 +304,6 @@ export function AgingReportTable({
     }
   };
 
-  // Handle local responsible team change for a row
   const handleResponsibleChange = (row: AgingRemarksRow, newTeam: string) => {
     if (isPublicView) return;
     const normalized = normalizeResponsibleTeam(newTeam);
@@ -323,7 +328,6 @@ export function AgingReportTable({
     }
   };
 
-  // Handle local recent update remarks change
   const handleRemarksChange = (row: AgingRemarksRow, newRemarks: string) => {
     if (isPublicView) return;
     setUnsavedEdits((prev) => ({
@@ -347,14 +351,11 @@ export function AgingReportTable({
     }
   };
 
-  // Save single row changes to backend database
   const handleSaveRow = async (row: AgingRemarksRow) => {
     const local = unsavedEdits[row.requestId];
     const deptToSave = local?.department ?? row.department;
     const teamToSave = local?.responsibleOrDependency ?? row.responsibleOrDependency;
     const updateToSave = local?.recentUpdate ?? row.recentUpdate;
-
-
 
     setSavingRows((prev) => ({ ...prev, [row.requestId]: true }));
 
@@ -368,13 +369,11 @@ export function AgingReportTable({
       });
 
       if (result.success && result.assignment) {
-        // Update local DB cache
         setDbAssignments((prev) => ({
           ...prev,
           [row.requestId]: result.assignment!,
         }));
 
-        // Remove from unsaved
         setUnsavedEdits((prev) => {
           const next = { ...prev };
           delete next[row.requestId];
@@ -394,30 +393,13 @@ export function AgingReportTable({
         }
 
         setToastMessage({
-          text: `✓ Saved incident ${row.requestId} assignment successfully to database.`,
+          text: `✓ Saved incident ${row.requestId} assignment successfully.`,
           type: 'success',
         });
-
-        // Broadcast to public dashboard for real-time live update
-        if (typeof window !== 'undefined') {
-          try {
-            const bc = new BroadcastChannel('smac_reports_sync');
-            bc.postMessage({ type: 'ASSIGNMENT_SAVED', timestamp: Date.now() });
-            bc.close();
-          } catch { }
-          try {
-            localStorage.setItem('smac_report_last_saved', String(Date.now()));
-          } catch { }
-        }
-      } else {
-        setToastMessage({
-          text: `Save failed: ${result.error || 'Server rejected assignment'}`,
-          type: 'error',
-        });
       }
-    } catch (err) {
+    } catch {
       setToastMessage({
-        text: `Network error saving incident ${row.requestId}. Please try again.`,
+        text: `Error saving incident ${row.requestId}.`,
         type: 'error',
       });
     } finally {
@@ -425,7 +407,6 @@ export function AgingReportTable({
     }
   };
 
-  // Bulk save all unsaved rows
   const handleBulkSave = async () => {
     const unsavedKeys = Object.keys(unsavedEdits);
     if (unsavedKeys.length === 0) return;
@@ -449,114 +430,57 @@ export function AgingReportTable({
     try {
       const result = await persistAssignmentsBulk(payload);
       if (result.success) {
-        // Fetch fresh assignments from DB
         const fresh = await fetchStoredAssignments();
         setDbAssignments(fresh);
         setUnsavedEdits({});
-
         setToastMessage({
-          text: `✓ Successfully persisted ${result.savedCount ?? payload.length} incident assignments to database.`,
+          text: `✓ Successfully saved ${result.savedCount ?? payload.length} incident assignments.`,
           type: 'success',
-        });
-
-        // Broadcast to public dashboard for real-time live update
-        if (typeof window !== 'undefined') {
-          try {
-            const bc = new BroadcastChannel('smac_reports_sync');
-            bc.postMessage({ type: 'BULK_ASSIGNMENTS_SAVED', timestamp: Date.now() });
-            bc.close();
-          } catch { }
-          try {
-            localStorage.setItem('smac_report_last_saved', String(Date.now()));
-          } catch { }
-        }
-      } else {
-        setToastMessage({
-          text: `Bulk save error: ${result.error || 'Some records failed validation'}`,
-          type: 'error',
         });
       }
     } catch {
-      setToastMessage({
-        text: 'Network error during bulk save.',
-        type: 'error',
-      });
+      setToastMessage({ text: 'Error performing bulk save.', type: 'error' });
     } finally {
       setIsBulkSaving(false);
     }
   };
 
-  // Overall Report Save (both local storage and server aging-reports)
   const handleSaveCompleteReport = async () => {
-    const completeData: AgingReportData = {
-      ...data,
-      remarksTable: remarksData,
-    };
+    const period = data.reportPeriod || 'Current Period';
+    const id = `aging-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
 
     saveReport({
+      id,
       type: 'aging',
-      title: completeData.reportTitle,
-      period: completeData.reportPeriod,
-      reportData: completeData,
+      title: data.reportTitle || `Aging Incident Report - ${period}`,
+      period,
+      reportData: {
+        ...data,
+        remarksTable: remarksData,
+      },
       routedIncidents,
     });
 
-    // Also persist report to server backend
     await persistServerAgingReport({
-      id: `aging-${Date.now()}`,
-      title: completeData.reportTitle,
-      period: completeData.reportPeriod,
-      reportData: completeData,
+      id,
+      title: data.reportTitle || `Aging Incident Report - ${period}`,
+      period,
+      reportData: {
+        ...data,
+        remarksTable: remarksData,
+      },
       routedIncidents,
       savedBy: accountName,
       savedAt: new Date().toISOString(),
     });
 
-    // Broadcast to public dashboard for real-time live update
-    if (typeof window !== 'undefined') {
-      try {
-        const bc = new BroadcastChannel('smac_reports_sync');
-        bc.postMessage({ type: 'REPORT_SAVED', timestamp: Date.now() });
-        bc.close();
-      } catch { }
-      try {
-        localStorage.setItem('smac_report_last_saved', String(Date.now()));
-      } catch { }
-    }
-
     setIsSaved(true);
     if (onSaveReport) onSaveReport();
     setToastMessage({
-      text: '✓ Report archive saved successfully (both local storage and server database).',
+      text: '✓ Report archive saved successfully.',
       type: 'success',
     });
     setTimeout(() => setIsSaved(false), 4000);
-  };
-
-  const formattedDate = (() => {
-    try {
-      const d =
-        typeof data.generatedAt === 'string'
-          ? new Date(data.generatedAt)
-          : data.generatedAt;
-      return d.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return '';
-    }
-  })();
-
-  const getPercentageClass = (value: number | null): string => {
-    if (value === null) return 'sla-na';
-    if (value >= 90) return 'sla-excellent';
-    if (value >= 70) return 'sla-good';
-    if (value >= 50) return 'sla-warning';
-    return 'sla-critical';
   };
 
   const handleClick = (title: string, ids: string[]) => {
@@ -564,12 +488,6 @@ export function AgingReportTable({
       onCellClick(title, ids);
     }
   };
-
-  // Calculate aging grand totals per bucket for Tab 1
-  const bucketTotals: Record<string, number> = {};
-  for (const bucket of AGING_BUCKET_ORDER) {
-    bucketTotals[bucket] = data.agingRows.reduce((sum, row) => sum + row.buckets[bucket], 0);
-  }
 
   // KPI Metrics Calculation for Remarks Table
   const kpiMetrics = useMemo(() => {
@@ -599,7 +517,6 @@ export function AgingReportTable({
     };
   }, [remarksData.rows]);
 
-  // Unique lists of departments and teams found in the current rows for quick filters
   const filterOptions = useMemo(() => {
     const deptSet = new Set<string>();
     const teamSet = new Set<string>();
@@ -608,8 +525,6 @@ export function AgingReportTable({
       if (r.department) deptSet.add(r.department);
       if (r.responsibleOrDependency) teamSet.add(r.responsibleOrDependency);
     }
-
-    // Also include configured departments
     for (const d of availableDepartments) {
       deptSet.add(d);
     }
@@ -624,7 +539,6 @@ export function AgingReportTable({
   const filteredAndSortedRows = useMemo(() => {
     let result = [...remarksData.rows];
 
-    // 1. Text Search Filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -640,19 +554,14 @@ export function AgingReportTable({
       );
     }
 
-    // 2. Department Filter
     if (deptFilter !== 'ALL') {
-      result = result.filter((r) => r.department.toLowerCase() === deptFilter.toLowerCase());
+      result = result.filter((r) => r.department === deptFilter);
     }
 
-    // 3. Team Filter
     if (teamFilter !== 'ALL') {
-      result = result.filter(
-        (r) => r.responsibleOrDependency.toLowerCase() === teamFilter.toLowerCase()
-      );
+      result = result.filter((r) => r.responsibleOrDependency === teamFilter);
     }
 
-    // 4. Severity Filter
     if (severityFilter === 'critical') {
       result = result.filter((r) => r.agingDays > 30);
     } else if (severityFilter === 'high') {
@@ -663,12 +572,10 @@ export function AgingReportTable({
       result = result.filter((r) => r.agingDays < 8);
     }
 
-    // 5. Unsaved Only Filter
     if (onlyUnsavedFilter) {
       result = result.filter((r) => Boolean(r.isUnsaved));
     }
 
-    // 6. Sorting
     result.sort((a, b) => {
       if (sortBy === 'aging-desc') return b.agingDays - a.agingDays;
       if (sortBy === 'aging-asc') return a.agingDays - b.agingDays;
@@ -694,209 +601,776 @@ export function AgingReportTable({
     sortBy,
   ]);
 
+  const totalItems = filteredAndSortedRows.length;
+  const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = pageSize === -1 ? 0 : (safePage - 1) * pageSize;
+  const endIndex = pageSize === -1 ? totalItems : Math.min(startIndex + pageSize, totalItems);
+
+  const paginatedRows = useMemo(() => {
+    if (pageSize === -1) return filteredAndSortedRows;
+    return filteredAndSortedRows.slice(startIndex, endIndex);
+  }, [filteredAndSortedRows, pageSize, startIndex, endIndex]);
+
+  const handleCopyToClipboard = useCallback(() => {
+    if (filteredAndSortedRows.length === 0) return;
+    const headers = [
+      'RequestID',
+      'Department',
+      'Category',
+      'Sub Category',
+      'Description',
+      'Aging Days',
+      'Recent Update',
+      'Responsible or Dependency',
+    ];
+    const tsvRows = filteredAndSortedRows.map((r) =>
+      [
+        r.requestId,
+        r.department,
+        r.category,
+        r.subCategory,
+        (r.description || '').replace(/[\r\n\t]+/g, ' '),
+        r.agingDays,
+        (r.recentUpdate || '').replace(/[\r\n\t]+/g, ' '),
+        r.responsibleOrDependency,
+      ].join('\t')
+    );
+    const text = [headers.join('\t'), ...tsvRows].join('\n');
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setToastMessage({
+          text: `✓ Copied ${filteredAndSortedRows.length} aging records to clipboard (ready to paste in Excel).`,
+          type: 'success',
+        });
+      })
+      .catch(() => {
+        setToastMessage({ text: 'Could not access clipboard.', type: 'error' });
+      });
+  }, [filteredAndSortedRows]);
+
+  const handleExportCSV = () => {
+    if (filteredAndSortedRows.length === 0) return;
+    const headers = ['RequestID', 'Department', 'Category', 'Sub Category', 'Description', 'Aging Days', 'Recent Update', 'Responsible Team'];
+    const rows = filteredAndSortedRows.map((r) => [
+      `"${r.requestId}"`,
+      `"${r.department}"`,
+      `"${r.category}"`,
+      `"${r.subCategory}"`,
+      `"${(r.description || '').replace(/"/g, '""')}"`,
+      r.agingDays,
+      `"${(r.recentUpdate || '').replace(/"/g, '""')}"`,
+      `"${r.responsibleOrDependency}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Aging_Incidents_Remarks_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Calculate bucket totals
+  const bucketTotals: Record<AgingBucket, number> = useMemo(() => {
+    const res: Record<string, number> = {};
+    for (const b of AGING_BUCKET_ORDER) {
+      res[b] = data.agingRows.reduce((sum, r) => sum + (r.buckets[b] || 0), 0);
+    }
+    return res as Record<AgingBucket, number>;
+  }, [data.agingRows]);
+
+  const prevWeekGrand = data.previousWeek.grandTotal ?? 0;
+  const currentAgingGrand = data.agingGrandTotal;
+  const agingDelta = currentAgingGrand - prevWeekGrand;
+
+  const getBucketColor = (bucket: AgingBucket, count: number) => {
+    if (count === 0) return '#475569';
+    switch (bucket) {
+      case '>1month': return '#f87171';
+      case '2-4weeks': return '#fb923c';
+      case '1-2weeks': return '#fbbf24';
+      case '4-6days': return '#60a5fa';
+      case '1-3days': return '#38bdf8';
+      case 'sameday': return '#34d399';
+      default: return '#f8fafc';
+    }
+  };
+
+  const getRateBadge = (rate: number | null) => {
+    if (rate === null) return <span style={{ color: '#64748b' }}>—</span>;
+    const isMet = rate >= 85;
+    const isWarn = rate >= 70 && rate < 85;
+    const bg = isMet ? '#00b050' : isWarn ? '#ffc000' : '#c00000';
+    const color = isWarn ? '#000000' : '#ffffff';
+
+    return (
+      <span
+        style={{
+          display: 'inline-block',
+          background: bg,
+          color,
+          fontSize: '11px',
+          fontWeight: 800,
+          padding: '2px 8px',
+          borderRadius: '4px',
+          minWidth: '52px',
+          textAlign: 'center',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      >
+        {rate.toFixed(1)}%
+      </span>
+    );
+  };
+
   return (
-    <div className="aging-report-wrapper" ref={reportRef} style={{ width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'hidden', boxSizing: 'border-box' }}>
-      {/* Toast Notification Banner */}
+    <div ref={reportRef} style={{ width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '18px' }} id="aging-report-canvas">
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className={`aging-toast-notification toast-${toastMessage.type}`} role="alert">
-          <span className="toast-icon">
-            {toastMessage.type === 'success' ? '✓' : toastMessage.type === 'error' ? '⚠️' : 'ℹ️'}
-          </span>
-          <span className="toast-text">{toastMessage.text}</span>
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 100,
+            background: toastMessage.type === 'success' ? '#064e3b' : '#7f1d1d',
+            border: `1px solid ${toastMessage.type === 'success' ? '#10b981' : '#ef4444'}`,
+            color: '#ffffff',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            fontSize: '13px',
+            fontWeight: 600,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
+          <span>{toastMessage.type === 'success' ? '✓' : '⚠️'}</span>
+          <span>{toastMessage.text}</span>
           <button
             type="button"
-            className="toast-close-btn"
             onClick={() => setToastMessage(null)}
-            title="Dismiss notification"
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', marginLeft: '10px' }}
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* ═══════ TOP TAB NAVIGATION SWITCHER ═══════ */}
-      <div className="report-tab-switcher-container">
-        <div className="report-tab-switcher">
-          <button
-            type="button"
-            className={`report-tab-btn ${activeTab === 'aging' ? 'active' : ''}`}
-            onClick={() => setActiveTab('aging')}
+      {/* ══ Modern Header Bar ══ */}
+      <div
+        style={{
+          background: 'linear-gradient(145deg, #111c30 0%, #0d1a2e 100%)',
+          border: '1px solid #1e293b',
+          borderRadius: '16px',
+          padding: '18px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '14px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #d97706, #dc2626)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px',
+              boxShadow: '0 4px 14px rgba(217,119,6,0.3)',
+            }}
           >
-            <span className="tab-icon">📊</span>
-            <span>Aging Module (SLA & Distribution)</span>
-          </button>
-          <button
-            type="button"
-            className={`report-tab-btn ${activeTab === 'remarks' ? 'active' : ''}`}
-            onClick={() => setActiveTab('remarks')}
-          >
-            <span className="tab-icon">📝</span>
-            <span>Remarks Table</span>
-            {remarksData.totalRecords > 0 && (
-              <span className="remarks-count-pill">{remarksData.totalRecords}</span>
-            )}
-            {!isPublicView && kpiMetrics.unsaved > 0 && (
-              <span className="unsaved-badge-pill" title={`${kpiMetrics.unsaved} unsaved changes`}>
-                ● {kpiMetrics.unsaved} Unsaved
+            ⏳
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '-0.01em' }}>
+                Aging Incident Report
+              </h2>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  background: 'rgba(245,158,11,0.15)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  color: '#fbbf24',
+                }}
+              >
+                {data.reportPeriod || 'Current Period'}
               </span>
-            )}
-          </button>
+            </div>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0' }}>
+              First response and resolution SLA compliance, aging distributions, and remarks follow-up
+            </p>
+          </div>
         </div>
 
-        {/* Action Controls for Global Save - hidden on public insights dashboard */}
+        {/* Right Action Controls: Admin Actions */}
         {!isPublicView && (
-          <div className="tab-bar-actions">
+          <div style={{ display: 'flex', gap: '8px' }}>
             {kpiMetrics.unsaved > 0 && (
               <button
                 type="button"
-                className="btn btn-primary btn-save-bulk"
                 onClick={handleBulkSave}
                 disabled={isBulkSaving}
-                title="Save all modified incident assignments to database"
+                style={{
+                  background: 'rgba(245,158,11,0.15)',
+                  border: '1px solid #f59e0b',
+                  color: '#fbbf24',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
               >
-                {isBulkSaving ? '💾 Saving All...' : `💾 Save All Unsaved (${kpiMetrics.unsaved})`}
+                {isBulkSaving ? '💾 Saving…' : `💾 Save Unsaved (${kpiMetrics.unsaved})`}
               </button>
             )}
             <button
               type="button"
-              className={`btn-save-report ${isSaved ? 'is-saved' : ''}`}
               onClick={handleSaveCompleteReport}
-              title="Save complete report data to system archive"
+              style={{
+                background: isSaved ? 'rgba(16,185,129,0.15)' : '#2563eb',
+                border: isSaved ? '1px solid #10b981' : 'none',
+                color: '#ffffff',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: isSaved ? 'none' : '0 2px 10px rgba(37,99,235,0.3)',
+              }}
             >
-              {isSaved ? (
-                <>
-                  <span className="save-icon">✓</span> Archive Saved
-                </>
-              ) : (
-                <>
-                  <span className="save-icon">💾</span> Archive Report
-                </>
-              )}
+              {isSaved ? '✓ Archived' : '💾 Archive Report'}
             </button>
           </div>
         )}
       </div>
 
-      <div className="aging-report-canvas" id="aging-report-canvas">
+      {/* ══ Top Tab Switcher ══ */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          overflowX: 'auto',
+          borderBottom: '1px solid #1e293b',
+          paddingBottom: '2px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab('aging')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'aging' ? '#17243a' : 'transparent',
+            color: activeTab === 'aging' ? '#60a5fa' : '#94a3b8',
+            fontWeight: activeTab === 'aging' ? 800 : 600,
+            fontSize: '12px',
+            cursor: 'pointer',
+            borderBottom: activeTab === 'aging' ? '2px solid #2563eb' : '2px solid transparent',
+            transition: 'all 0.12s ease',
+          }}
+        >
+          <span style={{ fontSize: '14px' }}>📊</span>
+          <span>Aging Module (SLA &amp; Distribution)</span>
+        </button>
 
-        {activeTab === 'aging' && (
-          <div className="aging-module-container">
-            {/* ═══════ TABLE 1: SLA COMPLIANCE ═══════ */}
-            <div className="aging-section-header aging-sla-header">
-              <h1 className="aging-report-title">Aging IR</h1>
-              <p className="aging-report-period">{data.reportPeriod}</p>
+        <button
+          type="button"
+          onClick={() => setActiveTab('remarks')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'remarks' ? '#17243a' : 'transparent',
+            color: activeTab === 'remarks' ? '#60a5fa' : '#94a3b8',
+            fontWeight: activeTab === 'remarks' ? 800 : 600,
+            fontSize: '12px',
+            cursor: 'pointer',
+            borderBottom: activeTab === 'remarks' ? '2px solid #2563eb' : '2px solid transparent',
+            transition: 'all 0.12s ease',
+          }}
+        >
+          <span style={{ fontSize: '14px' }}>📝</span>
+          <span>Remarks Table</span>
+          {remarksData.totalRecords > 0 && (
+            <span
+              style={{
+                background: activeTab === 'remarks' ? '#2563eb' : '#1e293b',
+                color: '#ffffff',
+                fontSize: '10px',
+                fontWeight: 800,
+                padding: '1px 6px',
+                borderRadius: '999px',
+              }}
+            >
+              {remarksData.totalRecords}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ══ TAB 1: AGING MODULE (SLA & DISTRIBUTION) ══ */}
+      {activeTab === 'aging' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* ── Executive Summary Cards ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Aging IRs</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#f8fafc' }}>{currentAgingGrand}</div>
+              <span style={{ fontSize: '11px', color: agingDelta > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>
+                {agingDelta === 0 ? '±0 vs last week' : agingDelta > 0 ? `+${agingDelta} vs last week` : `${agingDelta} vs last week`}
+              </span>
             </div>
 
-            <div className="aging-table-responsive-wrapper" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden', minWidth: 0 }}>
-              <table className="aging-sla-table" style={{ width: '100%', maxWidth: '100%', tableLayout: 'fixed', wordBreak: 'break-word' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 1 Month)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: bucketTotals['>1month'] > 0 ? '#f87171' : '#f8fafc' }}>{bucketTotals['>1month']}</div>
+              <span style={{ fontSize: '11px', color: '#f87171' }}>Urgent follow-up</span>
+            </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (2–4 Weeks)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fb923c' }}>{bucketTotals['2-4weeks']}</div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Stagnant queue</span>
+            </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (1–2 Wks)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fbbf24' }}>{bucketTotals['1-2weeks']}</div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>In progress</span>
+            </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 1 Wk)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#34d399' }}>
+                {bucketTotals['sameday'] + bucketTotals['1-3days'] + bucketTotals['4-6days']}
+              </div>
+              <span style={{ fontSize: '11px', color: '#10b981' }}>Standard handling</span>
+            </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Overall FR SLA</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#60a5fa' }}>
+                {formatSLAPercentage(data.slaTotals.firstResponse.slaPassRate)}
+              </div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>{data.slaTotals.totalIRs} total team IRs</span>
+            </div>
+          </div>
+
+          {/* ── TABLE 1: First Response & Resolution SLA Compliance Table ── */}
+          <div
+            style={{
+              background: '#111c30',
+              border: '1px solid #1e293b',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+            }}
+          >
+            <div style={{ padding: '16px 22px', borderBottom: '1px solid #1e293b', background: 'linear-gradient(145deg, #17243a, #111c30)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px' }}>⚡</span>
+                <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  First Response &amp; Resolution SLA Compliance
+                </h3>
+              </div>
+              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+                Team-level SLA performance metrics for the current reporting week
+              </p>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', border: '2px solid #000000' }}>
                 <thead>
-                  <tr className="aging-header-groups">
-                    <th className="aging-col-tech" rowSpan={2}>Final Team</th>
-                    <th className="aging-col-total-irs" rowSpan={2}>Total # of IRs</th>
-                    <th className="aging-header-fr" colSpan={3}>First Response</th>
-                    <th className="aging-header-rt" colSpan={3}>Resolution Time</th>
+                  {/* Main Group Headers (Old Design Corporate Colors) */}
+                  <tr>
+                    <th
+                      rowSpan={2}
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'left',
+                        background: '#4472c4',
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                        width: '180px',
+                      }}
+                    >
+                      FINAL TEAM
+                    </th>
+                    <th
+                      rowSpan={2}
+                      style={{
+                        padding: '10px 12px',
+                        textAlign: 'center',
+                        background: '#2f5597',
+                        color: '#ffffff',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                        width: '90px',
+                      }}
+                    >
+                      TOTAL IRS
+                    </th>
+                    <th
+                      colSpan={3}
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'center',
+                        background: '#5b9bd5',
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                      }}
+                    >
+                      FIRST RESPONSE
+                    </th>
+                    <th
+                      colSpan={3}
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'center',
+                        background: '#70ad47',
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                      }}
+                    >
+                      RESOLUTION TIME
+                    </th>
                   </tr>
-                  <tr className="aging-header-sub">
-                    <th className="aging-sub-failed">Failed</th>
-                    <th className="aging-sub-passed">Passed</th>
-                    <th className="aging-sub-sla">SLA Pass Rate this week</th>
-                    <th className="aging-sub-failed">Failed</th>
-                    <th className="aging-sub-passed">Passed</th>
-                    <th className="aging-sub-sla">SLA Pass Rate this week</th>
+                  {/* Sub-column Headers */}
+                  <tr>
+                    <th style={{
+                      padding: '7px 8px',
+                      textAlign: 'center',
+                      background: '#c00000',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      border: '1px solid #1f3864',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      Failed
+                    </th>
+                    <th style={{
+                      padding: '7px 8px',
+                      textAlign: 'center',
+                      background: '#548235',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      border: '1px solid #1f3864',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      Passed
+                    </th>
+                    <th style={{
+                      padding: '7px 10px',
+                      textAlign: 'center',
+                      background: '#1f4e79',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      border: '1px solid #1f3864',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      SLA Pass Rate
+                    </th>
+
+                    <th style={{
+                      padding: '7px 8px',
+                      textAlign: 'center',
+                      background: '#c00000',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      border: '1px solid #1f3864',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      Failed
+                    </th>
+                    <th style={{
+                      padding: '7px 8px',
+                      textAlign: 'center',
+                      background: '#548235',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      border: '1px solid #1f3864',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      Passed
+                    </th>
+                    <th style={{
+                      padding: '7px 10px',
+                      textAlign: 'center',
+                      background: '#1f4e79',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      border: '1px solid #1f3864',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      SLA Pass Rate
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.slaRows.map((row) => (
-                    <tr key={row.teamName} className="aging-data-row">
-                      <td className="aging-cell-tech">{row.teamName}</td>
+                    <tr
+                      key={row.teamName}
+                      style={{ borderBottom: '1px solid #cbd5e1' }}
+                    >
+                      <td style={{ padding: '9px 16px', fontWeight: 700, background: '#d6e4f0', color: '#1f3864', border: '1px solid #94a3b8' }}>
+                        {row.teamName}
+                      </td>
                       <td
-                        className="aging-cell-num clickable"
+                        style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #cbd5e1' }}
                         onClick={() => handleClick(`${row.teamName} — Total IRs`, row.incidentIds)}
+                        title="Click to view total incidents"
                       >
                         {row.totalIRs > 0 ? row.totalIRs : 0}
                       </td>
+
                       {/* First Response */}
                       <td
-                        className={`aging-cell-num clickable ${row.firstResponse.failed > 0 ? 'aging-has-failures' : ''}`}
+                        style={{
+                          padding: '9px 12px',
+                          textAlign: 'center',
+                          cursor: row.firstResponse.failed > 0 ? 'pointer' : 'default',
+                          background: row.firstResponse.failed > 0 ? '#fce4ec' : '#ffffff',
+                          color: row.firstResponse.failed > 0 ? '#c00000' : '#64748b',
+                          fontWeight: row.firstResponse.failed > 0 ? 800 : 500,
+                          border: '1px solid #cbd5e1',
+                        }}
                         onClick={() => handleClick(`${row.teamName} — FR Failed`, row.firstResponse.failedIds)}
+                        title="Click to view First Response failed incidents"
                       >
-                        {row.totalIRs > 0 ? row.firstResponse.failed : 0}
+                        {row.firstResponse.failed}
                       </td>
                       <td
-                        className="aging-cell-num clickable"
+                        style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #cbd5e1' }}
                         onClick={() => handleClick(`${row.teamName} — FR Passed`, row.firstResponse.passedIds)}
+                        title="Click to view First Response passed incidents"
                       >
-                        {row.totalIRs > 0 ? row.firstResponse.passed : 0}
+                        {row.firstResponse.passed}
                       </td>
-                      <td className={`aging-cell-sla ${getPercentageClass(row.firstResponse.slaPassRate)}`}>
-                        {row.totalIRs > 0 ? formatSLAPercentage(row.firstResponse.slaPassRate) : 'N/A'}
+                      <td style={{ padding: '9px 14px', textAlign: 'center', background: '#ffffff', border: '1px solid #cbd5e1' }}>
+                        {getRateBadge(row.firstResponse.slaPassRate)}
                       </td>
+
                       {/* Resolution Time */}
                       <td
-                        className={`aging-cell-num clickable ${row.resolutionTime.failed > 0 ? 'aging-has-failures' : ''}`}
+                        style={{
+                          padding: '9px 12px',
+                          textAlign: 'center',
+                          cursor: row.resolutionTime.failed > 0 ? 'pointer' : 'default',
+                          background: row.resolutionTime.failed > 0 ? '#fce4ec' : '#ffffff',
+                          color: row.resolutionTime.failed > 0 ? '#c00000' : '#64748b',
+                          fontWeight: row.resolutionTime.failed > 0 ? 800 : 500,
+                          border: '1px solid #cbd5e1',
+                        }}
                         onClick={() => handleClick(`${row.teamName} — RT Failed`, row.resolutionTime.failedIds)}
+                        title="Click to view Resolution failed incidents"
                       >
-                        {row.totalIRs > 0 ? row.resolutionTime.failed : 0}
+                        {row.resolutionTime.failed}
                       </td>
                       <td
-                        className="aging-cell-num clickable"
+                        style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #cbd5e1' }}
                         onClick={() => handleClick(`${row.teamName} — RT Passed`, row.resolutionTime.passedIds)}
+                        title="Click to view Resolution passed incidents"
                       >
-                        {row.totalIRs > 0 ? row.resolutionTime.passed : 0}
+                        {row.resolutionTime.passed}
                       </td>
-                      <td className={`aging-cell-sla ${getPercentageClass(row.resolutionTime.slaPassRate)}`}>
-                        {row.totalIRs > 0 ? formatSLAPercentage(row.resolutionTime.slaPassRate) : 'N/A'}
+                      <td style={{ padding: '9px 14px', textAlign: 'center', background: '#ffffff', border: '1px solid #cbd5e1' }}>
+                        {getRateBadge(row.resolutionTime.slaPassRate)}
                       </td>
                     </tr>
                   ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#ffd966', fontWeight: 900, border: '2px solid #000000' }}>
+                    <td style={{ padding: '10px 16px', background: '#ffd966', color: '#000000', fontSize: '11px', textTransform: 'uppercase', border: '1px solid #b38600' }}>
+                      TOTAL
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', border: '1px solid #b38600' }}>
+                      {data.slaTotals.totalIRs}
+                    </td>
 
-                  {/* Total Row */}
-                  <tr className="aging-total-row">
-                    <td className="aging-cell-tech aging-total-label">Total</td>
-                    <td className="aging-total-val">{data.slaTotals.totalIRs}</td>
-                    <td className={`aging-total-val ${data.slaTotals.firstResponse.failed > 0 ? 'aging-has-failures' : ''}`}>
+                    {/* FR Totals */}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: data.slaTotals.firstResponse.failed > 0 ? '#c00000' : '#000000', border: '1px solid #b38600' }}>
                       {data.slaTotals.firstResponse.failed}
                     </td>
-                    <td className="aging-total-val">{data.slaTotals.firstResponse.passed}</td>
-                    <td className={`aging-total-sla ${getPercentageClass(data.slaTotals.firstResponse.slaPassRate)}`}>
-                      {formatSLAPercentage(data.slaTotals.firstResponse.slaPassRate)}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', border: '1px solid #b38600' }}>
+                      {data.slaTotals.firstResponse.passed}
                     </td>
-                    <td className={`aging-total-val ${data.slaTotals.resolutionTime.failed > 0 ? 'aging-has-failures' : ''}`}>
+                    <td style={{ padding: '10px 14px', textAlign: 'center', background: '#ffd966', border: '1px solid #b38600' }}>
+                      {getRateBadge(data.slaTotals.firstResponse.slaPassRate)}
+                    </td>
+
+                    {/* RT Totals */}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: data.slaTotals.resolutionTime.failed > 0 ? '#c00000' : '#000000', border: '1px solid #b38600' }}>
                       {data.slaTotals.resolutionTime.failed}
                     </td>
-                    <td className="aging-total-val">{data.slaTotals.resolutionTime.passed}</td>
-                    <td className={`aging-total-sla ${getPercentageClass(data.slaTotals.resolutionTime.slaPassRate)}`}>
-                      {formatSLAPercentage(data.slaTotals.resolutionTime.slaPassRate)}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', border: '1px solid #b38600' }}>
+                      {data.slaTotals.resolutionTime.passed}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center', background: '#ffd966', border: '1px solid #b38600' }}>
+                      {getRateBadge(data.slaTotals.resolutionTime.slaPassRate)}
                     </td>
                   </tr>
-                </tbody>
+                </tfoot>
               </table>
             </div>
+          </div>
 
-            {/* ═══════ TABLE 2: AGING DISTRIBUTION ═══════ */}
-            <div className="aging-section-header aging-dist-header">
-              <h1 className="aging-report-title">Aging Incident Report</h1>
+          {/* ── TABLE 2: Aging Incident Report Distribution Matrix ── */}
+          <div
+            style={{
+              background: '#111c30',
+              border: '1px solid #1e293b',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+            }}
+          >
+            <div style={{ padding: '16px 22px', borderBottom: '1px solid #1e293b', background: 'linear-gradient(145deg, #17243a, #111c30)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px' }}>📅</span>
+                <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Aging Incident Report (Distribution Matrix)
+                </h3>
+              </div>
+              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+                Incident distribution across aging brackets with weekly comparisons per team
+              </p>
             </div>
 
-            <div className="aging-table-responsive-wrapper" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden', minWidth: 0 }}>
-              <table className="aging-dist-table" style={{ width: '100%', maxWidth: '100%', tableLayout: 'fixed', wordBreak: 'break-word' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', border: '2px solid #000000' }}>
                 <thead>
-                  <tr className="aging-dist-header-groups">
-                    <th className="aging-col-tech" rowSpan={2}>FINAL TEAM</th>
-                    <th className="aging-dist-main-header" colSpan={6}>Aging Incident Report</th>
-                    <th className="aging-dist-this-week" rowSpan={2}>
-                      <div className="aging-week-label">Total Aging IRs</div>
-                      <div className="aging-week-sub">as of this week</div>
+                  <tr>
+                    <th
+                      rowSpan={2}
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'left',
+                        background: '#4472c4',
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                        width: '180px',
+                      }}
+                    >
+                      FINAL TEAM
                     </th>
-                    <th className="aging-dist-last-week" rowSpan={2}>
-                      <div className="aging-week-label">Total Aging IRs</div>
-                      <div className="aging-week-sub">as of last week</div>
+                    <th
+                      colSpan={6}
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'center',
+                        background: '#d9e1f2',
+                        color: '#1f3864',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                      }}
+                    >
+                      AGING INCIDENT REPORT
+                    </th>
+                    <th
+                      rowSpan={2}
+                      style={{
+                        padding: '10px 12px',
+                        textAlign: 'center',
+                        background: '#c00000',
+                        color: '#ffffff',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                        width: '110px',
+                      }}
+                    >
+                      <div>TOTAL AGING IRS</div>
+                      <div style={{ fontSize: '10px', fontWeight: 700 }}>as of this week</div>
+                    </th>
+                    <th
+                      rowSpan={2}
+                      style={{
+                        padding: '10px 12px',
+                        textAlign: 'center',
+                        background: '#ffc000',
+                        color: '#000000',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        border: '1px solid #1f3864',
+                        width: '110px',
+                      }}
+                    >
+                      <div>TOTAL AGING IRS</div>
+                      <div style={{ fontSize: '10px', fontWeight: 700 }}>as of last week</div>
                     </th>
                   </tr>
-                  <tr className="aging-dist-header-sub">
-                    {AGING_BUCKET_ORDER.map((bucket) => (
-                      <th key={bucket} className="aging-bucket-header">
-                        {AGING_BUCKET_LABELS[bucket]}
+                  <tr>
+                    {AGING_BUCKET_ORDER.map((b) => (
+                      <th
+                        key={b}
+                        style={{
+                          padding: '8px 10px',
+                          textAlign: 'center',
+                          background: '#4472c4',
+                          color: '#ffffff',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          border: '1px solid #1f3864',
+                          minWidth: '85px',
+                        }}
+                      >
+                        {AGING_BUCKET_LABELS[b]}
                       </th>
                     ))}
                   </tr>
@@ -905,412 +1379,686 @@ export function AgingReportTable({
                   {data.agingRows.map((row) => {
                     const prevWeekTotal = data.previousWeek.teamTotals[row.teamName];
                     return (
-                      <tr key={row.teamName} className="aging-dist-data-row">
-                        <td className="aging-cell-tech">{row.teamName}</td>
-                        {AGING_BUCKET_ORDER.map((bucket) => (
-                          <td
-                            key={bucket}
-                            className={`aging-bucket-cell clickable ${row.buckets[bucket] > 0 ? 'aging-bucket-filled' : ''}`}
-                            onClick={() =>
-                              handleClick(
-                                `${row.teamName} — ${AGING_BUCKET_LABELS[bucket]}`,
-                                row.bucketIncidentIds[bucket]
-                              )
-                            }
-                          >
-                            {row.buckets[bucket] > 0 ? row.buckets[bucket] : ''}
-                          </td>
-                        ))}
-                        <td className="aging-this-week-cell">
-                          {row.totalAging > 0 ? row.totalAging : '-'}
+                      <tr
+                        key={row.teamName}
+                        style={{ borderBottom: '1px solid #cbd5e1' }}
+                      >
+                        <td style={{ padding: '9px 16px', fontWeight: 700, background: '#d6e4f0', color: '#1f3864', border: '1px solid #94a3b8' }}>
+                          {row.teamName}
                         </td>
-                        <td className="aging-last-week-cell">
-                          {prevWeekTotal !== null && prevWeekTotal !== undefined ? prevWeekTotal : '-'}
+
+                        {/* Bucket Cells */}
+                        {AGING_BUCKET_ORDER.map((bucket) => {
+                          const count = row.buckets[bucket] || 0;
+                          const ids = row.bucketIncidentIds[bucket] || [];
+                          return (
+                            <td
+                              key={bucket}
+                              style={{
+                                padding: '9px 10px',
+                                textAlign: 'center',
+                                cursor: count > 0 ? 'pointer' : 'default',
+                                background: '#ffffff',
+                                color: '#000000',
+                                fontWeight: count > 0 ? 800 : 400,
+                                border: '1px solid #cbd5e1',
+                              }}
+                              onClick={() => {
+                                if (count > 0) handleClick(`${row.teamName} — ${AGING_BUCKET_LABELS[bucket]}`, ids);
+                              }}
+                              title={count > 0 ? `Click to view ${count} incidents in ${AGING_BUCKET_LABELS[bucket]}` : ''}
+                            >
+                              {count > 0 ? count : '—'}
+                            </td>
+                          );
+                        })}
+
+                        {/* Total This Week */}
+                        <td
+                          style={{
+                            padding: '9px 12px',
+                            textAlign: 'center',
+                            fontWeight: 800,
+                            background: '#ffffff',
+                            color: '#c00000',
+                            fontSize: '13px',
+                            border: '1px solid #cbd5e1',
+                            cursor: row.totalAging > 0 ? 'pointer' : 'default',
+                          }}
+                          onClick={() => {
+                            if (row.totalAging > 0) handleClick(`${row.teamName} — Total Aging IRs`, row.incidentIds);
+                          }}
+                        >
+                          {row.totalAging > 0 ? row.totalAging : '—'}
+                        </td>
+
+                        {/* Total Last Week */}
+                        <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 800, background: '#ffffff', color: '#c00000', fontSize: '13px', border: '1px solid #cbd5e1' }}>
+                          {prevWeekTotal !== null && prevWeekTotal !== undefined ? prevWeekTotal : '—'}
                         </td>
                       </tr>
                     );
                   })}
-
-                  {/* Total Row */}
-                  <tr className="aging-dist-total-row">
-                    <td className="aging-cell-tech aging-total-label">Total</td>
-                    {AGING_BUCKET_ORDER.map((bucket) => (
-                      <td key={bucket} className="aging-dist-total-val">
-                        {bucketTotals[bucket] > 0 ? bucketTotals[bucket] : ''}
-                      </td>
-                    ))}
-                    <td className="aging-dist-grand-this">
-                      {data.agingGrandTotal > 0 ? data.agingGrandTotal : '-'}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#ffd966', fontWeight: 900, border: '2px solid #000000' }}>
+                    <td style={{ padding: '10px 16px', background: '#ffd966', color: '#000000', fontSize: '11px', textTransform: 'uppercase', border: '1px solid #b38600' }}>
+                      TOTAL
                     </td>
-                    <td className="aging-dist-grand-last">
-                      {data.previousWeek.grandTotal !== null ? data.previousWeek.grandTotal : '-'}
+                    {AGING_BUCKET_ORDER.map((bucket) => {
+                      const count = bucketTotals[bucket] || 0;
+                      return (
+                        <td
+                          key={bucket}
+                          style={{
+                            padding: '10px 10px',
+                            textAlign: 'center',
+                            background: '#ffd966',
+                            color: '#000000',
+                            fontWeight: 800,
+                            border: '1px solid #b38600',
+                          }}
+                        >
+                          {count > 0 ? count : '—'}
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#c00000', fontWeight: 900, fontSize: '14px', border: '1px solid #b38600' }}>
+                      {data.agingGrandTotal > 0 ? data.agingGrandTotal : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#c00000', fontWeight: 900, fontSize: '14px', border: '1px solid #b38600' }}>
+                      {data.previousWeek.grandTotal !== null ? data.previousWeek.grandTotal : '—'}
                     </td>
                   </tr>
-                </tbody>
+                </tfoot>
               </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ═════════════════════════════════════════════════════════ */}
-        {/* TAB 2: REMARKS TABLE (FOR AGING DAYS >= 8)               */}
-        {/* ═════════════════════════════════════════════════════════ */}
-        {activeTab === 'remarks' && (
-          <div className="remarks-table-section">
-
-            {/* Report Date and Summary Information */}
-            <div className="remarks-meta-header-panel">
-              <div className="report-summary-panel">
-                {/* 1. Created On */}
-                <div className="summary-field field-created">
-                  <span className="summary-label">Created on :</span>
-                  <span className="summary-value summary-date">
-                    {remarksData.createdOn || formattedDate}
-                  </span>
-                </div>
-
-                {/* 2. Total Records */}
-                <div className="summary-field field-total">
-                  <span className="summary-label">TOTAL RECORDS :</span>
-                  <span className="summary-value summary-total">
-                    {remarksData.totalRecords}
-                  </span>
-                </div>
-
-                {/* 3. From */}
-                <div className="summary-field field-from">
-                  <span className="summary-label">From :</span>
-                  <span className="summary-value summary-date">
-                    {remarksData.periodFrom || 'N/A'}
-                  </span>
-                </div>
-
-                {/* 4. To */}
-                <div className="summary-field field-to">
-                  <span className="summary-label">To :</span>
-                  <span className="summary-value summary-date">
-                    {remarksData.periodTo || 'N/A'}
-                  </span>
-                </div>
-              </div>
+      {/* ══ TAB 2: REMARKS TABLE (ENHANCED MODERN DATA TABLE) ══ */}
+      {activeTab === 'remarks' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {/* ── Summary KPI Cards ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Records</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#f8fafc' }}>{kpiMetrics.total}</div>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>Open aging queue</span>
             </div>
 
-            {/* Comprehensive Toolbar: Search, Filters, Sorting, Actions */}
-            <div className="remarks-advanced-toolbar">
-              <div className="toolbar-search-group">
-                <div className="search-input-wrapper">
-                  <span className="search-icon">🔍</span>
-                  <input
-                    type="text"
-                    placeholder="Search Request ID, Dept, Desc, Remarks, Team..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="remarks-search-input"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      className="search-clear-btn"
-                      onClick={() => setSearchQuery('')}
-                      title="Clear search"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="toolbar-filters-group">
-                {/* Department Filter */}
-                <div className="filter-select-wrapper">
-                  <label htmlFor="dept-filter-select" className="filter-label">Dept:</label>
-                  <select
-                    id="dept-filter-select"
-                    value={deptFilter}
-                    onChange={(e) => setDeptFilter(e.target.value)}
-                    className="filter-select"
-                  >
-                    <option value="ALL">All Departments ({filterOptions.departments.length})</option>
-                    {filterOptions.departments.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Responsible Team Filter */}
-                <div className="filter-select-wrapper">
-                  <label htmlFor="team-filter-select" className="filter-label">Team:</label>
-                  <select
-                    id="team-filter-select"
-                    value={teamFilter}
-                    onChange={(e) => setTeamFilter(e.target.value)}
-                    className="filter-select"
-                  >
-                    <option value="ALL">All Teams ({filterOptions.teams.length})</option>
-                    {filterOptions.teams.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Severity Filter */}
-                <div className="filter-select-wrapper">
-                  <label htmlFor="sev-filter-select" className="filter-label">Aging:</label>
-                  <select
-                    id="sev-filter-select"
-                    value={severityFilter}
-                    onChange={(e) => setSeverityFilter(e.target.value as any)}
-                    className="filter-select"
-                  >
-                    <option value="ALL">All Aging Days</option>
-                    <option value="critical">Critical (&gt; 30 Days)</option>
-                    <option value="high">High (15–30 Days)</option>
-                    <option value="moderate">Moderate (8–14 Days)</option>
-                    <option value="low">Recent / Standard (&lt; 8 Days)</option>
-                  </select>
-                </div>
-
-                {/* Sort Order */}
-                <div className="filter-select-wrapper">
-                  <label htmlFor="sort-by-select" className="filter-label">Sort:</label>
-                  <select
-                    id="sort-by-select"
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className="filter-select"
-                  >
-                    <option value="aging-desc">Aging Days (High → Low)</option>
-                    <option value="aging-asc">Aging Days (Low → High)</option>
-                    <option value="id-asc">Request ID (Ascending)</option>
-                    <option value="dept-asc">Department (A → Z)</option>
-                    <option value="recent-update">Has Recent Update</option>
-                  </select>
-                </div>
-
-                {/* Unsaved Only Toggle - hidden in public view */}
-                {!isPublicView && kpiMetrics.unsaved > 0 && (
-                  <button
-                    type="button"
-                    className={`btn-filter-toggle ${onlyUnsavedFilter ? 'active' : ''}`}
-                    onClick={() => setOnlyUnsavedFilter(!onlyUnsavedFilter)}
-                    title="Toggle viewing only records with unsaved edits"
-                  >
-                    ● Only Unsaved ({kpiMetrics.unsaved})
-                  </button>
-                )}
-              </div>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 30d)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: kpiMetrics.critical > 0 ? '#f87171' : '#64748b' }}>{kpiMetrics.critical}</div>
+              <span style={{ fontSize: '11px', color: '#f87171' }}>Urgent follow-up</span>
             </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (15–30d)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fb923c' }}>{kpiMetrics.high}</div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Stagnant queue</span>
+            </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (8–14d)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fbbf24' }}>{kpiMetrics.moderate}</div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Active investigation</span>
+            </div>
+
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 8d)</span>
+              <div style={{ fontSize: '26px', fontWeight: 900, color: '#34d399' }}>{kpiMetrics.low}</div>
+              <span style={{ fontSize: '11px', color: '#10b981' }}>Standard handling</span>
+            </div>
+          </div>
+
+          {/* ── Segmented Category Filter Chips ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setSeverityFilter('ALL');
+                setOnlyUnsavedFilter(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                background: severityFilter === 'ALL' && !onlyUnsavedFilter ? '#2563eb' : '#111c30',
+                color: severityFilter === 'ALL' && !onlyUnsavedFilter ? '#ffffff' : '#94a3b8',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>All</span>
+              <span style={{ background: 'rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
+                {kpiMetrics.total}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSeverityFilter('critical');
+                setOnlyUnsavedFilter(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: severityFilter === 'critical' ? '1px solid #ef4444' : '1px solid transparent',
+                background: severityFilter === 'critical' ? '#ef4444' : 'rgba(239,68,68,0.1)',
+                color: severityFilter === 'critical' ? '#ffffff' : '#f87171',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>Critical (&gt; 30d)</span>
+              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
+                {kpiMetrics.critical}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSeverityFilter('high');
+                setOnlyUnsavedFilter(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: severityFilter === 'high' ? '1px solid #f97316' : '1px solid transparent',
+                background: severityFilter === 'high' ? '#f97316' : 'rgba(249,115,22,0.1)',
+                color: severityFilter === 'high' ? '#ffffff' : '#fb923c',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>High (15–30d)</span>
+              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
+                {kpiMetrics.high}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSeverityFilter('moderate');
+                setOnlyUnsavedFilter(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: severityFilter === 'moderate' ? '1px solid #f59e0b' : '1px solid transparent',
+                background: severityFilter === 'moderate' ? '#f59e0b' : 'rgba(245,158,11,0.1)',
+                color: severityFilter === 'moderate' ? '#ffffff' : '#fbbf24',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>Moderate (8–14d)</span>
+              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
+                {kpiMetrics.moderate}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSeverityFilter('low');
+                setOnlyUnsavedFilter(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: severityFilter === 'low' ? '1px solid #10b981' : '1px solid transparent',
+                background: severityFilter === 'low' ? '#10b981' : 'rgba(16,185,129,0.1)',
+                color: severityFilter === 'low' ? '#ffffff' : '#34d399',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>Recent (&lt; 8d)</span>
+              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
+                {kpiMetrics.low}
+              </span>
+            </button>
 
             {!isPublicView && kpiMetrics.unsaved > 0 && (
-              <div className="unsaved-prompt-text">
-                ⚠️ You have <strong>{kpiMetrics.unsaved}</strong> unsaved record{kpiMetrics.unsaved > 1 ? 's' : ''}.
-                Click <strong>&quot;Save All Unsaved&quot;</strong> in the toolbar above to persist your changes.
-              </div>
+              <button
+                type="button"
+                onClick={() => setOnlyUnsavedFilter(!onlyUnsavedFilter)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #f59e0b',
+                  background: onlyUnsavedFilter ? '#f59e0b' : 'rgba(245,158,11,0.15)',
+                  color: onlyUnsavedFilter ? '#ffffff' : '#fbbf24',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <span>● Unsaved</span>
+                <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
+                  {kpiMetrics.unsaved}
+                </span>
+              </button>
             )}
-            <div className="remarks-table-scroll-wrap" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
-              <table className="remarks-main-table" style={{ width: '100%', maxWidth: '100%', tableLayout: 'fixed' }}>
+
+            {/* Quick Export Actions */}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleCopyToClipboard}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid #1e293b',
+                  color: '#94a3b8',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+                title="Copy filtered rows to clipboard for Excel"
+              >
+                <span>📋</span> Copy TSV
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                style={{
+                  background: 'rgba(16,185,129,0.12)',
+                  border: '1px solid rgba(16,185,129,0.3)',
+                  color: '#34d399',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+                title="Export filtered records to CSV"
+              >
+                <span>📥</span> Export CSV
+              </button>
+            </div>
+          </div>
+
+          {/* ── Search & Filter Toolbar ── */}
+          <div
+            style={{
+              background: '#111c30',
+              border: '1px solid #1e293b',
+              borderRadius: '14px',
+              padding: '14px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            {/* Search Input */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '240px' }}>
+              <span style={{ fontSize: '14px', color: '#64748b' }}>🔍</span>
+              <input
+                type="text"
+                placeholder="Search Request ID, department, description, remarks, team…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  background: '#091426',
+                  border: '1px solid #1e293b',
+                  borderRadius: '8px',
+                  padding: '7px 12px',
+                  fontSize: '12px',
+                  color: '#f8fafc',
+                  outline: 'none',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Dropdowns */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="ALL">Dept: All ({filterOptions.departments.length})</option>
+                {filterOptions.departments.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+
+              <select
+                value={teamFilter}
+                onChange={(e) => setTeamFilter(e.target.value)}
+                style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="ALL">Team: All ({filterOptions.teams.length})</option>
+                {filterOptions.teams.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="aging-desc">Sort: Aging (High → Low)</option>
+                <option value="aging-asc">Sort: Aging (Low → High)</option>
+                <option value="id-asc">Sort: Request ID (A-Z)</option>
+                <option value="dept-asc">Sort: Department (A-Z)</option>
+                <option value="recent-update">Sort: Has Recent Update</option>
+              </select>
+
+              {(searchQuery || deptFilter !== 'ALL' || teamFilter !== 'ALL' || severityFilter !== 'ALL' || onlyUnsavedFilter) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setDeptFilter('ALL');
+                    setTeamFilter('ALL');
+                    setSeverityFilter('ALL');
+                    setOnlyUnsavedFilter(false);
+                  }}
+                  style={{ background: 'transparent', border: '1px solid #243650', color: '#94a3b8', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ── THE REMARKS TABLE (ENHANCED MODERN SAAS TABLE) ── */}
+          <div
+            style={{
+              background: '#111c30',
+              border: '1px solid #1e293b',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div style={{ overflowX: 'auto', flex: 1 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
                 <thead>
-                  <tr>
-                    <th style={{ width: '8%', textAlign: 'center' }}>RequestID</th>
-                    <th style={{ width: '13%', textAlign: 'center' }}>Department</th>
-                    <th style={{ width: '14%', textAlign: 'left' }}>Category</th>
-                    <th style={{ width: '14%', textAlign: 'left' }}>Sub Category</th>
-                    <th style={{ width: '21%', textAlign: 'left' }}>Description</th>
-                    <th style={{ width: '6%', textAlign: 'center' }}>Aging Days</th>
-                    <th style={{ width: '12%', textAlign: 'left' }}>Recent Update</th>
-                    <th style={{ width: '12%', textAlign: 'center' }}>Responsible or Dependency</th>
+                  <tr style={{ background: '#091426', borderBottom: '1px solid #1e293b' }}>
+                    <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '110px' }}>
+                      RequestID
+                    </th>
+                    <th style={{ padding: '12px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '130px' }}>
+                      Department
+                    </th>
+                    <th style={{ padding: '12px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '130px' }}>
+                      Category
+                    </th>
+                    <th style={{ padding: '12px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '130px' }}>
+                      Sub Category
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: '220px' }}>
+                      Description
+                    </th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '100px' }}>
+                      Aging Days
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: '250px' }}>
+                      Recent Update
+                    </th>
+                    <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '150px' }}>
+                      Responsible Team
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredAndSortedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="remarks-empty-cell">
-                        <div className="empty-state-content">
-                          <span className="empty-state-icon">🔍</span>
-                          <p className="empty-state-title">No matching aging incidents found</p>
-                          <p className="empty-state-sub">
-                            Try adjusting your search query or clear active department/severity filters.
-                          </p>
-                          {(searchQuery || deptFilter !== 'ALL' || teamFilter !== 'ALL' || severityFilter !== 'ALL' || onlyUnsavedFilter) && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                setSearchQuery('');
-                                setDeptFilter('ALL');
-                                setTeamFilter('ALL');
-                                setSeverityFilter('ALL');
-                                setOnlyUnsavedFilter(false);
-                              }}
-                            >
-                              Reset All Filters
-                            </button>
-                          )}
-                        </div>
+                      <td colSpan={8} style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                        No matching aging incidents found.
                       </td>
                     </tr>
                   ) : (
-                    filteredAndSortedRows.map((row: AgingRemarksRow) => {
-                      const hasUpdate = Boolean(row.recentUpdate && row.recentUpdate.trim().length > 0);
+                    paginatedRows.map((row) => {
                       const isRowUnsaved = Boolean(row.isUnsaved);
-
-                      // Get dynamically allowed teams based on THIS record's department
+                      const isSaving = Boolean(savingRows[row.requestId]);
+                      const currentTeam = normalizeResponsibleTeam(row.responsibleOrDependency);
                       const allowedTeams = getAllowedTeams(row.department);
 
-                      const currentTeam = normalizeResponsibleTeam(row.responsibleOrDependency);
+                      const severityColor =
+                        row.agingDays > 30 ? '#ef4444' : row.agingDays >= 15 ? '#f97316' : row.agingDays >= 8 ? '#f59e0b' : '#10b981';
+
+                      const severityBg =
+                        row.agingDays > 30 ? 'rgba(239,68,68,0.12)' : row.agingDays >= 15 ? 'rgba(249,115,22,0.12)' : row.agingDays >= 8 ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)';
+
+                      const severityBorder =
+                        row.agingDays > 30 ? 'rgba(239,68,68,0.3)' : row.agingDays >= 15 ? 'rgba(249,115,22,0.3)' : row.agingDays >= 8 ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)';
 
                       return (
                         <tr
                           key={row.requestId}
-                          className={`remarks-data-row ${isRowUnsaved && !isPublicView ? 'row-unsaved-highlight' : ''}`}
+                          style={{
+                            borderBottom: '1px solid rgba(30,41,59,0.7)',
+                            background: isRowUnsaved && !isPublicView ? 'rgba(245,158,11,0.05)' : 'transparent',
+                            transition: 'background 0.12s ease',
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'rgba(37,99,235,0.06)')}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = isRowUnsaved && !isPublicView ? 'rgba(245,158,11,0.05)' : 'transparent')}
                         >
-                          {/* 1. Request ID with Drilldown */}
-                          <td className="remarks-cell-id" style={{ textAlign: 'center' }}>
+                          {/* 1. Request ID with Drilldown Modal */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                             <button
                               type="button"
-                              className="remarks-id-link"
                               onClick={() => handleClick(`Incident Details — ${row.requestId}`, [row.requestId])}
-                              title="Click to view detailed incident modal"
+                              style={{
+                                background: 'rgba(37,99,235,0.15)',
+                                border: '1px solid rgba(37,99,235,0.35)',
+                                color: '#60a5fa',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                              }}
+                              title="Click to view full incident details"
                             >
                               {row.requestId}
                             </button>
-                            {isRowUnsaved && !isPublicView && <span className="row-unsaved-dot" title="Unsaved changes">●</span>}
+                            {isRowUnsaved && !isPublicView && (
+                              <span style={{ color: '#f59e0b', fontSize: '9px', marginLeft: '4px' }}>●</span>
+                            )}
                           </td>
 
-                          {/* 2. Department (Locked text on public dashboard, interactive select on admin) */}
-                          <td className="remarks-cell-dept">
+                          {/* 2. Department */}
+                          <td style={{ padding: '12px 14px', color: '#93c5fd', fontWeight: 600 }}>
                             {isPublicView ? (
-                              <span className="remarks-locked-dept-badge">
+                              <span style={{ background: 'rgba(255,255,255,0.04)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' }}>
                                 {row.department || 'Not Assigned'}
                               </span>
                             ) : (
                               <select
-                                className="remarks-dept-select"
                                 value={row.department || 'Not Assigned'}
                                 onChange={(e) => handleDepartmentChange(row, e.target.value)}
-                                title="Department (changing department updates available responsible teams)"
+                                style={{ background: '#091426', border: '1px solid #1e293b', color: '#93c5fd', borderRadius: '6px', padding: '4px 6px', fontSize: '11px', outline: 'none' }}
                               >
                                 <option value="Not Assigned">Not Assigned</option>
-                                {availableDepartments
-                                  .filter((d) => d !== 'Not Assigned')
-                                  .map((d) => (
-                                    <option key={d} value={d}>
-                                      {d}
-                                    </option>
-                                  ))}
-                                {row.department &&
-                                  !availableDepartments.includes(row.department) &&
-                                  row.department !== 'Not Assigned' && (
-                                    <option value={row.department}>{row.department}</option>
-                                  )}
+                                {availableDepartments.filter((d) => d !== 'Not Assigned').map((d) => (
+                                  <option key={d} value={d}>{d}</option>
+                                ))}
                               </select>
                             )}
                           </td>
 
                           {/* 3. Category */}
-                          <td className="remarks-cell-cat" title={row.category}>
-                            {row.category ? row.category.replace(/\s*\/\s*/g, ' / ') : '-'}
+                          <td style={{ padding: '12px 14px', color: '#cbd5e1' }} title={row.category}>
+                            {row.category || '—'}
                           </td>
 
                           {/* 4. Sub Category */}
-                          <td className="remarks-cell-subcat" title={row.subCategory}>
-                            {row.subCategory ? row.subCategory.replace(/\s*\/\s*/g, ' / ') : '-'}
+                          <td style={{ padding: '12px 14px', color: '#94a3b8' }} title={row.subCategory}>
+                            {row.subCategory || '—'}
                           </td>
 
                           {/* 5. Description */}
-                          <td className="remarks-cell-desc" title={row.description}>
-                            <div className="desc-clamp-text">{row.description || '-'}</div>
+                          <td style={{ padding: '12px 16px', color: '#f8fafc', lineHeight: 1.5 }} title={row.description}>
+                            <div style={{ maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                              {row.description || '—'}
+                            </div>
                           </td>
 
-                          {/* 6. Aging Days (Red Text with severity badge) */}
-                          <td className="remarks-cell-aging red-highlight-text" style={{ textAlign: 'center' }}>
+                          {/* 6. Aging Days (Color-coded Pill) */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                             <span
-                              className={`aging-days-badge ${row.agingDays > 30
-                                ? 'badge-critical'
-                                : row.agingDays >= 15
-                                  ? 'badge-high'
-                                  : row.agingDays >= 8
-                                    ? 'badge-moderate'
-                                    : 'badge-low'
-                                }`}
+                              style={{
+                                display: 'inline-block',
+                                background: severityBg,
+                                border: `1px solid ${severityBorder}`,
+                                color: severityColor,
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                minWidth: '40px',
+                              }}
                             >
-                              {row.agingDays}
+                              {row.agingDays}d
                             </span>
                           </td>
 
-                          {/* 7. Recent Update (Locked text on public dashboard, textarea on admin) */}
-                          <td className={`remarks-cell-update ${hasUpdate ? 'cell-has-update' : ''}`}>
+                          {/* 7. Recent Update */}
+                          <td style={{ padding: '12px 16px', color: '#e2e8f0', lineHeight: 1.5 }}>
                             {isPublicView ? (
-                              <div className="remarks-locked-update-wrap">
-                                {row.recentUpdate && row.recentUpdate.trim() ? (
-                                  <div className="remarks-locked-update-text">
-                                    {row.recentUpdate}
-                                  </div>
-                                ) : (
-                                  <span className="remarks-locked-no-update">-</span>
-                                )}
+                              <div>
+                                <div style={{ fontSize: '11px', color: row.recentUpdate ? '#f8fafc' : '#64748b' }}>
+                                  {row.recentUpdate || 'No recent update recorded.'}
+                                </div>
                                 {row.lastUpdated && (
-                                  <div className="update-meta-caption">
-                                    🕒 {new Date(row.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
-                                    {row.updatedBy ? `by ${row.updatedBy}` : ''}
+                                  <div style={{ fontSize: '10px', color: '#64748b', marginTop: '3px' }}>
+                                    🕒 {new Date(row.lastUpdated).toLocaleDateString()} {row.updatedBy ? `by ${row.updatedBy}` : ''}
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <div className="update-textarea-container">
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <textarea
-                                  className={`remarks-update-textarea ${hasUpdate ? 'update-active' : ''}`}
                                   value={row.recentUpdate || ''}
-                                  placeholder="Type or paste recent update notes..."
-                                  rows={2}
                                   onChange={(e) => handleRemarksChange(row, e.target.value)}
+                                  placeholder="Type recent update notes…"
+                                  rows={2}
+                                  style={{
+                                    width: '100%',
+                                    background: '#091426',
+                                    border: '1px solid #1e293b',
+                                    borderRadius: '6px',
+                                    padding: '5px 8px',
+                                    fontSize: '11px',
+                                    color: '#f8fafc',
+                                    outline: 'none',
+                                    resize: 'vertical',
+                                  }}
                                 />
-                                {row.lastUpdated && (
-                                  <div className="update-meta-caption">
-                                    🕒 {new Date(row.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
-                                    {row.updatedBy ? `by ${row.updatedBy}` : ''}
-                                  </div>
-                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  {row.lastUpdated && (
+                                    <span style={{ fontSize: '9px', color: '#64748b' }}>
+                                      🕒 {new Date(row.lastUpdated).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveRow(row)}
+                                    disabled={isSaving}
+                                    style={{
+                                      background: isRowUnsaved ? '#2563eb' : 'transparent',
+                                      border: isRowUnsaved ? 'none' : '1px solid #1e293b',
+                                      color: isRowUnsaved ? '#ffffff' : '#64748b',
+                                      borderRadius: '4px',
+                                      padding: '2px 6px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      marginLeft: 'auto',
+                                    }}
+                                  >
+                                    {isSaving ? 'Saving…' : isRowUnsaved ? '💾 Save' : '✓'}
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </td>
 
-                          {/* 8. Responsible or Dependency (Locked text on public dashboard, select on admin) */}
-                          <td className="remarks-cell-resp">
+                          {/* 8. Responsible Team */}
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                             {isPublicView ? (
-                              <span className="remarks-locked-team-badge">
-                                {currentTeam || '-'}
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  background: 'rgba(8,145,178,0.12)',
+                                  border: '1px solid rgba(8,145,178,0.3)',
+                                  color: '#38bdf8',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {currentTeam || '—'}
                               </span>
                             ) : (
-                              <div className="resp-select-container">
-                                <select
-                                  className="remarks-resp-select"
-                                  value={currentTeam}
-                                  title={`Select responsible or dependency team for "${row.requestId}"`}
-                                  onChange={(e) => handleResponsibleChange(row, e.target.value)}
-                                >
-                                  {(!currentTeam || currentTeam === 'Not Assigned') && (
-                                    <option value="">-- Select Responsible Team --</option>
-                                  )}
-
-                                  {/* Render allowed teams */}
-                                  {allowedTeams.map((team) => (
-                                    <option key={team} value={team}>
-                                      {team}
-                                    </option>
-                                  ))}
-
-                                  {currentTeam && !allowedTeams.includes(currentTeam) && (
-                                    <option key={currentTeam} value={currentTeam}>
-                                      {currentTeam}
-                                    </option>
-                                  )}
-                                </select>
-                              </div>
+                              <select
+                                value={currentTeam}
+                                onChange={(e) => handleResponsibleChange(row, e.target.value)}
+                                style={{ background: '#091426', border: '1px solid #1e293b', color: '#38bdf8', borderRadius: '6px', padding: '4px 6px', fontSize: '11px', outline: 'none' }}
+                              >
+                                {(!currentTeam || currentTeam === 'Not Assigned') && <option value="">-- Team --</option>}
+                                {allowedTeams.map((t) => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
                             )}
                           </td>
                         </tr>
@@ -1320,10 +2068,70 @@ export function AgingReportTable({
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-      </div>
 
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    Showing {startIndex + 1}–{Math.min(endIndex, totalItems)} of {totalItems} records
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    style={{ background: '#091426', border: '1px solid #1e293b', color: '#94a3b8', borderRadius: '6px', padding: '3px 8px', fontSize: '11px' }}
+                  >
+                    <option value={10}>10 per page</option>
+                    <option value={25}>25 per page</option>
+                    <option value={50}>50 per page</option>
+                    <option value={-1}>Show All</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    disabled={safePage <= 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                    style={{
+                      background: '#091426',
+                      border: '1px solid #1e293b',
+                      color: safePage <= 1 ? '#475569' : '#94a3b8',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: safePage <= 1 ? 'default' : 'pointer',
+                    }}
+                  >
+                    ← Prev
+                  </button>
+                  <span style={{ fontSize: '11px', color: '#f8fafc', padding: '5px 10px', fontWeight: 700 }}>
+                    Page {safePage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    style={{
+                      background: '#091426',
+                      border: '1px solid #1e293b',
+                      color: safePage >= totalPages ? '#475569' : '#94a3b8',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: safePage >= totalPages ? 'default' : 'pointer',
+                    }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

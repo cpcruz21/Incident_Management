@@ -7,7 +7,6 @@ export interface Account {
   pin: string;
 }
 
-
 export const ACCOUNTS: Account[] = [
   {
     id: 'smac-admin',

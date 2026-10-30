@@ -349,10 +349,9 @@ export function AgingReportWorkflow({
                   incidents={state.routedIncidents}
                   reportData={state.reportData}
                   baseFilename="SMAC_Aging_Report"
+                  targetElementId="aging-report-canvas"
+                  onExportPng={handleExportPng}
                 />
-                <button className="btn btn-export" onClick={handleExportPng}>
-                  📷 Download PNG
-                </button>
               </div>
             </div>
 
