@@ -15,7 +15,6 @@ interface SLAReportTableProps {
 
 interface OverdueStatusTableProps {
   title: string;
-  accentColor: string;
   passed: number;
   failed: number;
   rate: number | null | undefined;
@@ -26,7 +25,6 @@ interface OverdueStatusTableProps {
 
 function ModernOverdueStatusTable({
   title,
-  accentColor,
   passed,
   failed,
   rate,
@@ -36,45 +34,31 @@ function ModernOverdueStatusTable({
 }: OverdueStatusTableProps) {
   const hasRate = rate !== null && rate !== undefined;
   const isTargetMet = hasRate && rate >= 85;
-  const rateColor = isTargetMet ? '#047857' : '#dc2626';
-  const rateBg = isTargetMet ? '#ecfdf5' : '#fff1f2';
-  const rateBorder = isTargetMet ? '#a7f3d0' : '#fecaca';
+  const rateColor = isTargetMet ? '#16a34a' : '#dc2626';
 
   return (
-    <div style={{ marginBottom: '22px' }}>
-      {/* Title with matching color bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <div
-          style={{
-            width: '4px',
-            height: '18px',
-            borderRadius: '2px',
-            background: accentColor,
-          }}
-        />
-        <h3
-          style={{
-            margin: 0,
-            fontSize: '1.05rem',
-            fontWeight: 800,
-            color: '#0f172a',
-            letterSpacing: '0.01em',
-            fontFamily:
-              "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Inter, 'Helvetica Neue', Arial, sans-serif",
-          }}
-        >
-          {title}
-        </h3>
-      </div>
+    <div style={{ marginBottom: '20px' }}>
+      <h3
+        style={{
+          margin: '0 0 8px 0',
+          fontSize: '1.05rem',
+          fontWeight: 700,
+          color: '#0f172a',
+          letterSpacing: '0.01em',
+          fontFamily:
+            "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Inter, 'Helvetica Neue', Arial, sans-serif",
+        }}
+      >
+        {title}
+      </h3>
 
       <div
         style={{
           border: '1px solid #cbd5e1',
-          borderTop: `3px solid ${accentColor}`,
           borderRadius: '8px',
           overflow: 'hidden',
           background: '#ffffff',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.06)',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
         }}
       >
         <table
@@ -93,14 +77,12 @@ function ModernOverdueStatusTable({
                 style={{
                   width: '28%',
                   textAlign: 'center',
-                  fontWeight: 800,
+                  fontWeight: 700,
                   fontSize: '0.92rem',
-                  color: '#ffffff',
-                  background: '#1e293b',
-                  borderRight: '1px solid #334155',
-                  padding: '16px 12px',
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
+                  color: '#334155',
+                  background: '#f8fafc',
+                  borderRight: '1px solid #e2e8f0',
+                  padding: '14px 12px',
                 }}
               >
                 Overdue Status
@@ -111,17 +93,17 @@ function ModernOverdueStatusTable({
                 style={{
                   width: '24%',
                   textAlign: 'center',
-                  fontWeight: 800,
-                  fontSize: '0.92rem',
-                  color: '#14532d',
-                  background: '#dcfce7',
-                  borderRight: '1px solid #bbf7d0',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  color: '#16a34a',
+                  background: '#f0fdf4',
+                  borderRight: '1px solid #e2e8f0',
                   borderBottom: '1px solid #e2e8f0',
-                  padding: '12px 14px',
-                  letterSpacing: '0.05em',
+                  padding: '10px 14px',
+                  letterSpacing: '0.04em',
                 }}
               >
-                ✓ PASSED
+                PASSED
               </td>
 
               {/* PASSED Count */}
@@ -132,16 +114,15 @@ function ModernOverdueStatusTable({
                 style={{
                   width: '20%',
                   textAlign: 'center',
-                  fontWeight: 900,
-                  fontSize: '1.25rem',
-                  color: '#15803d',
-                  background: '#f0fdf4',
+                  fontWeight: 700,
+                  fontSize: '1.05rem',
+                  color: '#0f172a',
                   borderRight: '1px solid #e2e8f0',
                   borderBottom: '1px solid #e2e8f0',
-                  padding: '12px 14px',
+                  padding: '10px 14px',
                   fontVariantNumeric: 'tabular-nums',
                   cursor: passedIds?.length ? 'pointer' : 'default',
-                  transition: 'background 0.15s ease',
+                  background: '#ffffff',
                 }}
               >
                 {passed}
@@ -154,34 +135,21 @@ function ModernOverdueStatusTable({
                   width: '28%',
                   textAlign: 'center',
                   verticalAlign: 'middle',
-                  padding: '16px 14px',
-                  background: rateBg,
-                  borderLeft: `1px solid ${rateBorder}`,
+                  padding: '12px 14px',
+                  background: '#ffffff',
                 }}
               >
                 <div
                   style={{
-                    fontSize: '2.3rem',
-                    fontWeight: 900,
+                    fontSize: '2.1rem',
+                    fontWeight: 800,
                     color: rateColor,
-                    lineHeight: 1,
+                    lineHeight: 1.1,
                     fontVariantNumeric: 'tabular-nums',
-                    letterSpacing: '-0.02em',
+                    letterSpacing: '-0.01em',
                   }}
                 >
                   {hasRate ? `${rate.toFixed(2)}%` : 'N/A'}
-                </div>
-                <div
-                  style={{
-                    marginTop: '6px',
-                    fontSize: '10.5px',
-                    fontWeight: 700,
-                    color: isTargetMet ? '#15803d' : '#b91c1c',
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {isTargetMet ? 'Target Met (≥85%)' : 'Target Missed (<85%)'}
                 </div>
               </td>
             </tr>
@@ -192,16 +160,16 @@ function ModernOverdueStatusTable({
               <td
                 style={{
                   textAlign: 'center',
-                  fontWeight: 800,
-                  fontSize: '0.92rem',
-                  color: '#7f1d1d',
-                  background: '#fee2e2',
-                  borderRight: '1px solid #fecaca',
-                  padding: '12px 14px',
-                  letterSpacing: '0.05em',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  color: '#dc2626',
+                  background: '#fef2f2',
+                  borderRight: '1px solid #e2e8f0',
+                  padding: '10px 14px',
+                  letterSpacing: '0.04em',
                 }}
               >
-                ✕ FAILED
+                FAILED
               </td>
 
               {/* FAILED Count */}
@@ -211,15 +179,14 @@ function ModernOverdueStatusTable({
                 className={failedIds?.length ? 'cell-interactive' : ''}
                 style={{
                   textAlign: 'center',
-                  fontWeight: 900,
-                  fontSize: '1.25rem',
-                  color: '#b91c1c',
-                  background: '#fef2f2',
+                  fontWeight: 700,
+                  fontSize: '1.05rem',
+                  color: '#0f172a',
                   borderRight: '1px solid #e2e8f0',
-                  padding: '12px 14px',
+                  padding: '10px 14px',
                   fontVariantNumeric: 'tabular-nums',
                   cursor: failedIds?.length ? 'pointer' : 'default',
-                  transition: 'background 0.15s ease',
+                  background: '#ffffff',
                 }}
               >
                 {failed}
@@ -550,7 +517,6 @@ export function SLAReportTable({
           <div className="weekly-overdue-section" style={{ marginTop: '28px' }}>
             <ModernOverdueStatusTable
               title="Resolution"
-              accentColor="#059669"
               passed={resPassed}
               failed={resFailed}
               rate={resRate}
@@ -560,7 +526,6 @@ export function SLAReportTable({
             />
             <ModernOverdueStatusTable
               title="First Response"
-              accentColor="#0284c7"
               passed={frCompPassed}
               failed={frCompFailed}
               rate={frCompRate}
