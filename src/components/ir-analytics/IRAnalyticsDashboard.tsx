@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type {
@@ -529,16 +529,34 @@ function DashboardHeader({
       }}
     >
       {/* Left: Brand Title & Metadata */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #2563eb, #0891b2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+            flexShrink: 0,
+          }}
+        >
           <img
             src="/images/DASH.png"
             alt="Dashboard"
-            style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+            style={{
+              width: '24px',
+              height: '24px',
+              objectFit: 'contain',
+            }}
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).src = '/DASH.png';
             }}
           />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '-0.01em' }}>
             IR Analytics Dashboard
           </h2>
@@ -556,9 +574,6 @@ function DashboardHeader({
             {canonicalCount} Total Incidents
           </span>
         </div>
-        <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0' }}>
-          Real-time incident intelligence, technician performance, and operational breakdown
-        </p>
       </div>
 
       {/* Right: View-Only Controls */}
