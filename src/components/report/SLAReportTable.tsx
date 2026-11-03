@@ -13,9 +13,8 @@ interface SLAReportTableProps {
   onSaveReport?: () => void;
 }
 
-interface OverdueStatusCardProps {
+interface OverdueStatusTableProps {
   title: string;
-  icon: string;
   passed: number;
   failed: number;
   rate: number | null | undefined;
@@ -24,238 +23,170 @@ interface OverdueStatusCardProps {
   onCellClick?: (title: string, ids: string[] | undefined) => void;
 }
 
-function OverdueStatusCard({
+function ModernOverdueStatusTable({
   title,
-  icon,
   passed,
   failed,
   rate,
   passedIds,
   failedIds,
   onCellClick,
-}: OverdueStatusCardProps) {
-  const total = passed + failed;
+}: OverdueStatusTableProps) {
   const hasRate = rate !== null && rate !== undefined;
   const isTargetMet = hasRate && rate >= 85;
   const rateColor = isTargetMet ? '#059669' : '#dc2626';
-  const rateBg = isTargetMet ? '#ecfdf5' : '#fef2f2';
-  const rateBorder = isTargetMet ? '#a7f3d0' : '#fecaca';
 
   return (
-    <div
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '20px 22px',
-        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.04)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-      }}
-    >
-      {/* Top Header Row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px' }}>{icon}</span>
-          <h3
-            style={{
-              margin: 0,
-              fontSize: '1.05rem',
-              fontWeight: 800,
-              color: '#0f172a',
-              letterSpacing: '0.01em',
-            }}
-          >
-            {title}
-          </h3>
-          <span
-            style={{
-              fontSize: '10.5px',
-              fontWeight: 700,
-              color: '#64748b',
-              background: '#f1f5f9',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-            }}
-          >
-            Overdue Status
-          </span>
-        </div>
+    <div style={{ marginBottom: '20px' }}>
+      <h3
+        style={{
+          margin: '0 0 8px 0',
+          fontSize: '1.05rem',
+          fontWeight: 700,
+          color: '#0f172a',
+          letterSpacing: '0.01em',
+          fontFamily:
+            "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Inter, 'Helvetica Neue', Arial, sans-serif",
+        }}
+      >
+        {title}
+      </h3>
 
-        {/* SLA Target Badge */}
-        {hasRate && (
-          <span
-            style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              padding: '3px 9px',
-              borderRadius: '6px',
-              background: rateBg,
-              color: rateColor,
-              border: `1px solid ${rateBorder}`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            {isTargetMet ? '✓ 85% Target Met' : '⚠ Below 85% Target'}
-          </span>
-        )}
-      </div>
-
-      {/* Main Stats Row: Rate & Progress */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
-        <div>
-          <span
-            style={{
-              display: 'block',
-              fontSize: '11px',
-              fontWeight: 600,
-              color: '#64748b',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              marginBottom: '2px',
-            }}
-          >
-            SLA Pass Rate
-          </span>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span
-              style={{
-                fontSize: '2.2rem',
-                fontWeight: 900,
-                color: rateColor,
-                lineHeight: 1,
-                fontVariantNumeric: 'tabular-nums',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              {hasRate ? `${rate.toFixed(2)}%` : 'N/A'}
-            </span>
-            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-              ({passed} of {total} tickets)
-            </span>
-          </div>
-        </div>
-
-        {/* Mini Progress Track */}
-        <div style={{ width: '130px', textAlign: 'right' }}>
-          <div
-            style={{
-              width: '100%',
-              height: '8px',
-              background: '#f1f5f9',
-              borderRadius: '4px',
-              overflow: 'hidden',
-              display: 'flex',
-            }}
-          >
-            <div
-              style={{
-                width: hasRate ? `${Math.min(100, Math.max(0, rate))}%` : '0%',
-                background: rateColor,
-                borderRadius: '4px',
-                transition: 'width 0.4s ease',
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Breakdown Tiles: PASSED and FAILED */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        {/* PASSED */}
-        <div
-          onClick={() => onCellClick?.(`${title} Passed`, passedIds)}
-          title="Click to view passed tickets"
+      <div
+        style={{
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          background: '#ffffff',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
+        }}
+      >
+        <table
           style={{
-            background: '#f0fdf4',
-            border: '1px solid #bbf7d0',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: onCellClick && passedIds?.length ? 'pointer' : 'default',
-            transition: 'all 0.15s ease',
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontFamily:
+              "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Inter, 'Helvetica Neue', Arial, sans-serif",
           }}
-          className="cell-interactive"
         >
-          <div>
-            <span
-              style={{
-                display: 'block',
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#15803d',
-                letterSpacing: '0.04em',
-              }}
-            >
-              ✓ PASSED
-            </span>
-            <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 500 }}>
-              On-time compliance
-            </span>
-          </div>
-          <span
-            style={{
-              fontSize: '1.4rem',
-              fontWeight: 900,
-              color: '#166534',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {passed}
-          </span>
-        </div>
+          <tbody>
+            <tr>
+              <td
+                rowSpan={2}
+                style={{
+                  width: '28%',
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  color: '#1e293b',
+                  background: '#f8fafc',
+                  borderRight: '1px solid #e2e8f0',
+                  padding: '14px 12px',
+                }}
+              >
+                Overdue Status
+              </td>
 
-        {/* FAILED */}
-        <div
-          onClick={() => onCellClick?.(`${title} Failed`, failedIds)}
-          title="Click to view failed tickets"
-          style={{
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: onCellClick && failedIds?.length ? 'pointer' : 'default',
-            transition: 'all 0.15s ease',
-          }}
-          className="cell-interactive"
-        >
-          <div>
-            <span
-              style={{
-                display: 'block',
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#b91c1c',
-                letterSpacing: '0.04em',
-              }}
-            >
-              ✕ FAILED
-            </span>
-            <span style={{ fontSize: '10.5px', color: '#dc2626', fontWeight: 500 }}>
-              Overdue / breached
-            </span>
-          </div>
-          <span
-            style={{
-              fontSize: '1.4rem',
-              fontWeight: 900,
-              color: '#991b1b',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {failed}
-          </span>
-        </div>
+              <td
+                style={{
+                  width: '24%',
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  color: '#15803d',
+                  background: '#f0fdf4',
+                  borderRight: '1px solid #e2e8f0',
+                  borderBottom: '1px solid #e2e8f0',
+                  padding: '10px 14px',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                PASSED
+              </td>
+
+              <td
+                onClick={() => onCellClick?.(`${title} Passed`, passedIds)}
+                title={passedIds?.length ? 'Click to view passed tickets' : undefined}
+                className={passedIds?.length ? 'cell-interactive' : ''}
+                style={{
+                  width: '20%',
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '1.05rem',
+                  color: '#0f172a',
+                  borderRight: '1px solid #e2e8f0',
+                  borderBottom: '1px solid #e2e8f0',
+                  padding: '10px 14px',
+                  fontVariantNumeric: 'tabular-nums',
+                  cursor: passedIds?.length ? 'pointer' : 'default',
+                  background: '#ffffff',
+                }}
+              >
+                {passed}
+              </td>
+
+              <td
+                rowSpan={2}
+                style={{
+                  width: '28%',
+                  textAlign: 'center',
+                  verticalAlign: 'middle',
+                  padding: '12px 14px',
+                  background: '#ffffff',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '2rem',
+                    fontWeight: 800,
+                    color: rateColor,
+                    lineHeight: 1.1,
+                    fontVariantNumeric: 'tabular-nums',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  {hasRate ? `${rate.toFixed(2)}%` : 'N/A'}
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td
+                style={{
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  color: '#b91c1c',
+                  background: '#fef2f2',
+                  borderRight: '1px solid #e2e8f0',
+                  padding: '10px 14px',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                FAILED
+              </td>
+
+              <td
+                onClick={() => onCellClick?.(`${title} Failed`, failedIds)}
+                title={failedIds?.length ? 'Click to view failed tickets' : undefined}
+                className={failedIds?.length ? 'cell-interactive' : ''}
+                style={{
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '1.05rem',
+                  color: '#0f172a',
+                  borderRight: '1px solid #e2e8f0',
+                  padding: '10px 14px',
+                  fontVariantNumeric: 'tabular-nums',
+                  cursor: failedIds?.length ? 'pointer' : 'default',
+                  background: '#ffffff',
+                }}
+              >
+                {failed}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -575,36 +506,26 @@ export function SLAReportTable({
             </table>
           </div>
 
-          {/* 2. Overdue Status Completion - Modern KPI Cards */}
-          <div className="weekly-overdue-section" style={{ marginTop: '28px', padding: '0 4px 12px 4px' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-                gap: '16px',
-              }}
-            >
-              <OverdueStatusCard
-                title="Resolution"
-                icon="⏱️"
-                passed={resPassed}
-                failed={resFailed}
-                rate={resRate}
-                passedIds={resPassedIds}
-                failedIds={resFailedIds}
-                onCellClick={handleClick}
-              />
-              <OverdueStatusCard
-                title="First Response"
-                icon="💬"
-                passed={frCompPassed}
-                failed={frCompFailed}
-                rate={frCompRate}
-                passedIds={frPassedIds}
-                failedIds={frFailedIds}
-                onCellClick={handleClick}
-              />
-            </div>
+          {/* 2. Overdue Status Completion - Modern Tables (Same Output, Modern Way) */}
+          <div className="weekly-overdue-section" style={{ marginTop: '28px' }}>
+            <ModernOverdueStatusTable
+              title="Resolution"
+              passed={resPassed}
+              failed={resFailed}
+              rate={resRate}
+              passedIds={resPassedIds}
+              failedIds={resFailedIds}
+              onCellClick={handleClick}
+            />
+            <ModernOverdueStatusTable
+              title="First Response"
+              passed={frCompPassed}
+              failed={frCompFailed}
+              rate={frCompRate}
+              passedIds={frPassedIds}
+              failedIds={frFailedIds}
+              onCellClick={handleClick}
+            />
           </div>
         </div>
       </div>
