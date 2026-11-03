@@ -131,9 +131,11 @@ function EditableRevisedCell({
 
 function EnhancedSLADashboard({
   data,
+  allIncidents,
   onCellClick,
 }: {
   data: MonthlyReportData;
+  allIncidents?: Incident[];
   onCellClick?: (title: string, ids: string[]) => void;
 }) {
   const handleClick = (title: string, ids: string[]) => {
@@ -144,6 +146,13 @@ function EnhancedSLADashboard({
 
   const frKPI = data.kpis.find((k) => k.label.toLowerCase().includes('first response')) || data.kpis[0];
   const rtKPI = data.kpis.find((k) => k.label.toLowerCase().includes('resolution')) || data.kpis[1];
+
+  const totalIncidentsCount = (allIncidents && allIncidents.length) || (data.allTickets && data.allTickets.length) || data.technicianTotals.frTotal;
+  const allIncidentIds = useMemo(() => {
+    if (allIncidents && allIncidents.length > 0) return allIncidents.map((i) => i.requestId);
+    if (data.allTickets && data.allTickets.length > 0) return data.allTickets.map((i) => i.requestId);
+    return data.technicianTotals.frTotalIds;
+  }, [allIncidents, data.allTickets, data.technicianTotals.frTotalIds]);
 
   const filteredTechs = useMemo(() => {
     if (!techSearch.trim()) return data.technicianSLA;
@@ -182,13 +191,26 @@ function EnhancedSLADashboard({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* ══ Executive Hero KPI Cards ══ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-        {/* Total Evaluated */}
-        <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {/* Total Evaluated / Total Incidents */}
+        <div
+          onClick={() => handleClick('All Monthly Incidents', allIncidentIds)}
+          style={{
+            background: '#111c30',
+            border: '1px solid #1e293b',
+            borderRadius: '14px',
+            padding: '16px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+            cursor: allIncidentIds.length > 0 ? 'pointer' : 'default',
+          }}
+          title={allIncidentIds.length > 0 ? 'Click to view all incidents' : undefined}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Incidents</span>
             <span style={{ fontSize: '16px' }}>🎫</span>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#f8fafc', lineHeight: 1 }}>{data.technicianTotals.rtTotal}</div>
+          <div style={{ fontSize: '28px', fontWeight: 900, color: '#f8fafc', lineHeight: 1 }}>{totalIncidentsCount}</div>
           <span style={{ fontSize: '11px', color: '#64748b' }}>Overall monthly ticket volume</span>
         </div>
 
@@ -1191,7 +1213,7 @@ export function MonthlyReportTable({
       {/* ══ Active Tab Content ══ */}
       <div>
         {activeTab === 'sla-dashboard' && (
-          <EnhancedSLADashboard data={data} onCellClick={onCellClick} />
+          <EnhancedSLADashboard data={data} allIncidents={allIncidents} onCellClick={onCellClick} />
         )}
 
         {activeTab === 'all-tickets' && (
