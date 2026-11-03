@@ -13,12 +13,13 @@ interface KpiLine {
   desc: string;
 }
 
-function parseRemarks(remarks: string): {
+interface ParsedRemarks {
   summary: string;
   kpiLines: KpiLine[];
-  observationLines: string[];
-  recommendation: string;
-} {
+  bodyLines: string[]; // observations + recommendation as plain paragraphs
+}
+
+function parseRemarks(remarks: string): ParsedRemarks {
   const lines = remarks
     .split('\n')
     .map((l) => l.trim())
@@ -26,22 +27,13 @@ function parseRemarks(remarks: string): {
 
   let summary = '';
   const kpiLines: KpiLine[] = [];
-  const observationLines: string[] = [];
-  let recommendation = '';
-  let inObservations = false;
+  const bodyLines: string[] = [];
 
   for (const line of lines) {
-    if (line.toLowerCase().startsWith('observations:')) {
-      inObservations = true;
-      continue;
-    }
-    if (line.toLowerCase().startsWith('recommendation:')) {
-      inObservations = false;
-      recommendation = line.replace(/^recommendation:\s*/i, '').trim();
-      continue;
-    }
+    // Skip legacy section headers if they ever appear
+    if (/^observations:$/i.test(line)) continue;
 
-    // Match KPI lines like "Target Resolution Time: Met (87.04%) - Description"
+    // Match KPI lines: "Target Resolution Time: Met (96.72%) - description"
     const kpiMatch = line.match(
       /^(Target\s+\w[\w\s]+?):\s*(Met|Failed|Passed|Not Met)\s*\(([^)]+)\)\s*[-–]?\s*(.*)?$/i
     );
@@ -56,21 +48,21 @@ function parseRemarks(remarks: string): {
       continue;
     }
 
-    if (inObservations) {
-      observationLines.push(line);
+    // First non-KPI line is the summary
+    if (!summary) {
+      summary = line;
       continue;
     }
 
-    if (!summary) {
-      summary = line;
-    }
+    // Everything else is body (observations + recommendation as plain text)
+    bodyLines.push(line);
   }
 
-  return { summary, kpiLines, observationLines, recommendation };
+  return { summary, kpiLines, bodyLines };
 }
 
 export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
-  const { summary, kpiLines, observationLines, recommendation } = useMemo(
+  const { summary, kpiLines, bodyLines } = useMemo(
     () => parseRemarks(remarks),
     [remarks]
   );
@@ -110,11 +102,11 @@ export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
             letterSpacing: '0.06em',
           }}
         >
-          Remarks for overall result
+          Executive Remarks &amp; Strategic Observations
         </h3>
       </div>
 
-      {/* ── Continuous narrative content ── */}
+      {/* ── Continuous narrative ── */}
       <div
         style={{
           display: 'flex',
@@ -125,12 +117,12 @@ export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
           color: '#cbd5e1',
         }}
       >
-        {/* Executive summary paragraph */}
+        {/* Summary */}
         {summary && (
           <p style={{ margin: 0, color: '#e2e8f0' }}>{summary}</p>
         )}
 
-        {/* KPI result lines — narrative style, NOT cards */}
+        {/* KPI lines */}
         {kpiLines.map((kpi, i) => {
           const isMet = kpi.status === 'Met';
           return (
@@ -159,9 +151,18 @@ export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
           );
         })}
 
-
+        {/* Body paragraphs — observations + recommendation, plain text, no labels */}
+        {bodyLines.length > 0 && (
+          <>
+            <div style={{ height: '1px', background: '#1e293b', margin: '4px 0' }} />
+            {bodyLines.map((line, i) => (
+              <p key={i} style={{ margin: 0, color: '#cbd5e1' }}>
+                {line}
+              </p>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
 }
-

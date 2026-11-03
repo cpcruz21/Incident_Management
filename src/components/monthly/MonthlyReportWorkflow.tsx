@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useReducer, useCallback, useState, useEffect } from 'react';
 import type { Account } from '@/lib/auth';
@@ -446,6 +446,7 @@ export function MonthlyReportWorkflow({
         {state.step === 'validation' && state.validationSummary && (
           <ValidationSummaryView
             summary={state.validationSummary}
+            isMonthly={true}
             onProceed={handleGenerateReport}
             onBack={() => dispatch({ type: 'SET_STEP', step: 'upload' })}
             reportPeriod={state.reportPeriod}

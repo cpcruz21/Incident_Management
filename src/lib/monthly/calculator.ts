@@ -335,62 +335,91 @@ function generateRemarks(
   const frMet = frKPI.percentageResult >= KPI_TARGET;
   const rtMet = rtKPI.percentageResult >= KPI_TARGET;
 
+  // ── Summary sentence ──────────────────────────────────────
   if (frMet && rtMet) {
-    lines.push('The team performed well in both initial response speed and resolving tickets on time.');
+    lines.push('The team performed well in both resolving tickets on time and meeting the first-response target.');
   } else if (rtMet && !frMet) {
-    lines.push('The team performed exceptionally well in resolving tickets on time, but continued to struggle with initial response speed.');
+    lines.push('The team performed exceptionally well in resolving tickets, and moved much closer to meeting the first-response target.');
   } else if (frMet && !rtMet) {
-    lines.push('The team responded quickly to new tickets, but struggled with meeting resolution time targets.');
+    lines.push('The team responded quickly to new tickets, but struggled to close all resolutions within the target window.');
   } else {
-    lines.push('The team needs improvement in both first response and resolution time metrics.');
+    lines.push('The team needs improvement in both first response and resolution time metrics this period.');
   }
 
   lines.push('');
 
-  // Target Resolution Time
+  // ── KPI Lines ─────────────────────────────────────────────
   const rtLabel = rtMet ? 'Met' : 'Failed';
   lines.push(
-    `Target Resolution Time: ${rtLabel} (${rtKPI.percentageResult.toFixed(2)}%) - ${rtMet
-      ? 'The team well exceeded the ' + KPI_TARGET + '% target, proving that active issues are fixed quickly.'
-      : 'The team missed the ' + KPI_TARGET + '% target due to ' + totals.rtFailed + ' late resolutions out of ' + totals.rtTotal + ' total tickets.'
+    `Target Resolution Time: ${rtLabel} (${rtKPI.percentageResult.toFixed(2)}%) - ${
+      rtMet
+        ? `The team well exceeded the ${KPI_TARGET}% target, showing that active tickets are solved quickly.`
+        : `The team missed the ${KPI_TARGET}% target due to ${totals.rtFailed} late resolutions out of ${totals.rtTotal} total tickets.`
     }`
   );
 
-  // Target Response Time
   const frLabel = frMet ? 'Met' : 'Failed';
   lines.push(
-    `Target Response Time: ${frLabel} (${frKPI.percentageResult.toFixed(2)}%) - ${frMet
-      ? 'The team met the ' + KPI_TARGET + '% target for first response.'
-      : 'The team missed the ' + KPI_TARGET + '% target due to ' + totals.frFailed + ' late first responses out of ' + totals.frTotal + ' total tickets.'
+    `Target Response Time: ${frLabel} (${frKPI.percentageResult.toFixed(2)}%) - ${
+      frMet
+        ? `The team met the ${KPI_TARGET}% target for first response.`
+        : `The team narrowly missed the ${KPI_TARGET}% target due to ${totals.frFailed} late first responses out of ${totals.frTotal} total tickets.`
     }`
   );
 
   lines.push('');
-  lines.push('Observations:');
 
-  // Top handler
+  // ── Observation 1: Top team by ticket volume ──────────────
   const sorted = [...rows].filter((r) => r.frTotal > 0).sort((a, b) => b.frTotal - a.frTotal);
   if (sorted.length > 0) {
     const top = sorted[0];
+    const frRate = top.frPassRate !== null ? top.frPassRate.toFixed(2) : 'N/A';
+    const rtRate = top.rtPassRate !== null ? top.rtPassRate.toFixed(2) : 'N/A';
     lines.push(
-      `${top.technician} handled the majority of tickets (${top.frTotal} for response, ${top.rtTotal} for resolution) with strong performance (${top.frPassRate !== null ? top.frPassRate.toFixed(2) : 'N/A'
-      }% response and ${top.rtPassRate !== null ? top.rtPassRate.toFixed(2) : 'N/A'}% resolution).`
+      `${top.technician} handled most of the tickets (${top.frTotal}) with strong results (${frRate}% response and ${rtRate}% resolution).`
     );
   }
 
-  // Low / 0% first-response
-  const zeroFR = rows.filter((r) => r.frTotal > 0 && (r.frPassRate === 0 || (r.frPassRate !== null && r.frPassRate < 50)));
-  if (zeroFR.length > 0) {
-    const names = zeroFR
-      .map((r) => `${r.technician} (${r.frPassRate !== null ? r.frPassRate.toFixed(2) : '0.00'}%)`)
+  // ── Observation 2: Teams dragging down FR rate ────────────
+  const lowFR = rows.filter(
+    (r) => r.frTotal > 0 && r.frPassRate !== null && r.frPassRate < KPI_TARGET
+  );
+  if (lowFR.length > 0) {
+    const names = lowFR
+      .map((r) => `${r.technician} (${r.frPassRate!.toFixed(2)}%${r.frFailed > 1 ? ` with ${r.frFailed} late responses` : ''})`)
       .join(', ');
-    lines.push(`First-response scores were pulled down by specific technician: ${names}.`);
+    lines.push(
+      `The response target was missed mainly due to lower pass rates in ${names}.`
+    );
+  }
+
+  // ── Observation 3: Perfect resolution teams ───────────────
+  const perfectRT = rows.filter((r) => r.rtTotal > 0 && r.rtPassRate === 100);
+  if (perfectRT.length > 0) {
+    const names = perfectRT.map((r) => r.technician).join(', ');
+    lines.push(
+      `Once work started, execution was excellent. ${names} all achieved a 100.00% resolution pass rate. This confirms the issue is strictly with acknowledging new tickets, not solving them.`
+    );
   }
 
   lines.push('');
-  lines.push(
-    'Recommendation: Once tickets were assigned, most teams performed exceptionally well, ECS HRAD, ECS SDS, and ECS ISMS Support all achieved 100% resolution pass rates. This confirms the delay is only in acknowledging new tickets, not fixing them.'
-  );
+
+  // ── Recommendation ────────────────────────────────────────
+  const gapPct = Math.abs(frKPI.percentageResult - KPI_TARGET).toFixed(2);
+  if (!frMet && lowFR.length > 0) {
+    const teamNames = lowFR.map((r) => r.technician).join(', ');
+    lines.push(
+      `Provide closer monitoring and alerts for ${teamNames} during ticket intake to close the small ${gapPct}% gap and pass the response KPI.`
+    );
+  } else if (!rtMet) {
+    lines.push(
+      `Focus on faster ticket closure for teams with pending resolutions to close the ${gapPct}% gap and meet the resolution KPI.`
+    );
+  } else {
+    lines.push(
+      `Maintain current performance levels and continue tracking both KPIs to sustain compliance across all teams.`
+    );
+  }
 
   return lines.join('\n');
 }

@@ -8,6 +8,7 @@ interface ValidationSummaryProps {
   onBack: () => void;
   reportPeriod?: string;
   onPeriodChange?: (period: string) => void;
+  isMonthly?: boolean;
 }
 
 function generateMonthOptions(): { label: string; value: string }[] {
@@ -21,8 +22,16 @@ function generateMonthOptions(): { label: string; value: string }[] {
   return options;
 }
 
-export function ValidationSummaryView({ summary, onProceed, onBack, reportPeriod = '', onPeriodChange }: ValidationSummaryProps) {
-  const monthOptions = generateMonthOptions();
+export function ValidationSummaryView({
+  summary,
+  onProceed,
+  onBack,
+  reportPeriod = '',
+  onPeriodChange,
+  isMonthly,
+}: ValidationSummaryProps) {
+  const isMonthlyTicket = isMonthly !== undefined ? isMonthly : Boolean(onPeriodChange);
+  const monthOptions = isMonthlyTicket ? generateMonthOptions() : [];
   return (
     <div className="validation-container">
       <div className="validation-header">
@@ -125,21 +134,23 @@ export function ValidationSummaryView({ summary, onProceed, onBack, reportPeriod
         </div>
       )}
 
-      {/* Storage Month Selector */}
-      <div className="validation-section">
-        <h3>Storage Month</h3>
-        <select
-          className="period-input"
-          value={reportPeriod}
-          onChange={(e) => onPeriodChange?.(e.target.value)}
-          style={{ maxWidth: '280px' }}
-        >
-          <option value="">-- Select Month --</option>
-          {monthOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </div>
+      {/* Storage Month Selector - Only for monthly tickets */}
+      {isMonthlyTicket && (
+        <div className="validation-section">
+          <h3>Storage Month</h3>
+          <select
+            className="period-input"
+            value={reportPeriod}
+            onChange={(e) => onPeriodChange?.(e.target.value)}
+            style={{ maxWidth: '280px' }}
+          >
+            <option value="">-- Select Month --</option>
+            {monthOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="validation-actions">
@@ -149,8 +160,8 @@ export function ValidationSummaryView({ summary, onProceed, onBack, reportPeriod
         <button
           className="btn btn-primary"
           onClick={onProceed}
-          disabled={summary.validRecords === 0 || !reportPeriod}
-          title={!reportPeriod ? 'Select a storage month before proceeding' : undefined}
+          disabled={summary.validRecords === 0 || (isMonthlyTicket && !reportPeriod)}
+          title={isMonthlyTicket && !reportPeriod ? 'Select a storage month before proceeding' : undefined}
         >
           Proceed →
         </button>
