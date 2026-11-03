@@ -1,14 +1,28 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import type { ValidationSummary as ValidationSummaryType } from '@/types/incident';
 
 interface ValidationSummaryProps {
   summary: ValidationSummaryType;
   onProceed: () => void;
   onBack: () => void;
+  reportPeriod?: string;
+  onPeriodChange?: (period: string) => void;
 }
 
-export function ValidationSummaryView({ summary, onProceed, onBack }: ValidationSummaryProps) {
+function generateMonthOptions(): { label: string; value: string }[] {
+  const options: { label: string; value: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    options.push({ label, value: label });
+  }
+  return options;
+}
+
+export function ValidationSummaryView({ summary, onProceed, onBack, reportPeriod = '', onPeriodChange }: ValidationSummaryProps) {
+  const monthOptions = generateMonthOptions();
   return (
     <div className="validation-container">
       <div className="validation-header">
@@ -111,6 +125,25 @@ export function ValidationSummaryView({ summary, onProceed, onBack }: Validation
         </div>
       )}
 
+      {/* Storage Month Selector */}
+      <div className="validation-section">
+        <h3>Storage Month</h3>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted, #94a3b8)', marginBottom: '0.6rem' }}>
+          Select the exact month this data will be filed under before proceeding.
+        </p>
+        <select
+          className="period-input"
+          value={reportPeriod}
+          onChange={(e) => onPeriodChange?.(e.target.value)}
+          style={{ maxWidth: '280px' }}
+        >
+          <option value="">-- Select Month --</option>
+          {monthOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Actions */}
       <div className="validation-actions">
         <button className="btn btn-secondary" onClick={onBack}>
@@ -119,7 +152,8 @@ export function ValidationSummaryView({ summary, onProceed, onBack }: Validation
         <button
           className="btn btn-primary"
           onClick={onProceed}
-          disabled={summary.validRecords === 0}
+          disabled={summary.validRecords === 0 || !reportPeriod}
+          title={!reportPeriod ? 'Select a storage month before proceeding' : undefined}
         >
           Proceed to Routing →
         </button>

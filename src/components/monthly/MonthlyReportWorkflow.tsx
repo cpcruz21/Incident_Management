@@ -450,6 +450,8 @@ export function MonthlyReportWorkflow({
             summary={state.validationSummary}
             onProceed={handleGenerateReport}
             onBack={() => dispatch({ type: 'SET_STEP', step: 'upload' })}
+            reportPeriod={state.reportPeriod}
+            onPeriodChange={(period) => dispatch({ type: 'SET_PERIOD', period })}
           />
         )}
 
