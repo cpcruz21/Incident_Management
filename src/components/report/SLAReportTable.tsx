@@ -13,6 +13,254 @@ interface SLAReportTableProps {
   onSaveReport?: () => void;
 }
 
+interface OverdueStatusCardProps {
+  title: string;
+  icon: string;
+  passed: number;
+  failed: number;
+  rate: number | null | undefined;
+  passedIds?: string[];
+  failedIds?: string[];
+  onCellClick?: (title: string, ids: string[] | undefined) => void;
+}
+
+function OverdueStatusCard({
+  title,
+  icon,
+  passed,
+  failed,
+  rate,
+  passedIds,
+  failedIds,
+  onCellClick,
+}: OverdueStatusCardProps) {
+  const total = passed + failed;
+  const hasRate = rate !== null && rate !== undefined;
+  const isTargetMet = hasRate && rate >= 85;
+  const rateColor = isTargetMet ? '#059669' : '#dc2626';
+  const rateBg = isTargetMet ? '#ecfdf5' : '#fef2f2';
+  const rateBorder = isTargetMet ? '#a7f3d0' : '#fecaca';
+
+  return (
+    <div
+      style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        padding: '20px 22px',
+        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.04)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+      }}
+    >
+      {/* Top Header Row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '18px' }}>{icon}</span>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: '1.05rem',
+              fontWeight: 800,
+              color: '#0f172a',
+              letterSpacing: '0.01em',
+            }}
+          >
+            {title}
+          </h3>
+          <span
+            style={{
+              fontSize: '10.5px',
+              fontWeight: 700,
+              color: '#64748b',
+              background: '#f1f5f9',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Overdue Status
+          </span>
+        </div>
+
+        {/* SLA Target Badge */}
+        {hasRate && (
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              padding: '3px 9px',
+              borderRadius: '6px',
+              background: rateBg,
+              color: rateColor,
+              border: `1px solid ${rateBorder}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            {isTargetMet ? '✓ 85% Target Met' : '⚠ Below 85% Target'}
+          </span>
+        )}
+      </div>
+
+      {/* Main Stats Row: Rate & Progress */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
+        <div>
+          <span
+            style={{
+              display: 'block',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: '#64748b',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginBottom: '2px',
+            }}
+          >
+            SLA Pass Rate
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span
+              style={{
+                fontSize: '2.2rem',
+                fontWeight: 900,
+                color: rateColor,
+                lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {hasRate ? `${rate.toFixed(2)}%` : 'N/A'}
+            </span>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+              ({passed} of {total} tickets)
+            </span>
+          </div>
+        </div>
+
+        {/* Mini Progress Track */}
+        <div style={{ width: '130px', textAlign: 'right' }}>
+          <div
+            style={{
+              width: '100%',
+              height: '8px',
+              background: '#f1f5f9',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              display: 'flex',
+            }}
+          >
+            <div
+              style={{
+                width: hasRate ? `${Math.min(100, Math.max(0, rate))}%` : '0%',
+                background: rateColor,
+                borderRadius: '4px',
+                transition: 'width 0.4s ease',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Breakdown Tiles: PASSED and FAILED */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        {/* PASSED */}
+        <div
+          onClick={() => onCellClick?.(`${title} Passed`, passedIds)}
+          title="Click to view passed tickets"
+          style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: onCellClick && passedIds?.length ? 'pointer' : 'default',
+            transition: 'all 0.15s ease',
+          }}
+          className="cell-interactive"
+        >
+          <div>
+            <span
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#15803d',
+                letterSpacing: '0.04em',
+              }}
+            >
+              ✓ PASSED
+            </span>
+            <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 500 }}>
+              On-time compliance
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: '1.4rem',
+              fontWeight: 900,
+              color: '#166534',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {passed}
+          </span>
+        </div>
+
+        {/* FAILED */}
+        <div
+          onClick={() => onCellClick?.(`${title} Failed`, failedIds)}
+          title="Click to view failed tickets"
+          style={{
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: onCellClick && failedIds?.length ? 'pointer' : 'default',
+            transition: 'all 0.15s ease',
+          }}
+          className="cell-interactive"
+        >
+          <div>
+            <span
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#b91c1c',
+                letterSpacing: '0.04em',
+              }}
+            >
+              ✕ FAILED
+            </span>
+            <span style={{ fontSize: '10.5px', color: '#dc2626', fontWeight: 500 }}>
+              Overdue / breached
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: '1.4rem',
+              fontWeight: 900,
+              color: '#991b1b',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {failed}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SLAReportTable({
   data,
   onCellClick,
@@ -327,76 +575,35 @@ export function SLAReportTable({
             </table>
           </div>
 
-          {/* 2. Overdue Status Completion Tables (Matching User Reference Image 2) */}
-          <div className="weekly-overdue-section">
-            {/* Resolution Table */}
-            <div className="weekly-overdue-block">
-              <h3 className="weekly-overdue-title">Resolution</h3>
-              <table className="weekly-overdue-table">
-                <tbody>
-                  <tr>
-                    <td className="weekly-overdue-label" rowSpan={2}>
-                      Overdue Status
-                    </td>
-                    <td className="weekly-overdue-status">PASSED</td>
-                    <td
-                      className="weekly-overdue-count cell-interactive"
-                      onClick={() => handleClick('Resolution Passed', resPassedIds)}
-                      title="Click to view passed resolution tickets"
-                    >
-                      {resPassed}
-                    </td>
-                    <td className="weekly-overdue-rate" rowSpan={2}>
-                      {resRate !== null && resRate !== undefined ? `${resRate.toFixed(2)}%` : 'N/A'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="weekly-overdue-status">FAILED</td>
-                    <td
-                      className="weekly-overdue-count cell-interactive"
-                      onClick={() => handleClick('Resolution Failed', resFailedIds)}
-                      title="Click to view failed resolution tickets"
-                    >
-                      {resFailed}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* First Response Table */}
-            <div className="weekly-overdue-block">
-              <h3 className="weekly-overdue-title">First Response</h3>
-              <table className="weekly-overdue-table">
-                <tbody>
-                  <tr>
-                    <td className="weekly-overdue-label" rowSpan={2}>
-                      Overdue Status
-                    </td>
-                    <td className="weekly-overdue-status">PASSED</td>
-                    <td
-                      className="weekly-overdue-count cell-interactive"
-                      onClick={() => handleClick('First Response Passed', frPassedIds)}
-                      title="Click to view passed first response tickets"
-                    >
-                      {frCompPassed}
-                    </td>
-                    <td className="weekly-overdue-rate" rowSpan={2}>
-                      {frCompRate !== null && frCompRate !== undefined ? `${frCompRate.toFixed(2)}%` : 'N/A'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="weekly-overdue-status">FAILED</td>
-                    <td
-                      className="weekly-overdue-count cell-interactive"
-                      onClick={() => handleClick('First Response Failed', frFailedIds)}
-                      title="Click to view failed first response tickets"
-                    >
-                      {frCompFailed}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+          {/* 2. Overdue Status Completion - Modern KPI Cards */}
+          <div className="weekly-overdue-section" style={{ marginTop: '28px', padding: '0 4px 12px 4px' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+                gap: '16px',
+              }}
+            >
+              <OverdueStatusCard
+                title="Resolution"
+                icon="⏱️"
+                passed={resPassed}
+                failed={resFailed}
+                rate={resRate}
+                passedIds={resPassedIds}
+                failedIds={resFailedIds}
+                onCellClick={handleClick}
+              />
+              <OverdueStatusCard
+                title="First Response"
+                icon="💬"
+                passed={frCompPassed}
+                failed={frCompFailed}
+                rate={frCompRate}
+                passedIds={frPassedIds}
+                failedIds={frFailedIds}
+                onCellClick={handleClick}
+              />
             </div>
           </div>
         </div>
