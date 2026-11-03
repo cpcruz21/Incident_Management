@@ -15,6 +15,7 @@ import {
 import { formatSLAPercentage } from '@/lib/sla/calculator';
 import { saveReport } from '@/lib/storage/report-storage';
 import { filterAcceptableFirstResponse } from '@/lib/monthly/calculator';
+import { ExecutiveRemarksCard } from '@/components/monthly/ExecutiveRemarksCard';
 
 // ─── Sub-component interfaces ───────────────────────────────
 
@@ -646,44 +647,7 @@ function EnhancedSLADashboard({
       </div>
 
       {/* ══ Executive Remarks & Observations (Card Layout) ══ */}
-      {data.remarks && (
-        <div
-          style={{
-            background: '#111c30',
-            border: '1px solid #1e293b',
-            borderRadius: '16px',
-            padding: '20px 24px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <span style={{ fontSize: '16px' }}>📝</span>
-            <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Executive Remarks &amp; Strategic Observations
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#cbd5e1', lineHeight: 1.6 }}>
-            {data.remarks.split('\n').map((line, i) => {
-              const trimmed = line.trim();
-              if (!trimmed) return null;
-              const isHeader = trimmed.startsWith('Target ') || trimmed.startsWith('Observations:') || trimmed.startsWith('Recommendation:');
-              return (
-                <p
-                  key={i}
-                  style={{
-                    margin: 0,
-                    fontWeight: isHeader ? 800 : 400,
-                    color: isHeader ? '#93c5fd' : '#cbd5e1',
-                    fontSize: isHeader ? '12px' : '12px',
-                  }}
-                >
-                  {trimmed}
-                </p>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {data.remarks && <ExecutiveRemarksCard remarks={data.remarks} />}
     </div>
   );
 }
