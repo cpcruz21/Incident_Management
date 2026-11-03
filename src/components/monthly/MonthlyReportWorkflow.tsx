@@ -400,16 +400,26 @@ export function MonthlyReportWorkflow({
             />
             <div className="period-input-section">
               <label htmlFor="monthly-period" className="period-label">
-                Report Period
+                Storage Month
               </label>
-              <input
+              <select
                 id="monthly-period"
-                type="text"
                 className="period-input"
-                placeholder="e.g., October 2026"
                 value={state.reportPeriod}
                 onChange={(e) => dispatch({ type: 'SET_PERIOD', period: e.target.value })}
-              />
+              >
+                <option value="">-- Select Month --</option>
+                {(() => {
+                  const opts: React.ReactNode[] = [];
+                  const now = new Date();
+                  for (let i = 0; i < 24; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    opts.push(<option key={label} value={label}>{label}</option>);
+                  }
+                  return opts;
+                })()}
+              </select>
             </div>
             <div className="period-input-section">
               <label htmlFor="storage-destination" className="period-label">
