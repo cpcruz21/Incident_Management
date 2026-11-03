@@ -75,52 +75,88 @@ function EditableRevisedCell({
 
   if (!isAdmin) {
     return (
-      <td style={{ padding: '10px 14px', color: value ? '#60a5fa' : '#64748b' }} title={value || 'No adjustment'}>
-        <span style={{ fontSize: '11px', fontWeight: 600 }}>{value || '—'}</span>
+      <td
+        style={{
+          padding: '8px 10px',
+          background: 'rgba(56, 189, 248, 0.03)',
+        }}
+        title={value || 'No revision specified'}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            background: value ? 'rgba(56, 189, 248, 0.08)' : 'rgba(56, 189, 248, 0.04)',
+            border: '1px solid rgba(56, 189, 248, 0.22)',
+            borderLeft: '3px solid #38bdf8',
+            color: value ? '#38bdf8' : '#64748b',
+            fontSize: '11px',
+            fontWeight: 600,
+            minHeight: '28px',
+          }}
+        >
+          {value || '—'}
+        </div>
       </td>
     );
   }
 
   return (
-    <td style={{ padding: '8px 12px' }} title={`${field} (Manual Checker Dropdown)`}>
-      <select
+    <td
+      style={{
+        padding: '6px 10px',
+        background: 'rgba(56, 189, 248, 0.03)',
+      }}
+      title={`${field} (Manual Checker Dropdown)`}
+    >
+      <div
         style={{
-          width: '100%',
-          background: '#091426',
-          border: '1px solid #1e3a5f',
-          color: value ? '#93c5fd' : '#64748b',
           borderRadius: '6px',
-          padding: '4px 8px',
-          fontSize: '11px',
-          outline: 'none',
+          borderLeft: '3px solid #38bdf8',
+          paddingLeft: '2px',
         }}
-        value={value || ''}
-        onChange={handleChange}
-        aria-label={field}
       >
-        <option value="">{isTypeField ? '-- Select Root Cause Type --' : '-- Select Identified Root Cause --'}</option>
-        {isTypeField ? (
-          <>
-            {value && !ROOT_CAUSE_TYPES.includes(value) && <option value={value}>{value} (Current)</option>}
-            {ROOT_CAUSE_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </>
-        ) : (
-          <>
-            {value && !Object.values(ROOT_CAUSE_FACTORS).some((arr) => arr.includes(value)) && (
-              <option value={value}>{value} (Current)</option>
-            )}
-            {Object.entries(ROOT_CAUSE_FACTORS).map(([type, causes]) => (
-              <optgroup key={type} label={type}>
-                {causes.map((cause) => (
-                  <option key={cause} value={cause} title={cause}>{cause}</option>
-                ))}
-              </optgroup>
-            ))}
-          </>
-        )}
-      </select>
+        <select
+          style={{
+            width: '100%',
+            background: '#091426',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            color: value ? '#38bdf8' : '#94a3b8',
+            borderRadius: '6px',
+            padding: '5px 8px',
+            fontSize: '11px',
+            outline: 'none',
+          }}
+          value={value || ''}
+          onChange={handleChange}
+          aria-label={field}
+        >
+          <option value="">{isTypeField ? '-- Select Root Cause Type --' : '-- Select Identified Root Cause --'}</option>
+          {isTypeField ? (
+            <>
+              {value && !ROOT_CAUSE_TYPES.includes(value) && <option value={value}>{value} (Current)</option>}
+              {ROOT_CAUSE_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </>
+          ) : (
+            <>
+              {value && !Object.values(ROOT_CAUSE_FACTORS).some((arr) => arr.includes(value)) && (
+                <option value={value}>{value} (Current)</option>
+              )}
+              {Object.entries(ROOT_CAUSE_FACTORS).map(([type, causes]) => (
+                <optgroup key={type} label={type}>
+                  {causes.map((cause) => (
+                    <option key={cause} value={cause} title={cause}>{cause}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </>
+          )}
+        </select>
+      </div>
     </td>
   );
 }
@@ -855,14 +891,14 @@ function EnhancedTicketGrid({
                         style={{
                           padding: '10px 14px',
                           textAlign: 'left',
-                          color: sortCol === col ? '#60a5fa' : '#64748b',
+                          color: isRevisedCol ? '#38bdf8' : sortCol === col ? '#60a5fa' : '#64748b',
                           fontSize: '10px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
                           whiteSpace: 'nowrap',
                           cursor: 'pointer',
-                          background: isRevisedCol ? 'rgba(37,99,235,0.08)' : 'transparent',
+                          background: isRevisedCol ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
