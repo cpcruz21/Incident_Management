@@ -398,14 +398,6 @@ export function SLAReportTable({
                 </tbody>
               </table>
             </div>
-
-            {/* Corporate Footer (matching original document) */}
-            <div className="weekly-company-footer">
-              <span className="weekly-company-name" style={{ color: '#0070c0', fontWeight: 700 }}>
-                Equitable Computer Services, Inc.
-              </span>
-              <span className="weekly-footer-date">Reporting Date: {formattedDate || 'Current Week'}</span>
-            </div>
           </div>
         </div>
       </div>
