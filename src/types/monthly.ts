@@ -107,6 +107,18 @@ export function getIncidentMonthlyValue(inc: Incident, colName: string): string 
 
   // Special overrides for First Response metrics
   if (lc === 'firstresponseoverduestatus') {
+    if (inc.rawData) {
+      for (const [k, v] of Object.entries(inc.rawData)) {
+        if (/first\s*response\s*overdue/i.test(k)) {
+          const s = String(v ?? '').trim().toUpperCase();
+          if (s === 'TRUE') return 'TRUE';
+          if (s === 'FALSE') return 'FALSE';
+        }
+      }
+    }
+    const raw = String(inc.rawFirstResponseStatus ?? '').trim().toUpperCase();
+    if (raw === 'TRUE') return 'TRUE';
+    if (raw === 'FALSE') return 'FALSE';
     return inc.firstResponseOverdue ? 'TRUE' : 'FALSE';
   }
   if (lc.includes('exceed') && lc.includes('24')) {

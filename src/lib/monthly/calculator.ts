@@ -46,13 +46,8 @@ export function getTechnician(inc: Incident): string {
   return inc.sourceTeam || inc.assignedTeam || 'Unassigned';
 }
 
-/** Check if First Response failed from raw data column or calculation */
-export function isFirstResponseFailed(inc: Incident): boolean {
-  // If non-ISS and created outside office hours / weekend -> excused (acceptable / NOT failed)
-  if (!isISSTeam(inc.assignedTeam || inc.sourceTeam, inc) && isCreatedOutsideOfficeHours(inc)) {
-    return false;
-  }
-
+/** Check whether the incident's raw First Response Overdue Status was TRUE (lapsed in SDP) */
+export function isRawFirstResponseOverdue(inc: Incident): boolean {
   if (inc.rawData) {
     for (const [k, v] of Object.entries(inc.rawData)) {
       if (/first\s*response\s*overdue/i.test(k)) {
@@ -62,7 +57,20 @@ export function isFirstResponseFailed(inc: Incident): boolean {
       }
     }
   }
-  return inc.firstResponseOverdue;
+  const raw = String(inc.rawFirstResponseStatus ?? '').trim().toUpperCase();
+  if (raw === 'TRUE') return true;
+  if (raw === 'FALSE') return false;
+  return Boolean(inc.firstResponseOverdue);
+}
+
+/** Check if First Response failed from raw data column or calculation */
+export function isFirstResponseFailed(inc: Incident): boolean {
+  // If non-ISS and created outside office hours / weekend -> excused (acceptable / NOT failed)
+  if (!isISS24x7(inc) && isCreatedOutsideOfficeHours(inc)) {
+    return false;
+  }
+
+  return isRawFirstResponseOverdue(inc);
 }
 
 /** Check if Resolution failed from raw data column or calculation */
@@ -104,36 +112,56 @@ export function filterClosedTickets(incidents: Incident[]): Incident[] {
 
 /**
  * Determine whether a given technician is an ISS 24/7 team.
- * These teams do NOT get the after-hours / weekend exception.
+ * Exception: ISS teams (ISS Binondo, ECS ISS MT / ISS Makati) operate 24/7
+ * and do NOT get the after-hours / weekend exception.
  */
 export function isISS24x7(inc: Incident): boolean {
-  return isISSTeam(inc.assignedTeam || inc.sourceTeam, inc);
+  const team = (inc.assignedTeam || inc.sourceTeam || inc.department || '').toLowerCase().trim();
+  const tech = (
+    (typeof inc.rawData?.['Technician'] === 'string' ? inc.rawData['Technician'] : '') ||
+    (typeof inc.rawData?.['technician'] === 'string' ? inc.rawData['technician'] : '') ||
+    inc.sourceTeam ||
+    ''
+  ).toLowerCase().trim();
+  const dept = (
+    (typeof inc.rawData?.['Department'] === 'string' ? inc.rawData['Department'] : '') ||
+    (typeof inc.rawData?.['department'] === 'string' ? inc.rawData['department'] : '') ||
+    inc.department ||
+    ''
+  ).toLowerCase().trim();
+
+  return (
+    team === 'ecs iss' ||
+    team.includes('iss') ||
+    team.includes('binondo') ||
+    team.includes('makati') ||
+    tech.includes('iss') ||
+    tech.includes('binondo') ||
+    tech.includes('makati') ||
+    dept.includes('iss binondo') ||
+    dept.includes('iss makati') ||
+    dept.includes('ecs iss')
+  );
 }
 export { isCreatedOutsideOfficeHours };
 
 /**
  * Filter incidents that have acceptable first response.
  *
- * A ticket is "acceptable" when:
- *   1. First Response Overdue Status = FALSE  (always acceptable), OR
- *   2. First Response Overdue Status = TRUE **but** the ticket was created
- *      outside office hours (before 8:30 AM / after 5:30 PM) or on a weekend
- *      — ONLY for non-ISS departments.
- *
- * ISS teams (ECS ISS Binondo, ECS ISS MT) run 24/7; they receive no
- * after-hours exception.
+ * In the monthly SLA report, "Acceptable First Response" lists ONLY the incidents
+ * that LAPSED (raw First Response Overdue Status = TRUE), BUT were excused and accepted
+ * because they were filed beyond office hours (before 8:30 AM / after 5:30 PM, or on weekends)
+ * for all departments EXCEPT ISS Binondo and ISS Makati (which operate 24/7).
  */
 export function filterAcceptableFirstResponse(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
-    // If first response is not overdue → always acceptable
-    if (!isFirstResponseFailed(inc)) return true;
+    // 1. Must be a ticket that lapsed/overdue in raw data
+    if (!isRawFirstResponseOverdue(inc)) return false;
 
-    // First response IS overdue — check for after-hours exception
-    // ISS 24/7 teams get NO exception
+    // 2. ISS 24/7 teams (ISS Binondo, ISS Makati) get NO exception
     if (isISS24x7(inc)) return false;
 
-    // Non-ISS: if the ticket was created outside office hours / weekend
-    // the overdue is excused → still acceptable
+    // 3. For all other departments: only accepted if created outside office hours / weekend
     return isCreatedOutsideOfficeHours(inc);
   });
 }

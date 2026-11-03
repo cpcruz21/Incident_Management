@@ -329,7 +329,7 @@ function EnhancedSLADashboard({
                       {kpi.percentageResult.toFixed(1)}%
                     </td>
                     <td style={{ padding: '12px 14px', textAlign: 'center', background: isMet ? '#00b050' : '#ff0000', color: '#ffffff', fontWeight: 800, border: '1px solid #000000' }}>
-                      {isMet ? '✓ ON TARGET' : '⚠️ BELOW TARGET'}
+                      {isMet ? ' Passed' : ' Failed'}
                     </td>
                   </tr>
                 );
@@ -934,6 +934,27 @@ function EnhancedTicketGrid({
                         }
 
                         if (colLower.includes('overdue status')) {
+                          if (title.toLowerCase().includes('acceptable')) {
+                            return (
+                              <td key={col} style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 800,
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(16,185,129,0.15)',
+                                    color: '#34d399',
+                                    border: '1px solid rgba(16,185,129,0.3)',
+                                  }}
+                                  title="Lapsed in ticketing system, but accepted due to after-hours filing (non-ISS department)"
+                                >
+                                  ✓ ACCEPTED (AFTER-HOURS)
+                                </span>
+                              </td>
+                            );
+                          }
+
                           const isOver = val.toLowerCase() === 'true';
                           return (
                             <td key={col} style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
