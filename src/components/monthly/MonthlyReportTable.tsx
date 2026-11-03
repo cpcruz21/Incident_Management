@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Incident } from '@/types/incident';
@@ -211,7 +211,6 @@ function EnhancedSLADashboard({
             <span style={{ fontSize: '16px' }}>🎫</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 900, color: '#f8fafc', lineHeight: 1 }}>{totalIncidentsCount}</div>
-          <span style={{ fontSize: '11px', color: '#64748b' }}>Overall monthly ticket volume</span>
         </div>
 
         {/* First Response Pass Rate */}
@@ -257,7 +256,6 @@ function EnhancedSLADashboard({
             <span style={{ fontSize: '16px' }}>🎯</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 900, color: '#60a5fa', lineHeight: 1 }}>85.0%</div>
-          <span style={{ fontSize: '11px', color: '#94a3b8' }}>Contractual threshold</span>
         </div>
       </div>
 
@@ -278,9 +276,6 @@ function EnhancedSLADashboard({
               Monthly KPI Objectives &amp; Compliance Results
             </h3>
           </div>
-          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
-            Official service level agreement benchmarks and actual performance metrics
-          </p>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -374,9 +369,6 @@ function EnhancedSLADashboard({
                 Technician SLA Performance Breakdown
               </h3>
             </div>
-            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
-              Detailed counts for First Response and Resolution Time compliance per technician
-            </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1127,9 +1119,6 @@ export function MonthlyReportTable({
                 {data.reportPeriod || 'Monthly Review'}
               </span>
             </div>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0' }}>
-              First response and resolution time compliance metrics per technician
-            </p>
           </div>
         </div>
 
@@ -1265,9 +1254,6 @@ export function MonthlyReportTable({
                 <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
                   Microsoft Power BI Embedded SLA Report
                 </h3>
-                <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
-                  Interactive live reports synced directly with the Power BI Service
-                </p>
               </div>
             </div>
             <div style={{ width: '100%', height: '700px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #1e293b' }}>

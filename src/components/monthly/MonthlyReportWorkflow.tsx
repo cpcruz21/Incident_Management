@@ -329,7 +329,6 @@ export function MonthlyReportWorkflow({
             <span className="brand-icon">📊</span>
             <div>
               <h1 className="brand-title">Monthly Overall Ticket Report</h1>
-              <p className="brand-subtitle">Generate monthly SLA reports based directly on technician</p>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -392,7 +391,6 @@ export function MonthlyReportWorkflow({
           <div className="step-content">
             <div className="step-intro">
               <h2>Upload Monthly Incident Data</h2>
-              <p>Upload your monthly incident report file (XLSX or CSV) containing all tickets for the reporting period.</p>
             </div>
             <FileUpload
               onFileSelected={handleFileSelected}

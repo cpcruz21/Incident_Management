@@ -128,9 +128,6 @@ export function ValidationSummaryView({ summary, onProceed, onBack, reportPeriod
       {/* Storage Month Selector */}
       <div className="validation-section">
         <h3>Storage Month</h3>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted, #94a3b8)', marginBottom: '0.6rem' }}>
-          Select the exact month this data will be filed under before proceeding.
-        </p>
         <select
           className="period-input"
           value={reportPeriod}
@@ -155,7 +152,7 @@ export function ValidationSummaryView({ summary, onProceed, onBack, reportPeriod
           disabled={summary.validRecords === 0 || !reportPeriod}
           title={!reportPeriod ? 'Select a storage month before proceeding' : undefined}
         >
-          Proceed to Routing →
+          Proceed →
         </button>
       </div>
     </div>
