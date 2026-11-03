@@ -104,13 +104,14 @@ export function BarChart({
                   onMouseEnter={() => setHoveredIdx(i)}
                   onMouseLeave={() => setHoveredIdx(null)}
                 >
+                  <title>{`${d.label}: ${d.value}`}</title>
                   <text
                     x={labelW - 8}
                     y={y + bHeight / 2 + 4}
                     textAnchor="end"
-                    fill={isHov ? '#ffffff' : '#cbd5e1'}
+                    fill={isHov ? '#38bdf8' : '#cbd5e1'}
                     fontSize="10.5"
-                    fontWeight={isHov ? '700' : '600'}
+                    fontWeight={isHov ? '800' : '600'}
                   >
                     {truncate(d.label, 14)}
                   </text>
@@ -129,7 +130,9 @@ export function BarChart({
                     height={bHeight}
                     rx="4"
                     fill={color}
-                    opacity={isHov ? 1 : 0.88}
+                    opacity={isHov ? 1 : hoveredIdx !== null ? 0.6 : 0.88}
+                    filter={isHov ? 'brightness(1.15)' : 'none'}
+                    style={{ transition: 'opacity 0.15s ease, filter 0.15s ease' }}
                   />
                   <text
                     x={labelW + barW + 6}
@@ -189,23 +192,42 @@ export function BarChart({
             const color = colorMap?.[d.label] ?? PALETTE[i % PALETTE.length];
             const isHov = hoveredIdx === i;
             return (
-              <g key={d.label}
+              <g
+                key={d.label}
                 style={{ cursor: onBarClick ? 'pointer' : 'default' }}
                 onClick={() => onBarClick?.(('ids' in d ? d.ids : []) ?? [], d.label)}
                 onMouseEnter={() => setHoveredIdx(i)}
                 onMouseLeave={() => setHoveredIdx(null)}
               >
-                <rect x={x} y={y} width={barW} height={barH2} rx="4" fill={color} opacity={isHov ? 1 : 0.88} />
-                <text x={x + barW / 2} y={y - 5} textAnchor="middle" fill="#f8fafc" fontSize="10.5" fontWeight="800">
+                <title>{`${d.label}: ${d.value}`}</title>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={barH2}
+                  rx="4"
+                  fill={color}
+                  opacity={isHov ? 1 : hoveredIdx !== null ? 0.6 : 0.88}
+                  filter={isHov ? 'brightness(1.18)' : 'none'}
+                  style={{ transition: 'opacity 0.15s ease, filter 0.15s ease' }}
+                />
+                <text
+                  x={x + barW / 2}
+                  y={y - 5}
+                  textAnchor="middle"
+                  fill={isHov ? '#ffffff' : '#f8fafc'}
+                  fontSize={isHov ? '11.5' : '10.5'}
+                  fontWeight="800"
+                >
                   {d.value > 0 ? d.value : ''}
                 </text>
                 <text
                   x={x + barW / 2}
                   y={svgH - padB + 14}
                   textAnchor="middle"
-                  fill={isHov ? '#ffffff' : '#94a3b8'}
+                  fill={isHov ? '#38bdf8' : '#94a3b8'}
                   fontSize="10"
-                  fontWeight={isHov ? '700' : '600'}
+                  fontWeight={isHov ? '800' : '600'}
                   transform={`rotate(-26, ${x + barW / 2}, ${svgH - padB + 14})`}
                 >
                   {truncate(d.label, 11)}

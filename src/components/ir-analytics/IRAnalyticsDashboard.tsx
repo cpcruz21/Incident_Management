@@ -427,7 +427,6 @@ export function IRAnalyticsDashboard({
           title="Incident Category Distribution"
           height={210}
           maxBars={6}
-          onBarClick={handleChartClick}
         />
       </div>
 

@@ -34,6 +34,40 @@ interface AgingReportTableProps {
   isPublicView?: boolean;
 }
 
+const DATE_SPLIT_REGEX = /(\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:\s*-\s*)?)/g;
+const IS_DATE_PATTERN = /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:\s*-\s*)?$/;
+
+function renderSingleColorUpdateText(text: string) {
+  if (!text) return null;
+  const parts = text.split(DATE_SPLIT_REGEX);
+
+  return parts.map((part, idx) => {
+    if (part && IS_DATE_PATTERN.test(part.trim())) {
+      return (
+        <span
+          key={idx}
+          style={{
+            display: 'inline-block',
+            background: 'rgba(56, 189, 248, 0.16)',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            color: '#38bdf8',
+            borderRadius: '4px',
+            padding: '1px 5px',
+            fontSize: '11px',
+            fontWeight: 700,
+            marginRight: '4px',
+            lineHeight: 1.3,
+            verticalAlign: 'baseline',
+          }}
+        >
+          {part.trim()}
+        </span>
+      );
+    }
+    return <span key={idx}>{part}</span>;
+  });
+}
+
 export function AgingReportTable({
   data,
   onCellClick,
@@ -811,9 +845,6 @@ export function AgingReportTable({
                 {data.reportPeriod || 'Current Period'}
               </span>
             </div>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0' }}>
-              First response and resolution SLA compliance, aging distributions, and remarks follow-up
-            </p>
           </div>
         </div>
 
@@ -933,49 +964,44 @@ export function AgingReportTable({
 
       {/* ══ TAB 1: AGING MODULE (SLA & DISTRIBUTION) ══ */}
       {activeTab === 'aging' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {/* ── Executive Summary Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Aging IRs</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#f8fafc' }}>{currentAgingGrand}</div>
-              <span style={{ fontSize: '11px', color: agingDelta > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Aging IRs</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#f8fafc' }}>{currentAgingGrand}</div>
+              <span style={{ fontSize: '10px', color: agingDelta > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>
                 {agingDelta === 0 ? '±0 vs last week' : agingDelta > 0 ? `+${agingDelta} vs last week` : `${agingDelta} vs last week`}
               </span>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 1 Month)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: bucketTotals['>1month'] > 0 ? '#f87171' : '#f8fafc' }}>{bucketTotals['>1month']}</div>
-              <span style={{ fontSize: '11px', color: '#f87171' }}>Urgent follow-up</span>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 1 Month)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: bucketTotals['>1month'] > 0 ? '#f87171' : '#f8fafc' }}>{bucketTotals['>1month']}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (2–4 Weeks)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fb923c' }}>{bucketTotals['2-4weeks']}</div>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Stagnant queue</span>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (2–4 Weeks)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fb923c' }}>{bucketTotals['2-4weeks']}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (1–2 Wks)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fbbf24' }}>{bucketTotals['1-2weeks']}</div>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>In progress</span>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (1–2 Wks)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fbbf24' }}>{bucketTotals['1-2weeks']}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 1 Wk)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#34d399' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 1 Wk)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#34d399' }}>
                 {bucketTotals['sameday'] + bucketTotals['1-3days'] + bucketTotals['4-6days']}
               </div>
-              <span style={{ fontSize: '11px', color: '#10b981' }}>Standard handling</span>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Overall FR SLA</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#60a5fa' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Overall FR SLA</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#60a5fa' }}>
                 {formatSLAPercentage(data.slaTotals.firstResponse.slaPassRate)}
               </div>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>{data.slaTotals.totalIRs} total team IRs</span>
             </div>
           </div>
 
@@ -984,21 +1010,17 @@ export function AgingReportTable({
             style={{
               background: '#111c30',
               border: '1px solid #1e293b',
-              borderRadius: '16px',
+              borderRadius: '12px',
               overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
             }}
           >
-            <div style={{ padding: '16px 22px', borderBottom: '1px solid #1e293b', background: 'linear-gradient(145deg, #17243a, #111c30)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px' }}>⚡</span>
-                <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b', background: '#17243a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '13px' }}>⚡</span>
+                <h3 style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   First Response &amp; Resolution SLA Compliance
                 </h3>
               </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
-                Team-level SLA performance metrics for the current reporting week
-              </p>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
@@ -1009,7 +1031,7 @@ export function AgingReportTable({
                     <th
                       rowSpan={2}
                       style={{
-                        padding: '10px 14px',
+                        padding: '7px 12px',
                         textAlign: 'left',
                         background: '#4472c4',
                         color: '#ffffff',
@@ -1018,7 +1040,7 @@ export function AgingReportTable({
                         textTransform: 'uppercase',
                         letterSpacing: '0.06em',
                         border: '1px solid #1f3864',
-                        width: '180px',
+                        width: '160px',
                       }}
                     >
                       FINAL TEAM
@@ -1026,7 +1048,7 @@ export function AgingReportTable({
                     <th
                       rowSpan={2}
                       style={{
-                        padding: '10px 12px',
+                        padding: '7px 10px',
                         textAlign: 'center',
                         background: '#2f5597',
                         color: '#ffffff',
@@ -1035,7 +1057,7 @@ export function AgingReportTable({
                         textTransform: 'uppercase',
                         letterSpacing: '0.06em',
                         border: '1px solid #1f3864',
-                        width: '90px',
+                        width: '80px',
                       }}
                     >
                       TOTAL IRS
@@ -1043,7 +1065,7 @@ export function AgingReportTable({
                     <th
                       colSpan={3}
                       style={{
-                        padding: '10px 14px',
+                        padding: '7px 12px',
                         textAlign: 'center',
                         background: '#5b9bd5',
                         color: '#ffffff',
@@ -1059,7 +1081,7 @@ export function AgingReportTable({
                     <th
                       colSpan={3}
                       style={{
-                        padding: '10px 14px',
+                        padding: '7px 12px',
                         textAlign: 'center',
                         background: '#70ad47',
                         color: '#ffffff',
@@ -1076,7 +1098,7 @@ export function AgingReportTable({
                   {/* Sub-column Headers */}
                   <tr>
                     <th style={{
-                      padding: '7px 8px',
+                      padding: '5px 8px',
                       textAlign: 'center',
                       background: '#c00000',
                       color: '#ffffff',
@@ -1088,7 +1110,7 @@ export function AgingReportTable({
                       Failed
                     </th>
                     <th style={{
-                      padding: '7px 8px',
+                      padding: '5px 8px',
                       textAlign: 'center',
                       background: '#548235',
                       color: '#ffffff',
@@ -1100,7 +1122,7 @@ export function AgingReportTable({
                       Passed
                     </th>
                     <th style={{
-                      padding: '7px 10px',
+                      padding: '5px 8px',
                       textAlign: 'center',
                       background: '#1f4e79',
                       color: '#ffffff',
@@ -1113,7 +1135,7 @@ export function AgingReportTable({
                     </th>
 
                     <th style={{
-                      padding: '7px 8px',
+                      padding: '5px 8px',
                       textAlign: 'center',
                       background: '#c00000',
                       color: '#ffffff',
@@ -1125,7 +1147,7 @@ export function AgingReportTable({
                       Failed
                     </th>
                     <th style={{
-                      padding: '7px 8px',
+                      padding: '5px 8px',
                       textAlign: 'center',
                       background: '#548235',
                       color: '#ffffff',
@@ -1137,7 +1159,7 @@ export function AgingReportTable({
                       Passed
                     </th>
                     <th style={{
-                      padding: '7px 10px',
+                      padding: '5px 8px',
                       textAlign: 'center',
                       background: '#1f4e79',
                       color: '#ffffff',
@@ -1264,21 +1286,17 @@ export function AgingReportTable({
             style={{
               background: '#111c30',
               border: '1px solid #1e293b',
-              borderRadius: '16px',
+              borderRadius: '12px',
               overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
             }}
           >
-            <div style={{ padding: '16px 22px', borderBottom: '1px solid #1e293b', background: 'linear-gradient(145deg, #17243a, #111c30)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px' }}>📅</span>
-                <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b', background: '#17243a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '13px' }}>📅</span>
+                <h3 style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Aging Incident Report (Distribution Matrix)
                 </h3>
               </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
-                Incident distribution across aging brackets with weekly comparisons per team
-              </p>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
@@ -1479,239 +1497,32 @@ export function AgingReportTable({
 
       {/* ══ TAB 2: REMARKS TABLE (ENHANCED MODERN DATA TABLE) ══ */}
       {activeTab === 'remarks' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* ── Summary KPI Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Records</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#f8fafc' }}>{kpiMetrics.total}</div>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>Open aging queue</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Records</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#f8fafc' }}>{kpiMetrics.total}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 30d)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: kpiMetrics.critical > 0 ? '#f87171' : '#64748b' }}>{kpiMetrics.critical}</div>
-              <span style={{ fontSize: '11px', color: '#f87171' }}>Urgent follow-up</span>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 30d)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: kpiMetrics.critical > 0 ? '#f87171' : '#64748b' }}>{kpiMetrics.critical}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (15–30d)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fb923c' }}>{kpiMetrics.high}</div>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Stagnant queue</span>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (15–30d)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fb923c' }}>{kpiMetrics.high}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (8–14d)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#fbbf24' }}>{kpiMetrics.moderate}</div>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Active investigation</span>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (8–14d)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fbbf24' }}>{kpiMetrics.moderate}</div>
             </div>
 
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 8d)</span>
-              <div style={{ fontSize: '26px', fontWeight: 900, color: '#34d399' }}>{kpiMetrics.low}</div>
-              <span style={{ fontSize: '11px', color: '#10b981' }}>Standard handling</span>
-            </div>
-          </div>
-
-          {/* ── Segmented Category Filter Chips ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => {
-                setSeverityFilter('ALL');
-                setOnlyUnsavedFilter(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                background: severityFilter === 'ALL' && !onlyUnsavedFilter ? '#2563eb' : '#111c30',
-                color: severityFilter === 'ALL' && !onlyUnsavedFilter ? '#ffffff' : '#94a3b8',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>All</span>
-              <span style={{ background: 'rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
-                {kpiMetrics.total}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSeverityFilter('critical');
-                setOnlyUnsavedFilter(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: severityFilter === 'critical' ? '1px solid #ef4444' : '1px solid transparent',
-                background: severityFilter === 'critical' ? '#ef4444' : 'rgba(239,68,68,0.1)',
-                color: severityFilter === 'critical' ? '#ffffff' : '#f87171',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>Critical (&gt; 30d)</span>
-              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
-                {kpiMetrics.critical}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSeverityFilter('high');
-                setOnlyUnsavedFilter(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: severityFilter === 'high' ? '1px solid #f97316' : '1px solid transparent',
-                background: severityFilter === 'high' ? '#f97316' : 'rgba(249,115,22,0.1)',
-                color: severityFilter === 'high' ? '#ffffff' : '#fb923c',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>High (15–30d)</span>
-              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
-                {kpiMetrics.high}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSeverityFilter('moderate');
-                setOnlyUnsavedFilter(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: severityFilter === 'moderate' ? '1px solid #f59e0b' : '1px solid transparent',
-                background: severityFilter === 'moderate' ? '#f59e0b' : 'rgba(245,158,11,0.1)',
-                color: severityFilter === 'moderate' ? '#ffffff' : '#fbbf24',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>Moderate (8–14d)</span>
-              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
-                {kpiMetrics.moderate}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSeverityFilter('low');
-                setOnlyUnsavedFilter(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: severityFilter === 'low' ? '1px solid #10b981' : '1px solid transparent',
-                background: severityFilter === 'low' ? '#10b981' : 'rgba(16,185,129,0.1)',
-                color: severityFilter === 'low' ? '#ffffff' : '#34d399',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>Recent (&lt; 8d)</span>
-              <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
-                {kpiMetrics.low}
-              </span>
-            </button>
-
-            {!isPublicView && kpiMetrics.unsaved > 0 && (
-              <button
-                type="button"
-                onClick={() => setOnlyUnsavedFilter(!onlyUnsavedFilter)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  border: '1px solid #f59e0b',
-                  background: onlyUnsavedFilter ? '#f59e0b' : 'rgba(245,158,11,0.15)',
-                  color: onlyUnsavedFilter ? '#ffffff' : '#fbbf24',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <span>● Unsaved</span>
-                <span style={{ background: 'rgba(255,255,255,0.25)', padding: '1px 6px', borderRadius: '999px', fontSize: '10px' }}>
-                  {kpiMetrics.unsaved}
-                </span>
-              </button>
-            )}
-
-            {/* Quick Export Actions */}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={handleCopyToClipboard}
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid #1e293b',
-                  color: '#94a3b8',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-                title="Copy filtered rows to clipboard for Excel"
-              >
-                <span>📋</span> Copy TSV
-              </button>
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                style={{
-                  background: 'rgba(16,185,129,0.12)',
-                  border: '1px solid rgba(16,185,129,0.3)',
-                  color: '#34d399',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-                title="Export filtered records to CSV"
-              >
-                <span>📥</span> Export CSV
-              </button>
+            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 8d)</span>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#34d399' }}>{kpiMetrics.low}</div>
             </div>
           </div>
 
@@ -1720,13 +1531,13 @@ export function AgingReportTable({
             style={{
               background: '#111c30',
               border: '1px solid #1e293b',
-              borderRadius: '14px',
-              padding: '14px 18px',
+              borderRadius: '12px',
+              padding: '12px 16px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
-              gap: '12px',
+              gap: '10px',
             }}
           >
             {/* Search Input */}
@@ -1734,7 +1545,7 @@ export function AgingReportTable({
               <span style={{ fontSize: '14px', color: '#64748b' }}>🔍</span>
               <input
                 type="text"
-                placeholder="Search Request ID, department, description, remarks, team…"
+                placeholder="Search records…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -1759,14 +1570,14 @@ export function AgingReportTable({
               )}
             </div>
 
-            {/* Dropdowns */}
+            {/* Dropdowns & Export Actions */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <select
                 value={deptFilter}
                 onChange={(e) => setDeptFilter(e.target.value)}
                 style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="ALL">Dept: All ({filterOptions.departments.length})</option>
+                <option value="ALL">All Departments</option>
                 {filterOptions.departments.map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
@@ -1777,7 +1588,7 @@ export function AgingReportTable({
                 onChange={(e) => setTeamFilter(e.target.value)}
                 style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="ALL">Team: All ({filterOptions.teams.length})</option>
+                <option value="ALL">All Teams</option>
                 {filterOptions.teams.map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
@@ -1788,11 +1599,11 @@ export function AgingReportTable({
                 onChange={(e) => setSortBy(e.target.value as any)}
                 style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="aging-desc">Sort: Aging (High → Low)</option>
-                <option value="aging-asc">Sort: Aging (Low → High)</option>
-                <option value="id-asc">Sort: Request ID (A-Z)</option>
-                <option value="dept-asc">Sort: Department (A-Z)</option>
-                <option value="recent-update">Sort: Has Recent Update</option>
+                <option value="aging-desc">Aging: High → Low</option>
+                <option value="aging-asc">Aging: Low → High</option>
+                <option value="id-asc">Request ID: A-Z</option>
+                <option value="dept-asc">Department: A-Z</option>
+                <option value="recent-update">Has Recent Update</option>
               </select>
 
               {(searchQuery || deptFilter !== 'ALL' || teamFilter !== 'ALL' || severityFilter !== 'ALL' || onlyUnsavedFilter) && (
@@ -1810,6 +1621,48 @@ export function AgingReportTable({
                   Clear
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={handleCopyToClipboard}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid #1e293b',
+                  color: '#94a3b8',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Copy filtered rows to clipboard for Excel"
+              >
+                <span>📋</span> Copy TSV
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                style={{
+                  background: 'rgba(16,185,129,0.12)',
+                  border: '1px solid rgba(16,185,129,0.3)',
+                  color: '#34d399',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Export filtered records to CSV"
+              >
+                <span>📥</span> Export CSV
+              </button>
             </div>
           </div>
 
@@ -1847,7 +1700,7 @@ export function AgingReportTable({
                     <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '100px' }}>
                       Aging Days
                     </th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: '250px' }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: '320px' }}>
                       Recent Update
                     </th>
                     <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '150px' }}>
@@ -1969,21 +1822,60 @@ export function AgingReportTable({
                             </span>
                           </td>
 
-                          {/* 7. Recent Update */}
-                          <td style={{ padding: '12px 16px', color: '#e2e8f0', lineHeight: 1.5 }}>
+                          {/* 7. Recent Update (Uniform Single-Color Highlight) */}
+                          <td style={{ padding: '10px 14px', verticalAlign: 'top', minWidth: '300px' }}>
                             {isPublicView ? (
-                              <div>
-                                <div style={{ fontSize: '11px', color: row.recentUpdate ? '#f8fafc' : '#64748b' }}>
-                                  {row.recentUpdate || 'No recent update recorded.'}
-                                </div>
-                                {row.lastUpdated && (
-                                  <div style={{ fontSize: '10px', color: '#64748b', marginTop: '3px' }}>
-                                    🕒 {new Date(row.lastUpdated).toLocaleDateString()} {row.updatedBy ? `by ${row.updatedBy}` : ''}
+                              row.recentUpdate && row.recentUpdate.trim() ? (
+                                <div
+                                  style={{
+                                    background: 'rgba(56, 189, 248, 0.05)',
+                                    border: '1px solid rgba(56, 189, 248, 0.22)',
+                                    borderLeft: '3px solid #38bdf8',
+                                    borderRadius: '8px',
+                                    padding: '8px 12px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px',
+                                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.18)',
+                                  }}
+                                >
+                                  {/* Update Content with Single-Color Date Chips */}
+                                  <div
+                                    style={{
+                                      fontSize: '12px',
+                                      color: '#f8fafc',
+                                      lineHeight: 1.55,
+                                      fontWeight: 400,
+                                      wordBreak: 'break-word',
+                                    }}
+                                  >
+                                    {renderSingleColorUpdateText(row.recentUpdate)}
                                   </div>
-                                )}
-                              </div>
+
+                                  {row.lastUpdated && (
+                                    <div style={{ fontSize: '10.5px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                      <span>🕒</span>
+                                      <span>{new Date(row.lastUpdated).toLocaleDateString()}</span>
+                                      {row.updatedBy && <span style={{ color: '#cbd5e1' }}>by {row.updatedBy}</span>}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#64748b', fontSize: '13px', display: 'inline-block', padding: '4px 6px' }}>—</span>
+                              )
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div
+                                style={{
+                                  background: 'rgba(56, 189, 248, 0.04)',
+                                  border: '1px solid rgba(56, 189, 248, 0.22)',
+                                  borderLeft: '3px solid #38bdf8',
+                                  borderRadius: '8px',
+                                  padding: '8px 10px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '6px',
+                                }}
+                              >
                                 <textarea
                                   value={row.recentUpdate || ''}
                                   onChange={(e) => handleRemarksChange(row, e.target.value)}
@@ -1992,18 +1884,20 @@ export function AgingReportTable({
                                   style={{
                                     width: '100%',
                                     background: '#091426',
-                                    border: '1px solid #1e293b',
+                                    border: '1px solid rgba(56, 189, 248, 0.25)',
                                     borderRadius: '6px',
-                                    padding: '5px 8px',
-                                    fontSize: '11px',
+                                    padding: '6px 8px',
+                                    fontSize: '12px',
+                                    lineHeight: 1.5,
                                     color: '#f8fafc',
                                     outline: 'none',
                                     resize: 'vertical',
                                   }}
                                 />
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                                   {row.lastUpdated && (
-                                    <span style={{ fontSize: '9px', color: '#64748b' }}>
+                                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>
                                       🕒 {new Date(row.lastUpdated).toLocaleDateString()}
                                     </span>
                                   )}
@@ -2012,14 +1906,14 @@ export function AgingReportTable({
                                     onClick={() => handleSaveRow(row)}
                                     disabled={isSaving}
                                     style={{
-                                      background: isRowUnsaved ? '#2563eb' : 'transparent',
-                                      border: isRowUnsaved ? 'none' : '1px solid #1e293b',
+                                      background: isRowUnsaved ? '#0284c7' : 'transparent',
+                                      border: isRowUnsaved ? '1px solid #38bdf8' : '1px solid #1e293b',
                                       color: isRowUnsaved ? '#ffffff' : '#64748b',
                                       borderRadius: '4px',
-                                      padding: '2px 6px',
+                                      padding: '3px 8px',
                                       fontSize: '10px',
                                       fontWeight: 700,
-                                      cursor: 'pointer',
+                                      cursor: isSaving ? 'not-allowed' : 'pointer',
                                       marginLeft: 'auto',
                                     }}
                                   >

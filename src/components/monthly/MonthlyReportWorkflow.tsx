@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useReducer, useCallback, useState, useEffect } from 'react';
 import type { Account } from '@/lib/auth';
@@ -34,6 +34,7 @@ interface MonthlyState {
   validationSummary: import('@/types/incident').ValidationSummary | null;
   reportData: MonthlyReportData | null;
   reportPeriod: string;
+  storageDestination: 'both' | 'local' | 'server';
   isProcessing: boolean;
   error: string | null;
   detailModal: { isOpen: boolean; title: string; incidentIds: string[] };
@@ -46,6 +47,7 @@ type MonthlyAction =
   | { type: 'SET_VALIDATION'; incidents: Incident[]; summary: import('@/types/incident').ValidationSummary }
   | { type: 'SET_REPORT'; data: MonthlyReportData }
   | { type: 'SET_PERIOD'; period: string }
+  | { type: 'SET_STORAGE_DESTINATION'; destination: 'both' | 'local' | 'server' }
   | { type: 'SET_PROCESSING'; val: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | {
@@ -68,6 +70,7 @@ const init: MonthlyState = {
   validationSummary: null,
   reportData: null,
   reportPeriod: '',
+  storageDestination: 'both',
   isProcessing: false,
   error: null,
   detailModal: { isOpen: false, title: '', incidentIds: [] },
@@ -81,6 +84,7 @@ function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
     case 'SET_VALIDATION': return { ...state, incidents: action.incidents, validationSummary: action.summary };
     case 'SET_REPORT': return { ...state, reportData: action.data };
     case 'SET_PERIOD': return { ...state, reportPeriod: action.period };
+    case 'SET_STORAGE_DESTINATION': return { ...state, storageDestination: action.destination };
     case 'SET_PROCESSING': return { ...state, isProcessing: action.val };
     case 'SET_ERROR': return { ...state, error: action.error };
     case 'UPDATE_INCIDENT_FIELD': {
@@ -262,27 +266,31 @@ export function MonthlyReportWorkflow({
       const title = state.reportData.reportTitle || `Monthly Overall Ticket Report - ${period}`;
       const id = `monthly-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
 
-      // 1. Save to browser local storage
-      saveReport({
-        id,
-        type: 'monthly',
-        title,
-        period,
-        author: account.name,
-        reportData: state.reportData,
-        routedIncidents: state.incidents,
-      });
+      // 1. Save to local storage (if 'both' or 'local')
+      if (state.storageDestination !== 'server') {
+        saveReport({
+          id,
+          type: 'monthly',
+          title,
+          period,
+          author: account.name,
+          reportData: state.reportData,
+          routedIncidents: state.incidents,
+        });
+      }
 
-      // 2. Persist to server backend
-      await persistServerMonthlyReport({
-        id,
-        title,
-        period,
-        savedBy: account.name,
-        savedAt: new Date().toISOString(),
-        reportData: state.reportData,
-        routedIncidents: state.incidents,
-      });
+      // 2. Persist to server backend (if 'both' or 'server')
+      if (state.storageDestination !== 'local') {
+        await persistServerMonthlyReport({
+          id,
+          title,
+          period,
+          savedBy: account.name,
+          savedAt: new Date().toISOString(),
+          reportData: state.reportData,
+          routedIncidents: state.incidents,
+        });
+      }
 
       // 3. Notify real-time broadcast channel
       try {
@@ -300,7 +308,7 @@ export function MonthlyReportWorkflow({
       dispatch({ type: 'SET_ERROR', error: 'Failed to publish monthly report to server.' });
       setSaveStatus('idle');
     }
-  }, [state.reportData, state.reportPeriod, state.incidents, account.name]);
+  }, [state.reportData, state.reportPeriod, state.storageDestination, state.incidents, account.name]);
 
   const stepIndex = STEPS.findIndex((s) => s.id === state.step);
 
@@ -402,6 +410,26 @@ export function MonthlyReportWorkflow({
                 value={state.reportPeriod}
                 onChange={(e) => dispatch({ type: 'SET_PERIOD', period: e.target.value })}
               />
+            </div>
+            <div className="period-input-section">
+              <label htmlFor="storage-destination" className="period-label">
+                Save Report To
+              </label>
+              <select
+                id="storage-destination"
+                className="period-input"
+                value={state.storageDestination}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'SET_STORAGE_DESTINATION',
+                    destination: e.target.value as 'both' | 'local' | 'server',
+                  })
+                }
+              >
+                <option value="both">Server &amp; Local Storage</option>
+                <option value="server">Server Only - Publish to Dashboard</option>
+                <option value="local">Local Storage Only - Draft</option>
+              </select>
             </div>
           </div>
         )}
