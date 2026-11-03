@@ -110,7 +110,7 @@ export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
             letterSpacing: '0.06em',
           }}
         >
-          Executive Remarks &amp; Strategic Observations
+          Remarks for overall result
         </h3>
       </div>
 
@@ -159,47 +159,9 @@ export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
           );
         })}
 
-        {/* ── Observations ── */}
-        {observationLines.length > 0 && (
-          <>
-            <div
-              style={{ height: '1px', background: '#1e293b', margin: '4px 0' }}
-            />
-            <p
-              style={{
-                margin: 0,
-                fontWeight: 700,
-                color: '#64748b',
-                fontSize: '10.5px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-              }}
-            >
-              Observations
-            </p>
-            {observationLines.map((obs, i) => (
-              <p key={i} style={{ margin: 0, color: '#cbd5e1' }}>
-                {obs}
-              </p>
-            ))}
-          </>
-        )}
 
-        {/* ── Recommendation ── */}
-        {recommendation && (
-          <>
-            <div
-              style={{ height: '1px', background: '#1e293b', margin: '4px 0' }}
-            />
-            <p style={{ margin: 0, color: '#cbd5e1' }}>
-              <span style={{ fontWeight: 700, color: '#38bdf8' }}>
-                💡 Recommendation:{' '}
-              </span>
-              {recommendation}
-            </p>
-          </>
-        )}
       </div>
     </div>
   );
 }
+
