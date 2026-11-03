@@ -14,6 +14,7 @@ export interface RoutingRule {
   conditions: {
     sourceTeams?: string[];    // Match if sourceTeam is in this list
     categories?: string[];      // Match if category contains/matches these
+    excludeCategories?: string[]; // Exclude if category contains any of these
     subCategories?: string[];   // Match if subCategory contains/matches these
     items?: string[];           // Match if item contains/matches these
     categoryMatch?: 'exact' | 'contains'; // How to match categories

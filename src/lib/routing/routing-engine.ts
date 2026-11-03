@@ -63,12 +63,25 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     enabled: true,
   },
   {
-    id: 'isms-routing',
-    name: 'ISMS → ECS ISMS Support',
-    description: 'ISMS/Security incidents are assigned to ECS ISMS Support',
+    id: 'safety-security-to-iss',
+    name: 'Safety & Security → ECS ISS',
+    description: 'Safety & Security incidents (Security Breaches, Virus/Malware, etc.) belong to ECS ISS / ISS Binondo',
     priority: 5,
     conditions: {
-      categories: ['ISMS', 'Security', 'Information Security'],
+      categories: ['Safety & Security', 'Safety'],
+      categoryMatch: 'contains',
+    },
+    assignedTeam: 'ECS ISS',
+    enabled: true,
+  },
+  {
+    id: 'isms-routing',
+    name: 'ISMS → ECS ISMS Support',
+    description: 'ISMS/Information Security incidents are assigned to ECS ISMS Support',
+    priority: 6,
+    conditions: {
+      categories: ['ISMS', 'Information Security'],
+      excludeCategories: ['Safety & Security', 'Safety'],
       categoryMatch: 'contains',
     },
     assignedTeam: 'ECS ISMS Support',
@@ -78,7 +91,7 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     id: 'sds-routing',
     name: 'SDS → ECS SDS',
     description: 'SDS-related incidents are assigned to ECS SDS',
-    priority: 6,
+    priority: 7,
     conditions: {
       categories: ['SDS', 'Service Desk'],
       categoryMatch: 'contains',
@@ -90,7 +103,7 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     id: 'psd-routing',
     name: 'PSD → ECS PSD',
     description: 'PSD-related incidents are assigned to ECS PSD',
-    priority: 7,
+    priority: 8,
     conditions: {
       categories: ['PSD', 'Professional Service'],
       categoryMatch: 'contains',
@@ -129,6 +142,14 @@ function matchesRule(incident: Incident, rule: RoutingRule): boolean {
     if (!sourceMatch) return false;
   }
 
+  if (conditions.excludeCategories && conditions.excludeCategories.length > 0) {
+    const categoryLower = incident.category.toLowerCase();
+    const isExcluded = conditions.excludeCategories.some((cat) =>
+      categoryLower.includes(cat.toLowerCase())
+    );
+    if (isExcluded) return false;
+  }
+
   if (conditions.categories && conditions.categories.length > 0) {
     const categoryLower = incident.category.toLowerCase();
     const categoryMatch = conditions.categories.some((cat) => {
@@ -148,16 +169,20 @@ export function resolveAssignedTeam(
   incident: Incident,
   config: RoutingConfig
 ): RoutingResult {
-
   const sortedRules = [...config.rules].sort((a, b) => a.priority - b.priority);
+  const defaultMappedTeam = config.defaultTeamMapping[incident.sourceTeam] || incident.sourceTeam;
 
   for (const rule of sortedRules) {
     if (matchesRule(incident, rule)) {
-      const wasReassigned = rule.assignedTeam !== incident.sourceTeam;
+      const wasReassigned =
+        rule.assignedTeam !== incident.sourceTeam && rule.assignedTeam !== defaultMappedTeam;
       return {
         requestId: incident.requestId,
         sourceTeam: incident.sourceTeam,
         category: incident.category,
+        subCategory: incident.subCategory,
+        item: incident.item,
+        autoAssignedGroup: rule.assignedTeam,
         originalAssignment: incident.sourceTeam,
         finalAssignedTeam: rule.assignedTeam,
         routingReason: rule.name,
@@ -169,15 +194,17 @@ export function resolveAssignedTeam(
 
   const mappedTeam = config.defaultTeamMapping[incident.sourceTeam];
   if (mappedTeam) {
-    const wasReassigned = mappedTeam !== incident.sourceTeam;
     return {
       requestId: incident.requestId,
       sourceTeam: incident.sourceTeam,
       category: incident.category,
+      subCategory: incident.subCategory,
+      item: incident.item,
+      autoAssignedGroup: mappedTeam,
       originalAssignment: incident.sourceTeam,
       finalAssignedTeam: mappedTeam,
       routingReason: 'Default team mapping',
-      wasReassigned,
+      wasReassigned: false,
     };
   }
 
@@ -187,14 +214,19 @@ export function resolveAssignedTeam(
   );
 
   if (matchedReportTeam) {
+    const wasReassigned =
+      matchedReportTeam !== incident.sourceTeam && matchedReportTeam !== defaultMappedTeam;
     return {
       requestId: incident.requestId,
       sourceTeam: incident.sourceTeam,
       category: incident.category,
+      subCategory: incident.subCategory,
+      item: incident.item,
+      autoAssignedGroup: matchedReportTeam,
       originalAssignment: incident.sourceTeam,
       finalAssignedTeam: matchedReportTeam,
       routingReason: 'Fuzzy team match',
-      wasReassigned: true,
+      wasReassigned,
     };
   }
 
@@ -202,10 +234,13 @@ export function resolveAssignedTeam(
     requestId: incident.requestId,
     sourceTeam: incident.sourceTeam,
     category: incident.category,
+    subCategory: incident.subCategory,
+    item: incident.item,
+    autoAssignedGroup: 'ECS ISS',
     originalAssignment: incident.sourceTeam,
     finalAssignedTeam: 'ECS ISS',
     routingReason: 'No matching rule — defaulted to ECS ISS',
-    wasReassigned: true,
+    wasReassigned: defaultMappedTeam !== 'ECS ISS',
   };
 }
 
