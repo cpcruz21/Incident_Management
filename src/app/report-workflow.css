@@ -895,3 +895,67 @@ button.report-progress-step:hover { background: var(--bg-card-hover); }
 .public-dashboard[data-theme="night"] .aging-distribution-table tbody [data-period="current"] { background: #38263a; }
 .public-dashboard[data-theme="night"] .aging-distribution-table tbody [data-period="previous"] { background: #322d2e; }
 
+/* ── Classic Corporate Aging Remarks Dashboard Table ── */
+.aging-dashboard-dept-section {
+  margin-bottom: 28px;
+}
+
+.aging-dashboard-dept-title {
+  color: #1d4ed8;
+  font-size: 19px;
+  font-weight: 800;
+  margin: 20px 0 10px 4px;
+  letter-spacing: 0.02em;
+}
+
+.aging-classic-dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #71717a;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.aging-classic-dashboard-table thead tr th {
+  background: #d4d4d8;
+  color: #111827;
+  font-weight: 700;
+  border: 1px solid #71717a;
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.aging-classic-dashboard-table tbody tr td {
+  border: 1px solid #71717a;
+  padding: 12px 14px;
+  vertical-align: middle;
+  background: #ffffff;
+  color: #111827;
+}
+
+.aging-classic-dashboard-table tbody tr td.aging-days-cell {
+  color: #dc2626 !important;
+  font-weight: 800;
+  font-size: 15px;
+  text-align: center;
+}
+
+.aging-classic-dashboard-table tbody tr td.description-cell {
+  text-align: center;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 12px;
+}
+
+.aging-classic-dashboard-table tbody tr td.update-cell {
+  text-align: left;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: 12px;
+}
+
+

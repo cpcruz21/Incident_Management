@@ -103,6 +103,40 @@ export function AgingReportTable({
     }
   }, [data.highImpactIncidents]);
 
+  const updateAsOfDate = useMemo(() => {
+    if (remarksData.periodTo) {
+      const d = new Date(remarksData.periodTo);
+      if (!isNaN(d.getTime())) {
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${mm}/${dd}/${yyyy}`;
+      }
+      const match = remarksData.periodTo.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+      if (match) {
+        return `${match[1].padStart(2, '0')}/${match[2].padStart(2, '0')}/${match[3].length === 2 ? '20' + match[3] : match[3]}`;
+      }
+    }
+    const dateObj = data.asOf ? new Date(data.asOf) : new Date(data.generatedAt);
+    if (!isNaN(dateObj.getTime())) {
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      const yyyy = dateObj.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    }
+    return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  }, [remarksData.periodTo, data.asOf, data.generatedAt]);
+
+  const highImpactByDepartment = useMemo(() => {
+    const groups: Record<string, HighImpactIncident[]> = {};
+    for (const item of highImpactIncidents) {
+      const dept = item.department?.trim() || 'General';
+      if (!groups[dept]) groups[dept] = [];
+      groups[dept].push(item);
+    }
+    return groups;
+  }, [highImpactIncidents]);
+
   // Dynamic Department Mappings from Server API
   const [deptMappings, setDeptMappings] = useState<Record<string, string[]>>(DEFAULT_DEPARTMENT_MAPPINGS);
   const [availableDepartments, setAvailableDepartments] = useState<string[]>(Object.keys(DEFAULT_DEPARTMENT_MAPPINGS));
@@ -1331,106 +1365,176 @@ export function AgingReportTable({
 
           {/* High Impact Incidents Table */}
           {highImpactIncidents.length === 0 ? (
-            <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', padding: '20px 0', textAlign: 'center' }}>
+            <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', padding: '24px 0', textAlign: 'center' }}>
               No high impact incidents designated for this period.
             </p>
           ) : (
-            <div style={{ background: 'var(--ui-surface, #111c30)', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--ui-border, #1e293b)' }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--ui-border, #1e293b)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Flame size={16} style={{ color: '#ef4444' }} aria-hidden="true" />
-                <span style={{ fontWeight: 700, fontSize: '13px', color: '#ef4444' }}>High Impact Incidents</span>
-                <span style={{ marginLeft: 'auto', background: '#dc2626', color: '#fff', borderRadius: '10px', padding: '1px 8px', fontSize: '11px', fontWeight: 700 }}>
-                  {highImpactIncidents.length}
-                </span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--ui-inset, #091426)', textAlign: 'left' }}>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', whiteSpace: 'nowrap' }}>Request ID</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Department</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Category</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', textAlign: 'center' }}>Aging Days</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Impact Level</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Reason</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Responsible</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Recent Update</th>
-                      {!isPublicView && <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Added By</th>}
-                      {!isPublicView && <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', textAlign: 'center' }}>Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {highImpactIncidents.map((item, idx) => {
-                      const impactColor =
-                        item.impactLevel === 'Critical' ? '#ef4444'
-                        : item.impactLevel === 'High' ? '#f97316'
-                        : item.impactLevel === 'Major' ? '#a855f7'
-                        : '#eab308';
-                      const impactEmoji =
-                        item.impactLevel === 'Critical' ? '🔴'
-                        : item.impactLevel === 'High' ? '🟠'
-                        : item.impactLevel === 'Major' ? '🟣'
-                        : '🟡';
-                      return (
-                        <tr
-                          key={item.requestId}
-                          style={{ borderTop: idx === 0 ? undefined : '1px solid var(--ui-border, #1e293b)', verticalAlign: 'top' }}
-                        >
-                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                            <RequestIdLink requestId={item.requestId} />
-                          </td>
-                          <td style={{ padding: '10px 12px' }}>{item.department}</td>
-                          <td style={{ padding: '10px 12px' }}>{item.category}{item.subCategory ? ` / ${item.subCategory}` : ''}</td>
-                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: item.agingDays > 30 ? '#ef4444' : item.agingDays > 14 ? '#f97316' : 'inherit' }}>
-                            {item.agingDays}d
-                          </td>
-                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: impactColor, fontWeight: 700 }}>{impactEmoji} {item.impactLevel}</span>
-                          </td>
-                          <td style={{ padding: '10px 12px', maxWidth: '220px' }}>{item.reason}</td>
-                          <td style={{ padding: '10px 12px' }}>{item.responsibleOrDependency}</td>
-                          <td style={{ padding: '10px 12px', maxWidth: '200px', fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)' }}>
-                            {item.recentUpdate || '—'}
-                          </td>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {Object.entries(highImpactByDepartment).map(([deptName, deptItems]) => (
+                <div key={deptName} className="aging-dashboard-dept-section">
+                  {/* Department Heading in Blue */}
+                  <h3
+                    className="aging-dashboard-dept-title"
+                    style={{
+                      color: '#1d4ed8',
+                      fontSize: '18px',
+                      fontWeight: 800,
+                      margin: '12px 0 8px 2px',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    {deptName}
+                  </h3>
+
+                  <div style={{ overflowX: 'auto', borderRadius: '4px', border: '1px solid #71717a' }}>
+                    <table
+                      className="aging-classic-dashboard-table"
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        background: '#ffffff',
+                        color: '#111827',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          <th style={{ width: '11%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
+                            IR Number
+                          </th>
+                          <th style={{ width: '13%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
+                            Category
+                          </th>
+                          <th style={{ width: '13%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
+                            Sub Category
+                          </th>
+                          <th style={{ width: '31%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 14px', textAlign: 'center' }}>
+                            Description
+                          </th>
+                          <th style={{ width: '8%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
+                            Aging Days
+                          </th>
+                          <th style={{ width: '16%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 10px', textAlign: 'center' }}>
+                            Update as of {updateAsOfDate}
+                          </th>
+                          <th style={{ width: isPublicView ? '8%' : '6%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
+                            Responsible
+                          </th>
                           {!isPublicView && (
-                            <td style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--ui-muted, #64748b)' }}>
-                              {item.addedBy || '—'}
-                            </td>
-                          )}
-                          {!isPublicView && (
-                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                              <button
-                                type="button"
-                                title="Remove from High Impact"
-                                onClick={() => {
-                                  const updated = highImpactIncidents.filter((h) => h.requestId !== item.requestId);
-                                  setHighImpactIncidents(updated);
-                                  onSaveReport?.({ ...data, highImpactIncidents: updated });
-                                }}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  background: 'rgba(239,68,68,0.1)',
-                                  border: '1px solid rgba(239,68,68,0.3)',
-                                  color: '#ef4444',
-                                  borderRadius: '6px',
-                                  padding: '4px 8px',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <Trash2 size={12} aria-hidden="true" /> Remove
-                              </button>
-                            </td>
+                            <th style={{ width: '6%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 6px', textAlign: 'center' }}>
+                              Action
+                            </th>
                           )}
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {deptItems.map((item) => (
+                          <tr key={item.requestId}>
+                            {/* 1. IR Number (blue link, centered) */}
+                            <td style={{ border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                              <RequestIdLink requestId={item.requestId} />
+                            </td>
+
+                            {/* 2. Category */}
+                            <td style={{ border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                              {item.category || '—'}
+                            </td>
+
+                            {/* 3. Sub Category */}
+                            <td style={{ border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                              {item.subCategory || '—'}
+                            </td>
+
+                            {/* 4. Description (centered, line breaks preserved) */}
+                            <td
+                              style={{
+                                border: '1px solid #71717a',
+                                padding: '12px 14px',
+                                textAlign: 'center',
+                                whiteSpace: 'pre-wrap',
+                                lineHeight: 1.5,
+                                fontSize: '12px',
+                                background: '#ffffff',
+                                verticalAlign: 'middle',
+                              }}
+                            >
+                              {item.description || '—'}
+                            </td>
+
+                            {/* 5. Aging Days (centered bold RED text) */}
+                            <td
+                              style={{
+                                border: '1px solid #71717a',
+                                padding: '12px 8px',
+                                textAlign: 'center',
+                                color: '#dc2626',
+                                fontWeight: 800,
+                                fontSize: '15px',
+                                background: '#ffffff',
+                                verticalAlign: 'middle',
+                              }}
+                            >
+                              {item.agingDays}
+                            </td>
+
+                            {/* 6. Update as of {date} */}
+                            <td
+                              style={{
+                                border: '1px solid #71717a',
+                                padding: '12px 12px',
+                                textAlign: 'left',
+                                whiteSpace: 'pre-wrap',
+                                lineHeight: 1.5,
+                                fontSize: '12px',
+                                background: '#ffffff',
+                                verticalAlign: 'middle',
+                              }}
+                            >
+                              {item.recentUpdate ? renderSingleColorUpdateText(item.recentUpdate) : '—'}
+                            </td>
+
+                            {/* 7. Responsible */}
+                            <td style={{ border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                              {item.responsibleOrDependency || '—'}
+                            </td>
+
+                            {/* Admin Action: Remove */}
+                            {!isPublicView && (
+                              <td style={{ border: '1px solid #71717a', padding: '8px 4px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                                <button
+                                  type="button"
+                                  title="Remove from High Impact"
+                                  onClick={() => {
+                                    const updated = highImpactIncidents.filter((h) => h.requestId !== item.requestId);
+                                    setHighImpactIncidents(updated);
+                                    onSaveReport?.({ ...data, highImpactIncidents: updated });
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '2px',
+                                    background: 'rgba(239,68,68,0.1)',
+                                    border: '1px solid rgba(239,68,68,0.3)',
+                                    color: '#ef4444',
+                                    borderRadius: '4px',
+                                    padding: '4px 6px',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <Trash2 size={12} aria-hidden="true" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
