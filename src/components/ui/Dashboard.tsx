@@ -1,157 +1,257 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  Archive, ArrowRight, Bell, CalendarClock, CalendarRange, ChevronDown, ClipboardList, House,
+  LogOut, Menu, Plus, TrendingUp, UserRound,
+} from 'lucide-react';
 import type { Account } from '@/lib/auth';
-import { isAdmin } from '@/lib/auth';
 import { StoredReportsList } from '@/components/report/StoredReportsList';
-import type { StoredReport } from '@/lib/storage/report-storage';
+import { UserManagement } from './UserManagement';
+import { AuditLog } from './AuditLog';
+import { migrateLegacyReports, type StoredReport } from '@/lib/storage/report-storage';
+import './admin.css';
 
-export type DashboardView = 'dashboard' | 'weekly' | 'monthly' | 'aging';
+export type DashboardView = 'dashboard' | 'weekly' | 'monthly' | 'aging' | 'archive' | 'users' | 'audit' | 'account';
+
+const navigation = [
+  { view: 'dashboard', label: 'Home', Icon: House },
+  { view: 'weekly', label: 'Weekly Reviews', Icon: CalendarClock },
+  { view: 'monthly', label: 'Monthly Review', Icon: CalendarRange },
+  { view: 'aging', label: 'Aging Trends', Icon: TrendingUp },
+  { view: 'archive', label: 'Archive', Icon: Archive },
+  { view: 'users', label: 'User Management', Icon: UserRound },
+  { view: 'audit', label: 'Audit Logs', Icon: ClipboardList },
+] as const;
+
+interface Overview {
+  total: number;
+  open: number;
+  closed: number;
+  pending: number;
+  unknown: number;
+  averageDays: number | null;
+  trend: { label: string; value: number }[];
+}
 
 interface DashboardProps {
   account: Account;
+  activeView: DashboardView;
   onSelectReport: (view: DashboardView) => void;
-  onOpenStoredReport?: (report: StoredReport) => void;
+  onOpenStoredReport: (report: StoredReport) => void;
   onLogout: () => void;
+  logoutError: string;
+  children?: ReactNode;
 }
 
-export function Dashboard({ account, onSelectReport, onOpenStoredReport, onLogout }: DashboardProps) {
-  const [selected, setSelected] = useState<string | null>(null);
+export function Dashboard({
+  account, activeView, onSelectReport, onOpenStoredReport, onLogout, logoutError, children,
+}: DashboardProps) {
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarToggleLabel = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  const initials = account.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase();
 
-  useEffect(() => {
-    // Load Tailwind CDN
-    if (!document.getElementById('tailwind-cdn')) {
-      const script = document.createElement('script');
-      script.id = 'tailwind-cdn';
-      script.src = 'https://cdn.tailwindcss.com/3.4.17';
-      document.head.appendChild(script);
-    }
-    // Load Lucide CDN
-    if (!document.getElementById('lucide-cdn')) {
-      const script = document.createElement('script');
-      script.id = 'lucide-cdn';
-      script.src = 'https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js';
-      script.onload = () => {
-        // @ts-ignore
-        if (window.lucide) window.lucide.createIcons();
-      };
-      document.head.appendChild(script);
-    } else {
-      // @ts-ignore
-      if (window.lucide) window.lucide.createIcons();
-    }
-  }, [selected]); // re-run lucide icons when selection changes if needed
-
-  function handleOpen(view: DashboardView) {
-    onSelectReport(view);
+  function select(view: DashboardView) {
+    setNavigationOpen(false);
+    setProfileOpen(false);
+    if (view !== activeView) onSelectReport(view);
   }
 
   return (
-    <div className="dashboard-body shell" style={{ background: 'rgb(9, 20, 38)' }}>
-        <header className="topbar">
-          <div className="topbar-inner mx-auto flex h-full max-w-[1240px] items-center justify-between px-8">
-            <div className="flex items-center gap-4">
-              <div className="grid h-29 w-16 place-items-center" aria-hidden="true">
-                <img src="/images/EQUI.png" alt="Equicom Logo" className="w-full h-full object-contain scale-110" />
-              </div>
-              <div>
-                <p className="m-0 text-[10px] font-bold uppercase tracking-[.14em] text-sky-300" style={{ color: 'rgb(125, 211, 252)', fontWeight: 700, fontStyle: 'normal', fontSize: '10px', letterSpacing: '0.12rem' }}>Incident Management</p>
-                <h1 className="m-0 text-sm font-bold text-white" style={{ color: 'rgb(255, 255, 255)', fontWeight: 700, fontStyle: 'normal', fontSize: '30px' }}>SMAC REPORTING</h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
+    <div className="admin-shell" data-sidebar-collapsed={sidebarCollapsed}>
+      <aside className="admin-sidebar" id="admin-sidebar">
+        <div className="admin-brand-row">
+          <button className="admin-brand" type="button" onClick={() => select('dashboard')}>
+            <span className="equicom-logo"><img className="equicom-logo-art" src="/images/EQUI.png" width="82" height="72" alt="Equicom" /></span>
+            <strong className="admin-brand-title">Incident Management</strong>
+          </button>
+          <button
+            className="admin-nav-toggle admin-nav-toggle-mobile" type="button" aria-expanded={navigationOpen}
+            aria-controls="admin-navigation" aria-label={navigationOpen ? 'Close navigation' : 'Open navigation'}
+            title={navigationOpen ? 'Close navigation' : 'Open navigation'}
+            onClick={() => setNavigationOpen(!navigationOpen)}
+          >
+            <Menu size={20} aria-hidden="true" />
+          </button>
+          <button
+            className="admin-nav-toggle admin-nav-toggle-desktop"
+            type="button"
+            aria-controls="admin-navigation"
+            aria-expanded={!sidebarCollapsed}
+            aria-label={sidebarToggleLabel}
+            title={sidebarToggleLabel}
+            onClick={() => {
+              setProfileOpen(false);
+              setSidebarCollapsed((collapsed) => !collapsed);
+            }}
+          >
+            <Menu size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <div id="admin-navigation" className="admin-navigation" data-open={navigationOpen}>
+          <nav aria-label="Admin workspace">
+            {navigation.filter(item => item.view !== 'audit' || account.role === 'super-admin').map(({ view, label, Icon }) => (
               <button
-                onClick={onLogout}
-                className="header-user-badge"
-                title="Click to log out"
+                key={view} type="button" onClick={() => select(view)}
+                aria-current={activeView === view ? 'page' : undefined}
               >
-                👤 {account.name}
-                {isAdmin(account) && (
-                  <span className="badge-role">Admin</span>
-                )}
+                <Icon size={23} aria-hidden="true" /> {view === 'users' && account.role === 'admin' ? 'Account Settings' : label}
               </button>
-            </div>
-          </div>
-        </header>
-        <main className="page-wrap">
-          <section id="landing-view" className="view active" aria-labelledby="landing-heading">
-            <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="eyebrow mb-2" style={{ color: 'rgb(85, 214, 255)', fontWeight: 700, fontStyle: 'normal', fontSize: '15px' }}>Reporting workspace</p>
-                <h2 id="landing-heading" className="m-0 text-3xl font-bold tracking-tight text-white" style={{ color: 'rgb(255, 255, 255)', fontWeight: 700, fontStyle: 'normal', fontSize: '23px' }}>Choose a report section</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300" style={{ color: 'rgb(203, 213, 225)', fontWeight: 400, fontStyle: 'normal', fontSize: '15px' }}>Select a scheduled workflow to generate an incident report.</p>
+            ))}
+          </nav>
+          <div className="admin-profile">
+            {profileOpen && (
+              <div className="admin-profile-actions">
+                <button type="button" onClick={() => select('account')}><UserRound size={16} /> Account settings</button>
+                <button type="button" onClick={onLogout}><LogOut size={16} /> Sign out</button>
               </div>
-            </div>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3" aria-label="Available report sections">
-
-              <article className={`report-card card ${selected === 'weekly' ? 'is-selected' : ''}`} onClick={() => setSelected('weekly')}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-blue-500/15 text-blue-300">
-                    <i data-lucide="calendar-days" style={{ width: 21, height: 21 }}></i>
-                  </div>
-                  <span className="flex items-center gap-2 text-xs text-slate-300">
-                    <span className="status-dot"></span><span className="selection-copy">{selected === 'weekly' ? 'Selected' : 'Not selected'}</span>
-                  </span>
-                </div>
-                <p className="mt-7 text-xs font-bold uppercase tracking-[.12em] text-sky-300" style={{ color: 'rgb(125, 211, 252)', fontWeight: 700, fontStyle: 'normal', fontSize: '15px' }}>Scheduled follow-up</p>
-                <h3 className="mt-2 text-xl font-bold leading-tight text-white" style={{ color: 'rgb(255, 255, 255)', fontWeight: 700, fontStyle: 'normal', fontSize: '18px' }}>Weekly Report</h3>
-                <button type="button" className="open-report primary-btn mt-auto flex w-full items-center justify-center gap-2 px-4 py-3" onClick={(e) => { e.stopPropagation(); handleOpen('weekly'); }}>
-                  <span>Open report</span><i data-lucide="arrow-right" style={{ width: 16, height: 16 }}></i>
-                </button>
-              </article>
-
-              <article className={`report-card card ${selected === 'monthly' ? 'is-selected' : ''}`} onClick={() => setSelected('monthly')}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-500/15 text-violet-300">
-                    <i data-lucide="calendar-range" style={{ width: 21, height: 21 }}></i>
-                  </div>
-                  <span className="flex items-center gap-2 text-xs text-slate-300">
-                    <span className="status-dot"></span><span className="selection-copy">{selected === 'monthly' ? 'Selected' : 'Not selected'}</span>
-                  </span>
-                </div>
-                <p className="mt-7 text-xs font-bold uppercase tracking-[.12em] text-violet-300" style={{ color: 'rgb(196, 181, 253)', fontWeight: 700, fontStyle: 'normal', fontSize: '15px' }}>Monthly review</p>
-                <h3 className="mt-2 text-xl font-bold leading-tight text-white" style={{ color: 'rgb(255, 255, 255)', fontWeight: 700, fontStyle: 'normal', fontSize: '18px' }}>Monthly Incident Report</h3>
-                <button type="button" className="open-report primary-btn mt-auto flex w-full items-center justify-center gap-2 px-4 py-3" onClick={(e) => { e.stopPropagation(); handleOpen('monthly'); }}>
-                  <span>Open report</span><i data-lucide="arrow-right" style={{ width: 16, height: 16 }}></i>
-                </button>
-              </article>
-
-              <article className={`report-card card ${selected === 'aging' ? 'is-selected' : ''}`} onClick={() => setSelected('aging')}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-amber-500/15 text-amber-300">
-                    <i data-lucide="trending-up" style={{ width: 21, height: 21 }}></i>
-                  </div>
-                  <span className="flex items-center gap-2 text-xs text-slate-300">
-                    <span className="status-dot"></span><span className="selection-copy">{selected === 'aging' ? 'Selected' : 'Not selected'}</span>
-                  </span>
-                </div>
-                <p className="mt-7 text-xs font-bold uppercase tracking-[.12em] text-amber-300" style={{ color: 'rgb(252, 211, 77)', fontWeight: 700, fontStyle: 'normal', fontSize: '15px' }}>Aging trends</p>
-                <h3 className="mt-2 text-xl font-bold leading-tight text-white" style={{ color: 'rgb(255, 255, 255)', fontWeight: 700, fontStyle: 'normal', fontSize: '18px' }}>Aging Incident Report</h3>
-                <button type="button" className="open-report primary-btn mt-auto flex w-full items-center justify-center gap-2 px-4 py-3" onClick={(e) => { e.stopPropagation(); handleOpen('aging'); }}>
-                  <span>Open report</span><i data-lucide="arrow-right" style={{ width: 16, height: 16 }}></i>
-                </button>
-              </article>
-            </div>
-
-            {/* Stored Reports Section */}
-            <div className="mt-10">
-              <StoredReportsList
-                onOpenReport={(report) => {
-                  if (onOpenStoredReport) {
-                    onOpenStoredReport(report);
-                  }
-                }}
-              />
-            </div>
-          </section>
-        </main>
-        <footer className="mt-8 border-t border-slate-600/60 px-6 py-4">
-          <div className="flex flex-col items-center justify-center text-center">
-            <p className="m-0 text-[10px] leading-4 text-slate-500">
-              ©SMAC-S 2026.
-            </p>
+            )}
+            <button className="admin-profile-button" type="button" aria-expanded={profileOpen}
+              onClick={() => setProfileOpen(!profileOpen)}>
+              <span className="admin-avatar" aria-hidden="true">{initials}</span>
+              <span><strong>{account.name}</strong><small>{account.role === 'super-admin' ? 'Super Administrator' : 'Administrator'}</small></span>
+              <ChevronDown size={17} aria-hidden="true" />
+            </button>
+            {logoutError && <p className="admin-error" role="alert">{logoutError}</p>}
           </div>
+        </div>
+        {sidebarCollapsed && (
+          <span className="admin-avatar admin-collapsed-avatar" role="img" aria-label={account.name} title={account.name}>
+            {initials}
+          </span>
+        )}
+      </aside>
+      <div className="admin-content">
+        {activeView === 'dashboard' && <HomeOverview onSelect={onSelectReport} />}
+        {activeView === 'archive' && (
+          <main className="admin-page">
+            <StoredReportsList onOpenReport={onOpenStoredReport} canDelete={account.role === 'super-admin'} />
+          </main>
+        )}
+        {activeView === 'users' && <main className="admin-page"><UserManagement account={account} /></main>}
+        {activeView === 'account' && <main className="admin-page"><UserManagement account={account} personalOnly /></main>}
+        {activeView === 'audit' && account.role === 'super-admin' && <main className="admin-page admin-audit-page"><header className="users-page-header"><h1>Audit Logs</h1></header><AuditLog /></main>}
+        {children}
+        <footer className="admin-footer app-footer">
+          <p>&copy; {new Date().getFullYear()} Equitable Computer Services Inc.</p>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function HomeOverview({ onSelect }: { onSelect: (view: DashboardView) => void }) {
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      await migrateLegacyReports();
+      const response = await fetch('/api/admin/overview', { signal: controller.signal });
+      if (!response.ok) throw new Error('Unable to load overview');
+      setOverview(await response.json());
+    }
+    load().catch(() => { if (!controller.signal.aborted) setLoadError(true); });
+    return () => controller.abort();
+  }, []);
+
+  const metrics = [
+    ['Total incidents', overview?.total],
+    ['Open incidents', overview?.open],
+    ['Closed incidents', overview?.closed],
+    ['Avg. resolution time', overview?.averageDays == null ? null : `${overview.averageDays.toFixed(1)} days`],
+  ] as const;
+
+  const statuses = [
+    ['Open', overview?.open, 'open'],
+    ['Closed', overview?.closed, 'closed'],
+    ['Pending review', overview?.pending, 'pending'],
+    ...(overview?.unknown ? [['Unclassified', overview.unknown, 'unknown']] as const : []),
+  ] as const;
+
+  return (
+    <main className="admin-page admin-home">
+      <header className="admin-welcome">
+        <div>
+          <p className="admin-kicker">Welcome to</p>
+          <h1>SMAC Reporting</h1>
+          <p>Incident reports, weekly reviews, and performance insights.</p>
+        </div>
+      </header>
+      <section className="admin-overview" aria-labelledby="analytics-heading">
+        <div className="admin-overview-header">
+          <h2 id="analytics-heading">Analytics overview</h2>
+          <div className="admin-create">
+            <button className="admin-primary" type="button" aria-expanded={createOpen}
+              onClick={() => setCreateOpen(!createOpen)}>
+              <Plus size={17} /> Create new report
+            </button>
+            {createOpen && (
+              <div className="admin-create-options" onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setCreateOpen(false);
+                  event.currentTarget.parentElement?.querySelector('button')?.focus();
+                }
+              }}>
+                {navigation.slice(1, 4).map(({ view, label, Icon }) => (
+                  <button key={view} type="button" onClick={() => onSelect(view)}><Icon size={17} /> {label}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        {loadError && <p className="admin-error" role="alert">Could not load incident analytics.</p>}
+        <dl className="admin-metrics">
+          {metrics.map(([label, value]) => (
+            <div key={label}><dt>{label}</dt><dd>{value ?? '\u2014'}</dd></div>
+          ))}
+        </dl>
+        <div className="admin-charts">
+          <section className="admin-chart">
+            <h3>Incident volume over time</h3>
+            <IncidentTrend trend={overview?.trend || []} />
+          </section>
+          <section className="admin-chart">
+            <h3>Status breakdown</h3>
+            <ul className="admin-statuses">
+              {statuses.map(([label, count, status]) => (
+                <li key={status}><span className={`admin-dot admin-dot-${status}`} />{label}<strong>{count ?? '\u2014'}</strong></li>
+              ))}
+            </ul>
+          </section>
+        </div>
+        <section className="admin-insights">
+          <div>
+            <h3><Bell size={15} /> Insights &amp; alerts</h3>
+            <p>{overview ? `${overview.open + overview.pending} incidents open or pending review.` : 'Incident follow-ups'}</p>
+          </div>
+          <button className="admin-text-button" type="button" onClick={() => onSelect('weekly')}>
+            View follow-ups <ArrowRight size={16} />
+          </button>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function IncidentTrend({ trend }: { trend: Overview['trend'] }) {
+  if (!trend.length) return <div className="admin-trend-empty">No dated incidents to chart.</div>;
+  const scale = Math.max(1, ...trend.map((point) => point.value));
+  const points = trend.map((point, index) => [20 + index * 92, 116 - point.value / scale * 96]);
+  return (
+    <figure className="admin-trend">
+      <svg viewBox="0 0 500 134" role="img" aria-label={trend.map(({ label, value }) => `${label}: ${value}`).join(', ')}>
+        {[20, 52, 84, 116].map((y) => <line key={y} x1="20" x2="480" y1={y} y2={y} stroke="var(--ui-border, #214359)" />)}
+        <polyline points={points.map((point) => point.join(',')).join(' ')} fill="none" stroke="var(--ui-link, #31c2dd)" strokeWidth="3" />
+        {points.map(([x, y], index) => (
+          <circle key={x} cx={x} cy={y} r="4" fill="var(--ui-link, #31c2dd)"><title>{trend[index].label}: {trend[index].value}</title></circle>
+        ))}
+      </svg>
+      <figcaption>{trend.map(({ label }) => <span key={label}>{label}</span>)}</figcaption>
+    </figure>
   );
 }

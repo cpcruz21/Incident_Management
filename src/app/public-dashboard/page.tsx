@@ -228,6 +228,8 @@ export default function PublicDashboardPage() {
   return (
     <div className="public-dashboard" data-theme={theme} style={{
       minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
       background: 'var(--ui-page, #060f1e)',
       color: 'var(--ui-text, #f8fafc)',
       fontFamily: "var(--font-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -430,7 +432,7 @@ export default function PublicDashboardPage() {
       </header>
 
       {/* ═══════════════════ MAIN CONTENT ═══════════════════ */}
-      <main className="live-content">
+      <main className="live-content" style={{ flex: 1 }}>
 
         {/* ── IR Analytics Dashboard Tab ── */}
         {activeTab === 'ir-analytics' && (
@@ -499,22 +501,8 @@ export default function PublicDashboardPage() {
       </main>
 
       {/* ═══════════════════ FOOTER ═══════════════════ */}
-      <footer style={{
-        marginTop: '60px',
-        borderTop: '1px solid var(--ui-panel-border)',
-        background: 'linear-gradient(180deg, var(--ui-inset, #091426) 0%, var(--ui-page, #050b16) 100%)',
-        padding: '24px 20px',
-        textAlign: 'center',
-      }}>
-        <p style={{
-          margin: 0,
-          fontSize: '12px',
-          color: 'var(--ui-secondary, #94a3b8)',
-          letterSpacing: '0.02em',
-          fontWeight: 500,
-        }}>
-          &copy; 2026 Equitable Computer Services Inc.
-        </p>
+      <footer className="admin-footer app-footer">
+        <p>&copy; {new Date().getFullYear()} Equitable Computer Services Inc.</p>
       </footer>
 
       {/* ═══════════════════ MODAL ═══════════════════ */}

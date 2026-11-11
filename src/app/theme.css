@@ -1,0 +1,217 @@
+:root {
+  color-scheme: light;
+  --ui-page: #f2f6fa;
+  --ui-surface: #ffffff;
+  --ui-inset: #eaf1f7;
+  --ui-selected: #dbeafe;
+  --ui-border: #a7b8c8;
+  --ui-control-border: #6b8096;
+  --ui-wash: rgba(25, 57, 86, .07);
+  --ui-grid: #b8c7d6;
+  --ui-shadow: rgba(35, 64, 90, .12);
+  --ui-text: #10263b;
+  --ui-secondary: #30465c;
+  --ui-muted: #455a70;
+  --ui-link: #064e89;
+  --ui-violet: #5f3194;
+  --ui-success: #065c40;
+  --ui-warning: #704700;
+  --ui-orange: #88360e;
+  --ui-danger: #971e35;
+  --theme-focus: #075cab;
+  --equicom-logo-bg: #ffffff;
+  --equicom-logo-border: #c1d1df;
+  --equicom-logo-shadow: 0 2px 5px rgba(16, 40, 63, .12);
+}
+
+.public-dashboard[data-theme="night"] {
+  color-scheme: dark;
+  --ui-page: #0f172a;
+  --ui-surface: #172337;
+  --ui-inset: #1e2e45;
+  --ui-selected: #2a4465;
+  --ui-border: #526a88;
+  --ui-panel-border: #526a88;
+  --ui-control-border: #7892b1;
+  --ui-wash: rgba(151, 183, 221, .1);
+  --ui-grid: #526a88;
+  --ui-shadow: rgba(0, 0, 0, .3);
+  --ui-text: #ecf3fc;
+  --ui-secondary: #c4d1e3;
+  --ui-muted: #a7bbd3;
+  --ui-link: #a0cbff;
+  --ui-violet: #d6baff;
+  --ui-success: #8be0b6;
+  --ui-warning: #f9d784;
+  --ui-orange: #ffc095;
+  --ui-danger: #ffa8b9;
+  --theme-focus: #a0cbff;
+  --analytics-series-strength: 62%;
+  --analytics-hover-brightness: 1.12;
+  --equicom-logo-bg: #172337;
+  --equicom-logo-border: #405673;
+  --equicom-logo-shadow: 0 2px 5px rgba(0, 0, 0, .3);
+}
+
+:root, .public-dashboard[data-theme="night"] {
+  --bg-primary: var(--ui-page);
+  --bg-secondary: var(--ui-surface);
+  --bg-card: var(--ui-surface);
+  --bg-card-hover: var(--ui-inset);
+  --bg-surface: var(--ui-inset);
+  --text-primary: var(--ui-text);
+  --text-secondary: var(--ui-secondary);
+  --text-muted: var(--ui-muted);
+  --border-color: var(--ui-border);
+  --success: var(--ui-success);
+  --warning: var(--ui-warning);
+  --error: var(--ui-danger);
+  --shadow-sm: 0 1px 3px var(--ui-shadow);
+  --shadow-md: 0 4px 12px var(--ui-shadow);
+  --shadow-lg: 0 8px 32px var(--ui-shadow);
+}
+
+:where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}
+
+:where(input, textarea)::placeholder {
+  color: var(--ui-muted);
+  opacity: 1;
+}
+
+.equicom-logo-art {
+  filter: url("#equicom-light-lettering");
+}
+.public-dashboard[data-theme="night"] .equicom-logo-art { filter: none; }
+
+.dashboard-theme-switch {
+  --theme-pill-background: #f8fdfd;
+  --theme-pill-border: #94c8c3;
+  --theme-pill-text: #36546a;
+  --theme-pill-hover: #e6f3f4;
+  --theme-pill-hover-text: #15384b;
+  --theme-pill-focus: #075cab;
+  grid-area: theme;
+  justify-self: end;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--theme-pill-border);
+  border-radius: 999px;
+  background: var(--theme-pill-background);
+}
+.public-dashboard[data-theme="night"] .dashboard-theme-switch {
+  --theme-pill-background: #0d2b43;
+  --theme-pill-border: #24b9ac;
+  --theme-pill-text: #c1d9e9;
+  --theme-pill-hover: #1b415c;
+  --theme-pill-hover-text: #f0faff;
+  --theme-pill-focus: #d9fcf8;
+}
+.dashboard-theme-switch button {
+  display: grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--theme-pill-text);
+  cursor: pointer;
+}
+.dashboard-theme-switch button:hover { background: var(--theme-pill-hover); color: var(--theme-pill-hover-text); }
+.dashboard-theme-switch button:focus-visible { outline: 2px solid var(--theme-pill-focus); outline-offset: -2px; }
+.dashboard-theme-switch button:first-child[aria-pressed="true"] { background: #bdeee6; color: #15384b; }
+.dashboard-theme-switch button:last-child[aria-pressed="true"] {
+  background: #215170;
+  color: #e8f6ff;
+  box-shadow: inset 0 0 0 1px #427697;
+}
+
+.live-header-brand { grid-area: brand; display: flex; align-items: center; gap: 14px; min-width: 0; }
+.live-header-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.live-header-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "brand navigation actions theme";
+  align-items: center;
+  min-height: 66px;
+  padding: 10px clamp(14px, 2.3%, 28px);
+  gap: 10px 16px;
+}
+
+.live-navigation { grid-area: navigation; justify-self: center; width: max-content; max-width: 100%; overflow-x: auto; }
+.live-content { max-width: 1600px; margin: 0 auto; padding: 28px clamp(14px, 2.5%, 32px) 60px; }
+
+.analytics-chart-card { border: 1px solid var(--ui-panel-border, #000); }
+
+.public-dashboard { --ui-panel-border: #000; }
+
+@media (max-width: 1240px) {
+  .live-header-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand theme"
+      "navigation navigation"
+      "actions actions";
+  }
+  .live-navigation { justify-self: start; }
+}
+
+@media (max-width: 600px) {
+  .live-navigation { width: 100%; }
+}
+
+/* Keep ticket identifiers easy to find across report tables and details. */
+.request-id-highlight {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #fff0bb;
+  color: #624100;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+button.request-id-highlight {
+  border: 1px solid currentColor;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+button.request-id-highlight:hover { text-decoration: underline; text-underline-offset: 3px; }
+button.request-id-highlight:focus-visible { outline: 2px solid var(--theme-focus, #55c8f5); outline-offset: 3px; }
+a.request-id-highlight { text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+a.request-id-highlight:hover { filter: brightness(1.1); }
+a.request-id-highlight:focus-visible { outline: 2px solid var(--theme-focus, #55c8f5); outline-offset: 3px; }
+
+/* ── Uniform App Footer (Admin & Live Dashboard) ── */
+.app-footer,
+.admin-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 16px clamp(20px, 2vw, 36px);
+  border-top: 1px solid var(--ui-border, #173247);
+  background: var(--ui-surface, #051522);
+  color: var(--ui-secondary, #94a3b8);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+}
+
+.app-footer p,
+.admin-footer p {
+  margin: 0;
+  font-weight: 500;
+}
+
