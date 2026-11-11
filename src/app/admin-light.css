@@ -1,0 +1,100 @@
+/* Administrator workspace and sign-in colors. */
+:is(.admin-shell, .admin-login) {
+  --color-primary: #1d4ed8;
+  --success-bg: #e5f3ed;
+  --warning-bg: #fff4d6;
+  --error-bg: #fcecee;
+}
+
+.admin-shell :is(.step-intro h2, .validation-header h2, .routing-header h2, .prevweek-header h2) {
+  background: none;
+  color: var(--ui-text);
+  -webkit-text-fill-color: currentColor;
+}
+
+.admin-shell .tag-team {
+  background: #f0e8fa;
+  border-color: #bfa5dc;
+  color: #64339b;
+}
+.admin-shell .tag-category {
+  background: #e5f3ed;
+  border-color: #97c6ae;
+  color: #066241;
+}
+.admin-shell :is(.group-pill, .footer-info, .pagination-info) { color: var(--ui-secondary); }
+.admin-shell .routing-table th { background: var(--ui-inset); color: var(--ui-secondary); }
+.admin-shell .prevweek-autofill-banner { background: #e5f3ed; border-color: #97c6ae; }
+.admin-shell .prevweek-autofill-sub { color: #245640; }
+.admin-shell .prevweek-info-banner { background: #eaf2fc; border-color: #a4bedc; }
+.admin-shell .btn-clear-autofill:hover { background: #f8dfe3; color: #8c1d30; }
+
+:is(.admin-shell, .admin-login) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select) {
+  background-color: #ffffff;
+  color: var(--ui-text);
+  border-color: var(--ui-control-border);
+  accent-color: #1d4ed8;
+}
+:is(.admin-shell, .admin-login) :is(input, textarea, select):focus-visible {
+  outline: 2px solid #075cab;
+  outline-offset: 2px;
+}
+:is(.admin-shell, .admin-login) :is(input, textarea, select):disabled {
+  background-color: #edf2f7;
+  color: var(--ui-muted);
+  opacity: 1;
+}
+
+.admin-shell :is(.report-summary-panel, .remarks-meta-card-table) { background: #a4b5c5; border-color: #a4b5c5; box-shadow: 0 2px 8px #233f5a12; }
+.admin-shell .summary-field { background: #ffffff; }
+.admin-shell .summary-label { background: #edf2f7; color: #334e68; border-color: #a4b5c5; }
+.admin-shell .summary-value { color: #102a43; }
+.admin-shell .red-highlight-text { color: #a02135 !important; }
+.admin-shell :is(.aging-pagination-container, .aging-pagination-info) { background: #ffffff; border-color: #a4b5c5; color: #334e68; }
+.admin-shell .btn-copy-clipboard { background: #edf2f7; border-color: #8195a8; color: #102a43; }
+.admin-shell .btn-copy-clipboard:hover { background: #dceafb; border-color: #075cab; }
+
+.admin-shell .kpi-chip { background: #edf2f7; border-color: #8195a8; color: #334e68; }
+.admin-shell .kpi-chip:hover { background: #dceafb; color: #102a43; }
+.admin-shell .kpi-chip.active { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff; }
+.admin-shell .kpi-chip.chip-critical.active { background: #b91c1c; border-color: #b91c1c; }
+.admin-shell .kpi-chip.chip-high.active { background: #9a3412; border-color: #9a3412; }
+.admin-shell .kpi-chip.chip-moderate.active { background: #fde68a; border-color: #b77909; color: #713f12; }
+.admin-shell .kpi-chip.chip-low.active { background: #047857; border-color: #047857; }
+.admin-shell .kpi-chip.chip-unsaved.active { background: #6b21a8; border-color: #6b21a8; }
+
+.admin-shell :is(.revised-select-input, .revised-select-input.is-empty, .revised-select-input.has-value) {
+  background: #fffaf0;
+  color: #713f12;
+  border-color: #a87612;
+}
+.admin-shell .revised-value-text { color: #713f12 !important; }
+.admin-shell .revised-empty-text { color: #805000; }
+.admin-shell .cell-revised-highlight { background: #fff9e8 !important; }
+.admin-shell .cell-revised-highlight.is-editable:hover { background: #fff0c2 !important; }
+.admin-shell th.col-header-revised {
+  background: #facc15 !important;
+  color: #0f172a !important;
+  border-left: 1.5px solid #ca8a04 !important;
+  border-right: 1.5px solid #ca8a04 !important;
+}
+.admin-shell th.col-header-revised .monthly-sort-button {
+  color: #0f172a !important;
+  font-weight: 750;
+}
+.admin-shell th.col-header-revised .monthly-sort-button:hover {
+  background: #eab308 !important;
+  color: #0f172a !important;
+}
+
+.admin-shell .admin-welcome::before { opacity: .9; }
+.admin-shell .admin-overview { background: #ffffff; border-radius: 8px; }
+.admin-shell .admin-navigation nav button[aria-current="page"] { border-left-color: #075cab; font-weight: 700; }
+:is(.admin-shell, .admin-login) .admin-primary { background: #075eae; border-color: #075eae; }
+:is(.admin-shell, .admin-login) .admin-primary:hover:not(:disabled) { background: #064c8c; }
+:is(.admin-shell, .admin-login) :is(.admin-primary, .admin-secondary):disabled {
+  background: var(--ui-inset);
+  border-color: var(--ui-control-border);
+  color: var(--ui-muted);
+  opacity: 1;
+}

@@ -62,7 +62,7 @@ function EditableRevisedCell({ value, requestId, field, currentType, isAdmin, on
 }) {
   const isType = field === 'Revised Root Cause Type';
   return (
-    <td className="monthly-revised-cell">
+    <td className="monthly-revised-cell cell-revised-highlight is-editable">
       {isAdmin && onSave ? (
         <>
           <select value={value || ''} aria-label={`${field} for ${requestId}`} onChange={event => {
@@ -233,13 +233,21 @@ function EnhancedTicketGrid({ incidents, columns, title, emptyMessage, isAdmin =
         <div className="monthly-report-scroll monthly-ticket-scroll" role="region" aria-label={`${title} table`} tabIndex={0}>
           <table className="monthly-records-table">
             <caption className="monthly-sr-only">{title}, with sortable columns</caption>
-            <thead><tr><th scope="col" className="monthly-row-index">#</th>{columns.map((col, index) => (
-              <th key={col} scope="col" className={index === 0 ? 'monthly-ticket-id' : undefined} aria-sort={sortCol === col ? sortDir === 'asc' ? 'ascending' : 'descending' : undefined}>
-                <button type="button" className="monthly-sort-button" onClick={() => { if (sortCol === col) setSortDir(dir => dir === 'asc' ? 'desc' : 'asc'); else { setSortCol(col); setSortDir('asc'); } setCurrentPage(1); }}>
-                  {col.replace(/\n/g, ' ')}{sortCol === col && (sortDir === 'asc' ? <ArrowUp size={14} aria-hidden="true" /> : <ArrowDown size={14} aria-hidden="true" />)}
-                </button>
-              </th>
-            ))}</tr></thead>
+            <thead><tr><th scope="col" className="monthly-row-index">#</th>{columns.map((col, index) => {
+              const isRevisedCol = col === 'Revised Root Cause Type' || col === 'Revised Identified Root Cause';
+              return (
+                <th
+                  key={col}
+                  scope="col"
+                  className={`${index === 0 ? 'monthly-ticket-id' : ''} ${isRevisedCol ? 'col-header-revised' : ''}`.trim() || undefined}
+                  aria-sort={sortCol === col ? sortDir === 'asc' ? 'ascending' : 'descending' : undefined}
+                >
+                  <button type="button" className="monthly-sort-button" onClick={() => { if (sortCol === col) setSortDir(dir => dir === 'asc' ? 'desc' : 'asc'); else { setSortCol(col); setSortDir('asc'); } setCurrentPage(1); }}>
+                    {col.replace(/\n/g, ' ')}{sortCol === col && (sortDir === 'asc' ? <ArrowUp size={14} aria-hidden="true" /> : <ArrowDown size={14} aria-hidden="true" />)}
+                  </button>
+                </th>
+              );
+            })}</tr></thead>
             <tbody>{paginated.map((inc, index) => <tr key={inc.requestId || index}>
               <td className="monthly-row-index">{start + index + 1}</td>
               {columns.map((col, columnIndex) => {
