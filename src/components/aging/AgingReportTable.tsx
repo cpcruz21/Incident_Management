@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useMemo, useEffect, useCallback, useId } from 'react';
-import { ChartColumn, Download, Flame, NotebookText, Trash2 } from 'lucide-react';
+import { ChartColumn, Download, Flame, NotebookText, Trash2, Edit2, Check, X } from 'lucide-react';
 import type { AgingReportData, AgingRemarksRow, AgingBucket, RemarksTableData, HighImpactIncident } from '@/types/aging';
 import type { Incident } from '@/types/incident';
 import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
@@ -103,15 +103,8 @@ export function AgingReportTable({
     }
   }, [data.highImpactIncidents]);
 
-  const highImpactByDepartment = useMemo(() => {
-    const groups: Record<string, HighImpactIncident[]> = {};
-    for (const item of highImpactIncidents) {
-      const dept = item.department?.trim() || 'General';
-      if (!groups[dept]) groups[dept] = [];
-      groups[dept].push(item);
-    }
-    return groups;
-  }, [highImpactIncidents]);
+  const [editingHighImpactId, setEditingHighImpactId] = useState<string | null>(null);
+  const [editingHighImpactNote, setEditingHighImpactNote] = useState<string>('');
 
   // Dynamic Department Mappings from Server API
   const [deptMappings, setDeptMappings] = useState<Record<string, string[]>>(DEFAULT_DEPARTMENT_MAPPINGS);
@@ -1369,172 +1362,263 @@ export function AgingReportTable({
               No high impact incidents designated for this period.
             </p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {Object.entries(highImpactByDepartment).map(([deptName, deptItems]) => (
-                <div key={deptName} className="aging-dashboard-dept-section">
-                  {/* Department Heading in Blue */}
-                  <h3
-                    className="aging-dashboard-dept-title"
-                    style={{
-                      color: '#1d4ed8',
-                      fontSize: '18px',
-                      fontWeight: 800,
-                      margin: '12px 0 8px 2px',
-                      letterSpacing: '0.01em',
-                    }}
-                  >
-                    {deptName}
-                  </h3>
+            <div style={{ overflowX: 'auto', borderRadius: '4px', border: '1px solid #71717a', background: '#ffffff', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' }}>
+              <table
+                className="aging-classic-dashboard-table"
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  background: '#ffffff',
+                  color: '#111827',
+                  fontSize: '13px',
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={{ width: '12%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center' }}>
+                      IR Number
+                    </th>
+                    <th style={{ width: '13%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center' }}>
+                      Category
+                    </th>
+                    <th style={{ width: '13%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center' }}>
+                      Sub Category
+                    </th>
+                    <th style={{ width: '32%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 16px', textAlign: 'center' }}>
+                      Description
+                    </th>
+                    <th style={{ width: '8%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center' }}>
+                      Aging Days
+                    </th>
+                    <th style={{ width: '14%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 12px', textAlign: 'center' }}>
+                      Update as of {updateAsOfDate}
+                    </th>
+                    <th style={{ width: '8%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center' }}>
+                      Responsible
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {highImpactIncidents.map((item) => {
+                    const isEditing = editingHighImpactId === item.requestId;
+                    return (
+                      <tr key={item.requestId}>
+                        {/* 1. IR Number (blue link, centered, no yellow highlight) */}
+                        <td style={{ border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                          <RequestIdLink requestId={item.requestId} plain={true} />
+                        </td>
 
-                  <div style={{ overflowX: 'auto', borderRadius: '4px', border: '1px solid #71717a' }}>
-                    <table
-                      className="aging-classic-dashboard-table"
-                      style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        background: '#ffffff',
-                        color: '#111827',
-                        fontSize: '13px',
-                      }}
-                    >
-                      <thead>
-                        <tr>
-                          <th style={{ width: '11%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
-                            IR Number
-                          </th>
-                          <th style={{ width: '13%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
-                            Category
-                          </th>
-                          <th style={{ width: '13%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
-                            Sub Category
-                          </th>
-                          <th style={{ width: '31%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 14px', textAlign: 'center' }}>
-                            Description
-                          </th>
-                          <th style={{ width: '8%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
-                            Aging Days
-                          </th>
-                          <th style={{ width: '16%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 10px', textAlign: 'center' }}>
-                            Update as of {updateAsOfDate}
-                          </th>
-                          <th style={{ width: isPublicView ? '8%' : '6%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 8px', textAlign: 'center' }}>
-                            Responsible
-                          </th>
-                          {!isPublicView && (
-                            <th style={{ width: '6%', background: '#d4d4d8', color: '#111827', fontWeight: 700, border: '1px solid #71717a', padding: '10px 6px', textAlign: 'center' }}>
-                              Action
-                            </th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {deptItems.map((item) => (
-                          <tr key={item.requestId}>
-                            {/* 1. IR Number (blue link, centered) */}
-                            <td style={{ border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
-                              <RequestIdLink requestId={item.requestId} />
-                            </td>
+                        {/* 2. Category */}
+                        <td style={{ border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                          {item.category || '—'}
+                        </td>
 
-                            {/* 2. Category */}
-                            <td style={{ border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
-                              {item.category || '—'}
-                            </td>
+                        {/* 3. Sub Category */}
+                        <td style={{ border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                          {item.subCategory || '—'}
+                        </td>
 
-                            {/* 3. Sub Category */}
-                            <td style={{ border: '1px solid #71717a', padding: '12px 10px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
-                              {item.subCategory || '—'}
-                            </td>
+                        {/* 4. Description (centered, line breaks preserved) */}
+                        <td
+                          style={{
+                            border: '1px solid #71717a',
+                            padding: '14px 16px',
+                            textAlign: 'center',
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.6,
+                            fontSize: '12.5px',
+                            background: '#ffffff',
+                            verticalAlign: 'middle',
+                          }}
+                        >
+                          {item.description || '—'}
+                        </td>
 
-                            {/* 4. Description (centered, line breaks preserved) */}
-                            <td
-                              style={{
-                                border: '1px solid #71717a',
-                                padding: '12px 14px',
-                                textAlign: 'center',
-                                whiteSpace: 'pre-wrap',
-                                lineHeight: 1.5,
-                                fontSize: '12px',
-                                background: '#ffffff',
-                                verticalAlign: 'middle',
-                              }}
-                            >
-                              {item.description || '—'}
-                            </td>
+                        {/* 5. Aging Days (centered bold RED text) */}
+                        <td
+                          style={{
+                            border: '1px solid #71717a',
+                            padding: '12px 8px',
+                            textAlign: 'center',
+                            color: '#dc2626',
+                            fontWeight: 800,
+                            fontSize: '16px',
+                            background: '#ffffff',
+                            verticalAlign: 'middle',
+                          }}
+                        >
+                          {item.agingDays}
+                        </td>
 
-                            {/* 5. Aging Days (centered bold RED text) */}
-                            <td
-                              style={{
-                                border: '1px solid #71717a',
-                                padding: '12px 8px',
-                                textAlign: 'center',
-                                color: '#dc2626',
-                                fontWeight: 800,
-                                fontSize: '15px',
-                                background: '#ffffff',
-                                verticalAlign: 'middle',
-                              }}
-                            >
-                              {item.agingDays}
-                            </td>
-
-                            {/* 6. Update as of {date} */}
-                            <td
-                              style={{
-                                border: '1px solid #71717a',
-                                padding: '12px 12px',
-                                textAlign: 'left',
-                                whiteSpace: 'pre-wrap',
-                                lineHeight: 1.5,
-                                fontSize: '12px',
-                                background: '#ffffff',
-                                verticalAlign: 'middle',
-                              }}
-                            >
-                              {item.recentUpdate ? renderSingleColorUpdateText(item.recentUpdate) : '—'}
-                            </td>
-
-                            {/* 7. Responsible */}
-                            <td style={{ border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
-                              {item.responsibleOrDependency || '—'}
-                            </td>
-
-                            {/* Admin Action: Remove */}
-                            {!isPublicView && (
-                              <td style={{ border: '1px solid #71717a', padding: '8px 4px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                        {/* 6. Update as of {date} (with manual admin edit support) */}
+                        <td
+                          style={{
+                            border: '1px solid #71717a',
+                            padding: '12px 12px',
+                            textAlign: 'left',
+                            background: '#ffffff',
+                            verticalAlign: 'middle',
+                            position: 'relative',
+                          }}
+                        >
+                          {isEditing ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
                                 <button
                                   type="button"
-                                  title="Remove from High Impact"
                                   onClick={() => {
-                                    const updated = highImpactIncidents.filter((h) => h.requestId !== item.requestId);
+                                    const now = new Date();
+                                    const prefix = `${now.getMonth() + 1}/${now.getDate()} - `;
+                                    if (!editingHighImpactNote.startsWith(prefix)) {
+                                      setEditingHighImpactNote((prev) => `${prefix}${prev}`);
+                                    }
+                                  }}
+                                  style={{
+                                    fontSize: '10px',
+                                    padding: '1px 6px',
+                                    borderRadius: '3px',
+                                    border: '1px solid #94a3b8',
+                                    background: '#f1f5f9',
+                                    color: '#0f172a',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  + Date
+                                </button>
+                              </div>
+                              <textarea
+                                value={editingHighImpactNote}
+                                rows={3}
+                                onChange={(e) => setEditingHighImpactNote(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  fontSize: '12px',
+                                  border: '1px solid #2563eb',
+                                  borderRadius: '4px',
+                                  color: '#0f172a',
+                                  background: '#ffffff',
+                                  lineHeight: 1.5,
+                                  resize: 'vertical',
+                                }}
+                              />
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingHighImpactId(null)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    fontSize: '11px',
+                                    padding: '2px 8px',
+                                    border: '1px solid #cbd5e1',
+                                    borderRadius: '4px',
+                                    background: '#f8fafc',
+                                    color: '#475569',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <X size={12} /> Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = highImpactIncidents.map((h) =>
+                                      h.requestId === item.requestId
+                                        ? { ...h, recentUpdate: editingHighImpactNote.trim() }
+                                        : h
+                                    );
                                     setHighImpactIncidents(updated);
                                     onSaveReport?.({ ...data, highImpactIncidents: updated });
+                                    setEditingHighImpactId(null);
+                                    setToastMessage({ text: `Updated recent note for ${item.requestId}`, type: 'success' });
                                   }}
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center',
                                     gap: '2px',
-                                    background: 'rgba(239,68,68,0.1)',
-                                    border: '1px solid rgba(239,68,68,0.3)',
-                                    color: '#ef4444',
-                                    borderRadius: '4px',
-                                    padding: '4px 6px',
                                     fontSize: '11px',
+                                    padding: '2px 8px',
+                                    border: '1px solid #2563eb',
+                                    borderRadius: '4px',
+                                    background: '#2563eb',
+                                    color: '#ffffff',
                                     fontWeight: 600,
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  <Trash2 size={12} aria-hidden="true" />
+                                  <Check size={12} /> Save
                                 </button>
-                              </td>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
+                              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: '12px', color: '#111827', flex: 1 }}>
+                                {item.recentUpdate ? renderSingleColorUpdateText(item.recentUpdate) : <span style={{ color: '#94a3b8' }}>—</span>}
+                              </div>
+                              {!isPublicView && (
+                                <button
+                                  type="button"
+                                  title="Edit recent update note"
+                                  onClick={() => {
+                                    setEditingHighImpactId(item.requestId);
+                                    setEditingHighImpactNote(item.recentUpdate || '');
+                                  }}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#64748b',
+                                    cursor: 'pointer',
+                                    padding: '2px',
+                                    borderRadius: '4px',
+                                    opacity: 0.7,
+                                  }}
+                                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
+                                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.7')}
+                                >
+                                  <Edit2 size={13} aria-hidden="true" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 7. Responsible */}
+                        <td style={{ border: '1px solid #71717a', padding: '12px 8px', textAlign: 'center', background: '#ffffff', verticalAlign: 'middle' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                            <span>{item.responsibleOrDependency || '—'}</span>
+                            {!isPublicView && (
+                              <button
+                                type="button"
+                                title={`Remove ${item.requestId} from High Impact`}
+                                onClick={() => {
+                                  const updated = highImpactIncidents.filter((h) => h.requestId !== item.requestId);
+                                  setHighImpactIncidents(updated);
+                                  onSaveReport?.({ ...data, highImpactIncidents: updated });
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#ef4444',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  borderRadius: '4px',
+                                  opacity: 0.6,
+                                }}
+                                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
+                                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.6')}
+                              >
+                                <Trash2 size={13} aria-hidden="true" />
+                              </button>
                             )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
