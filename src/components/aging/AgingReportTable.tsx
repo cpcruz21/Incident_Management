@@ -103,30 +103,6 @@ export function AgingReportTable({
     }
   }, [data.highImpactIncidents]);
 
-  const updateAsOfDate = useMemo(() => {
-    if (remarksData.periodTo) {
-      const d = new Date(remarksData.periodTo);
-      if (!isNaN(d.getTime())) {
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        return `${mm}/${dd}/${yyyy}`;
-      }
-      const match = remarksData.periodTo.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-      if (match) {
-        return `${match[1].padStart(2, '0')}/${match[2].padStart(2, '0')}/${match[3].length === 2 ? '20' + match[3] : match[3]}`;
-      }
-    }
-    const dateObj = data.asOf ? new Date(data.asOf) : new Date(data.generatedAt);
-    if (!isNaN(dateObj.getTime())) {
-      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const dd = String(dateObj.getDate()).padStart(2, '0');
-      const yyyy = dateObj.getFullYear();
-      return `${mm}/${dd}/${yyyy}`;
-    }
-    return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-  }, [remarksData.periodTo, data.asOf, data.generatedAt]);
-
   const highImpactByDepartment = useMemo(() => {
     const groups: Record<string, HighImpactIncident[]> = {};
     for (const item of highImpactIncidents) {
@@ -330,6 +306,30 @@ export function AgingReportTable({
     unsavedEdits,
     normalizeResponsibleTeam,
   ]);
+
+  const updateAsOfDate = useMemo(() => {
+    if (remarksData.periodTo) {
+      const d = new Date(remarksData.periodTo);
+      if (!isNaN(d.getTime())) {
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${mm}/${dd}/${yyyy}`;
+      }
+      const match = remarksData.periodTo.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+      if (match) {
+        return `${match[1].padStart(2, '0')}/${match[2].padStart(2, '0')}/${match[3].length === 2 ? '20' + match[3] : match[3]}`;
+      }
+    }
+    const dateObj = data.asOf ? new Date(data.asOf) : new Date(data.generatedAt);
+    if (!isNaN(dateObj.getTime())) {
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      const yyyy = dateObj.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    }
+    return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  }, [remarksData.periodTo, data.asOf, data.generatedAt]);
 
   // Handle local edits
   const handleDepartmentChange = (row: AgingRemarksRow, newDept: string) => {
