@@ -159,8 +159,13 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
         <div ref={kpiPanelRef} className="monthly-report-scroll monthly-summary-scroll" role="region" aria-label="Monthly KPI results table" tabIndex={0}>
           <table className="monthly-summary-table monthly-paper-table">
             <caption className="monthly-sr-only">Monthly KPI targets, passing tickets, and results</caption>
-            <colgroup><col className="monthly-kpi-label-col" /><col className="monthly-kpi-target-col" /></colgroup>
-            <colgroup span={3} />
+            <colgroup>
+              <col style={{ width: '28%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '20%' }} />
+            </colgroup>
             <thead><tr>
               <th scope="colgroup" colSpan={2}>KPI</th>
               <th scope="col">Count of Passed</th>
@@ -187,9 +192,17 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
         <div ref={technicianSlaPanelRef} className="monthly-report-scroll monthly-technician-scroll" role="region" aria-label="Technician SLA performance table" tabIndex={0}>
           <table className="monthly-technician-table monthly-paper-table">
             <caption className="monthly-sr-only">First-response and resolution totals and pass rates by technician</caption>
-            <colgroup><col className="monthly-technician-col" /></colgroup>
-            <colgroup span={4} />
-            <colgroup span={4} />
+            <colgroup>
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <td className="monthly-technician-corner" />

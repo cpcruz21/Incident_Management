@@ -91,8 +91,10 @@ async function captureWithClone(
     }
 
     const { width, height } = scene.getBoundingClientRect();
-    const effectiveWidth = Math.max(Math.ceil(width), 1140);
-    const effectiveHeight = Math.max(Math.ceil(height), 200);
+    const tableElements = Array.from(copy.querySelectorAll('table'));
+    const maxTableScroll = tableElements.reduce((acc, t) => Math.max(acc, t.scrollWidth), 0);
+    const effectiveWidth = Math.max(Math.ceil(width), maxTableScroll, 1260);
+    const effectiveHeight = Math.max(Math.ceil(height), 220);
 
     return await toPng(scene, {
       width: effectiveWidth,
@@ -120,7 +122,13 @@ async function captureDirect(
     await document.fonts.ready;
   }
 
+  const tableElements = Array.from(panel.querySelectorAll('table'));
+  const maxTableScroll = tableElements.reduce((acc, t) => Math.max(acc, t.scrollWidth), 0);
+  const targetWidth = Math.max(panel.scrollWidth, maxTableScroll, 1260);
+
   return await toPng(panel, {
+    width: targetWidth,
+    height: Math.max(panel.scrollHeight, 220),
     pixelRatio,
     skipFonts: true,
     skipAutoScale: true,
@@ -130,6 +138,8 @@ async function captureDirect(
       background: '#ffffff',
       backgroundColor: '#ffffff',
       margin: '0',
+      width: `${targetWidth}px`,
+      minWidth: `${targetWidth}px`,
       overflow: 'visible',
       overflowX: 'visible',
       overflowY: 'visible',

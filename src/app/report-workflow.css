@@ -559,25 +559,205 @@ button.report-progress-step:hover { background: var(--bg-card-hover); }
   position: fixed;
   top: 0;
   left: 0;
-  width: 1200px;
+  width: max-content;
+  min-width: 1260px;
   z-index: -9999;
   pointer-events: none;
   opacity: 0.01;
 }
 .report-image-capture {
-  padding: 16px;
-  background: #fff;
-  color: var(--ui-text);
+  width: max-content;
+  min-width: 1260px;
+  padding: 24px;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
 }
 .report-image-capture :is(.aging-sla-table-scroll, .weekly-table-responsive, .monthly-report-scroll, .monthly-summary-scroll, .monthly-technician-scroll) {
   overflow: visible !important;
   max-height: none !important;
+  width: 100% !important;
 }
 .report-image-capture :is(.aging-matrix-panel, .weekly-report-card, .monthly-paper-table) :is(.aging-matrix-team-heading, .th-weekly-team, .monthly-technician-heading, th[scope="row"]) {
   position: static !important;
 }
 .report-image-capture .monthly-paper-table {
   width: 100% !important;
+  table-layout: fixed !important;
+  border: 2px solid #475569 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HIGH CONTRAST HEADERS & LABELS FOR EXPORTED IMAGES
+   ═══════════════════════════════════════════════════════════════ */
+.report-image-capture .monthly-paper-table :is(th, td) {
+  padding: 8px 10px !important;
+  border-block-end: 1px solid #94a3b8 !important;
+  border-inline-end: 1px solid #94a3b8 !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+.report-image-capture .monthly-paper-table tr > :first-child:not(.monthly-technician-corner) {
+  border-inline-start: 1px solid #94a3b8 !important;
+}
+.report-image-capture .monthly-paper-table thead th {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  font-weight: 750 !important;
+  border-block-start: 1px solid #94a3b8 !important;
+}
+.report-image-capture .monthly-paper-table .monthly-fr-group {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  font-weight: 850 !important;
+  font-size: 14px !important;
+  letter-spacing: 0.03em !important;
+  border-block-start: 2px solid #0369a1 !important;
+  border-block-end: 2px solid #0369a1 !important;
+}
+.report-image-capture .monthly-paper-table .monthly-fr-group .sla-metric-heading {
+  color: #ffffff !important;
+}
+.report-image-capture .monthly-paper-table .monthly-fr-group svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+.report-image-capture .monthly-paper-table .monthly-rt-group {
+  background: #059669 !important;
+  color: #ffffff !important;
+  font-weight: 850 !important;
+  font-size: 14px !important;
+  letter-spacing: 0.03em !important;
+  border-block-start: 2px solid #047857 !important;
+  border-block-end: 2px solid #047857 !important;
+}
+.report-image-capture .monthly-paper-table .monthly-rt-group .sla-metric-heading {
+  color: #ffffff !important;
+}
+.report-image-capture .monthly-paper-table .monthly-rt-group svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+.report-image-capture .monthly-paper-table .monthly-technician-heading {
+  background: #1e293b !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+.report-image-capture .monthly-paper-table .monthly-failed-heading {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  font-weight: 850 !important;
+  border-block-end: 2px solid #ef4444 !important;
+}
+.report-image-capture .monthly-paper-table .monthly-rate-heading {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  font-weight: 850 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HIGH CONTRAST ROWS & HIGHLIGHTED CELLS
+   ═══════════════════════════════════════════════════════════════ */
+.report-image-capture .monthly-technician-table tbody th[scope="row"] {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  font-weight: 750 !important;
+  text-align: left !important;
+  padding-left: 12px !important;
+  border-inline-end: 2px solid #64748b !important;
+}
+.report-image-capture .monthly-technician-table tbody tr:nth-child(even) td:not(.monthly-failed-count) {
+  background: #f8fafc !important;
+}
+.report-image-capture .monthly-technician-table tbody tr:nth-child(odd) td:not(.monthly-failed-count) {
+  background: #ffffff !important;
+}
+.report-image-capture .monthly-paper-table tbody td {
+  color: #0f172a !important;
+  font-weight: 650 !important;
+}
+.report-image-capture .monthly-paper-table tbody td.monthly-failed-count {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  font-weight: 900 !important;
+  font-size: 14px !important;
+  border: 1.5px solid #fca5a5 !important;
+}
+.report-image-capture .monthly-technician-table tfoot :is(th, td) {
+  background: #fef3c7 !important;
+  color: #78350f !important;
+  font-weight: 900 !important;
+  font-size: 14px !important;
+  border-block-start: 3px solid #d97706 !important;
+  border-block-end: 2px solid #d97706 !important;
+}
+.report-image-capture .monthly-technician-table tfoot .monthly-failed-count {
+  background: #fecaca !important;
+  color: #b91c1c !important;
+  font-weight: 900 !important;
+}
+.report-image-capture .monthly-rate {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  padding: 3px 8px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+}
+.report-image-capture .monthly-rate--met {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #86efac !important;
+}
+.report-image-capture .monthly-rate--below {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important;
+}
+.report-image-capture .monthly-rate--warning {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+}
+
+/* KPI Summary Table Highlights */
+.report-image-capture .monthly-summary-table {
+  width: 100% !important;
+  max-width: 900px !important;
+  margin: 0 auto !important;
+}
+.report-image-capture .monthly-summary-table thead th:first-child {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+.report-image-capture .monthly-summary-table tbody th {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  font-weight: 750 !important;
+  text-align: left !important;
+  padding-left: 12px !important;
+}
+.report-image-capture .monthly-summary-table tbody td {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+.report-image-capture .monthly-summary-table .monthly-kpi-target {
+  color: #0284c7 !important;
+  font-weight: 800 !important;
+}
+
+/* Aging and Weekly Matrix Contrast */
+.report-image-capture .aging-matrix-panel table,
+.report-image-capture .weekly-report-card table {
+  border: 2px solid #475569 !important;
+}
+.report-image-capture .aging-matrix-panel table :is(th, td),
+.report-image-capture .weekly-report-card table :is(th, td) {
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
 }
 .aging-matrix-panel {
   min-width: 0;
