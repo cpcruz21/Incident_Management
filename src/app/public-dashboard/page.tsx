@@ -231,8 +231,6 @@ export default function PublicDashboardPage() {
       background: 'var(--ui-page, #060f1e)',
       color: 'var(--ui-text, #f8fafc)',
       fontFamily: "var(--font-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      display: 'flex',
-      flexDirection: 'column',
     }}>
 
       {/* ═══════════════════ TOPBAR ═══════════════════ */}
@@ -432,7 +430,7 @@ export default function PublicDashboardPage() {
       </header>
 
       {/* ═══════════════════ MAIN CONTENT ═══════════════════ */}
-      <main className="live-content" style={{ flex: 1, paddingBottom: '70px' }}>
+      <main className="live-content">
 
         {/* ── IR Analytics Dashboard Tab ── */}
         {activeTab === 'ir-analytics' && (
@@ -502,17 +500,11 @@ export default function PublicDashboardPage() {
 
       {/* ═══════════════════ FOOTER ═══════════════════ */}
       <footer style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 40,
+        marginTop: '60px',
         borderTop: '1px solid var(--ui-panel-border)',
         background: 'linear-gradient(180deg, var(--ui-inset, #091426) 0%, var(--ui-page, #050b16) 100%)',
-        backdropFilter: 'blur(8px)',
-        padding: '12px 20px',
+        padding: '24px 20px',
         textAlign: 'center',
-        boxShadow: '0 -4px 16px rgba(0,0,0,0.3)',
       }}>
         <p style={{
           margin: 0,

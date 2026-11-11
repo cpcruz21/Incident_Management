@@ -1,4 +1,6 @@
 
+import type { PreviousWeekSLA } from './sla';
+
 /** Aging time bucket identifiers (from oldest to newest) */
 export type AgingBucket = '>1month' | '2-4weeks' | '1-2weeks' | '4-6days' | '1-3days' | 'sameday';
 
@@ -75,6 +77,10 @@ export interface AgingSLATotals {
 export interface PreviousWeekAging {
   teamTotals: Record<string, number | null>; // teamName → total aging count or null
   grandTotal: number | null;
+  /** Optional for compatibility with reports saved before SLA comparisons were added. */
+  sla?: PreviousWeekSLA;
+  sourcePeriod?: string;
+  sourceReportId?: string;
 }
 
 /** A single row in the Remarks Table */
@@ -92,6 +98,22 @@ export interface AgingRemarksRow {
   isUnsaved?: boolean;
 }
 
+/** A high-impact incident recorded in the aging report */
+export interface HighImpactIncident {
+  requestId: string;
+  department: string;
+  category: string;
+  subCategory?: string;
+  description: string;
+  agingDays: number;
+  recentUpdate: string;
+  responsibleOrDependency: string;
+  impactLevel: 'Critical' | 'High' | 'Major' | 'Escalated';
+  reason: string;
+  addedBy?: string;
+  addedAt?: string;
+}
+
 /** Remarks Table complete metadata and rows */
 export interface RemarksTableData {
   createdOn: string;
@@ -103,9 +125,13 @@ export interface RemarksTableData {
 
 /** Complete Aging Report data combining all tables */
 export interface AgingReportData {
+  /** Stable identity: creating another report must not replace this snapshot. */
+  reportId?: string;
   reportTitle: string;
   reportPeriod: string;
   generatedAt: Date;
+  /** Timestamp used for all aging days, buckets, and timestamp-based SLA fallbacks. */
+  asOf?: Date;
 
   /** SLA compliance table data */
   slaRows: AgingSLARow[];
@@ -120,6 +146,9 @@ export interface AgingReportData {
 
   /** Remarks Table data for all open aging incidents */
   remarksTable?: RemarksTableData;
+
+  /** High impact incidents designated by admin */
+  highImpactIncidents?: HighImpactIncident[];
 
   /** Ordered list of teams */
   teamOrder: string[];

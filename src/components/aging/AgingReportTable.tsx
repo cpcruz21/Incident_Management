@@ -1,26 +1,25 @@
 'use client';
 
-import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import type { AgingReportData, AgingRemarksRow, AgingBucket } from '@/types/aging';
+import React, { useRef, useState, useMemo, useEffect, useCallback, useId } from 'react';
+import { ChartColumn, Download, Flame, NotebookText, Trash2 } from 'lucide-react';
+import type { AgingReportData, AgingRemarksRow, AgingBucket, RemarksTableData, HighImpactIncident } from '@/types/aging';
 import type { Incident } from '@/types/incident';
 import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
-import { formatSLAPercentage, buildRemarksTableData } from '@/lib/aging/calculator';
-import { saveReport } from '@/lib/storage/report-storage';
-import {
-  fetchDepartmentMappings,
-  fetchStoredAssignments,
-  persistAssignment,
-  persistAssignmentsBulk,
-  persistServerAgingReport,
-  StoredIncidentAssignmentClient,
-} from '@/lib/api/client';
+import { buildRemarksTableData } from '@/lib/aging/calculator';
+import { saveAgingSnapshot } from '@/lib/aging/snapshot';
+import { fetchDepartmentMappings } from '@/lib/api/client';
 import { DEFAULT_DEPARTMENT_MAPPINGS } from '@/lib/departments/mappings';
+import { RequestIdLink } from '@/components/report/RequestIdLink';
+import { SLAMetricHeading } from '@/components/report/SLATableLabels';
+import { ReportImageExport } from '@/components/report/ReportImageExport';
+import { ReportDetailsStrip } from '@/components/report/ReportDetailsStrip';
+import { HighImpactInput } from '@/components/aging/HighImpactInput';
 
 interface AgingReportTableProps {
   data: AgingReportData;
   onCellClick?: (title: string, incidentIds: string[]) => void;
   routedIncidents?: Incident[];
-  onSaveReport?: () => void;
+  onSaveReport?: (data: AgingReportData) => void;
   onUpdateRemarksRow?: (
     requestId: string,
     recentUpdate: string,
@@ -34,31 +33,24 @@ interface AgingReportTableProps {
   isPublicView?: boolean;
 }
 
-const DATE_SPLIT_REGEX = /(\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:\s*-\s*)?)/g;
-const IS_DATE_PATTERN = /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:\s*-\s*)?$/;
+const DATE_SPLIT_REGEX = /(\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:[ \t]*-[ \t]*)?)/g;
+const IS_DATE_PATTERN = /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:[ \t]*-[ \t]*)?$/;
 
 function renderSingleColorUpdateText(text: string) {
   if (!text) return null;
-  const parts = text.split(DATE_SPLIT_REGEX);
+  // Preserve authored line breaks and separate dated notes that run together.
+  const readableText = text.replace(/\r\n?/g, '\n').replace(
+    /([.!?;])[ \t]+(?=\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[ \t]*-)/g,
+    '$1\n\n'
+  );
+  const parts = readableText.split(DATE_SPLIT_REGEX);
 
   return parts.map((part, idx) => {
     if (part && IS_DATE_PATTERN.test(part.trim())) {
       return (
         <span
           key={idx}
-          style={{
-            display: 'inline-block',
-            background: 'rgba(56, 189, 248, 0.16)',
-            border: '1px solid rgba(56, 189, 248, 0.35)',
-            color: '#38bdf8',
-            borderRadius: '4px',
-            padding: '1px 5px',
-            fontSize: '11px',
-            fontWeight: 700,
-            marginRight: '4px',
-            lineHeight: 1.3,
-            verticalAlign: 'baseline',
-          }}
+          className="aging-update-date"
         >
           {part.trim()}
         </span>
@@ -78,39 +70,21 @@ export function AgingReportTable({
   isPublicView = false,
 }: AgingReportTableProps) {
   const reportRef = useRef<HTMLDivElement>(null);
+  const slaPanelRef = useRef<HTMLElement>(null);
+  const distributionPanelRef = useRef<HTMLElement>(null);
+  const distributionHeadingId = useId();
   const [isSaved, setIsSaved] = useState(false);
-  const [activeTab, setActiveTabState] = useState<'aging' | 'remarks'>(() => {
+  const [activeTab, setActiveTabState] = useState<'aging' | 'remarks' | 'high-impact'>(() => {
     if (typeof window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem('smac_active_report_tab');
-        if (stored === 'aging' || stored === 'remarks') return stored;
+        if (stored === 'aging' || stored === 'remarks' || stored === 'high-impact') return stored;
       } catch { }
     }
     return 'aging';
   });
 
-  const formattedDate = useMemo(() => {
-    try {
-      if (data.generatedAt) {
-        const d =
-          typeof data.generatedAt === 'string'
-            ? new Date(data.generatedAt)
-            : data.generatedAt;
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          });
-        }
-      }
-      return data.reportPeriod || 'Current Week';
-    } catch {
-      return data.reportPeriod || 'Current Week';
-    }
-  }, [data.generatedAt, data.reportPeriod]);
-
-  const setActiveTab = useCallback((tab: 'aging' | 'remarks') => {
+  const setActiveTab = useCallback((tab: 'aging' | 'remarks' | 'high-impact') => {
     setActiveTabState(tab);
     if (typeof window !== 'undefined') {
       try {
@@ -119,12 +93,23 @@ export function AgingReportTable({
     }
   }, []);
 
+  const [highImpactIncidents, setHighImpactIncidents] = useState<HighImpactIncident[]>(
+    () => data.highImpactIncidents || []
+  );
+
+  useEffect(() => {
+    if (data.highImpactIncidents) {
+      setHighImpactIncidents(data.highImpactIncidents);
+    }
+  }, [data.highImpactIncidents]);
+
   // Dynamic Department Mappings from Server API
   const [deptMappings, setDeptMappings] = useState<Record<string, string[]>>(DEFAULT_DEPARTMENT_MAPPINGS);
   const [availableDepartments, setAvailableDepartments] = useState<string[]>(Object.keys(DEFAULT_DEPARTMENT_MAPPINGS));
 
-  // Stored assignments from database
-  const [dbAssignments, setDbAssignments] = useState<Record<string, StoredIncidentAssignmentClient>>({});
+  // Saved notes belong to this report; pending edits never affect another extract.
+  const [savedRows, setSavedRows] = useState<Record<string, AgingRemarksRow>>({});
+  const committedRemarks = useRef<RemarksTableData | null>(null);
 
   // Local unsaved row modifications
   const [unsavedEdits, setUnsavedEdits] = useState<
@@ -141,6 +126,8 @@ export function AgingReportTable({
   // Loading / saving spinners per row
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const isSavingRemarks = isBulkSaving || isSavingReport || Object.values(savingRows).some(Boolean);
 
   // Toast / feedback message
   const [toastMessage, setToastMessage] = useState<{
@@ -157,6 +144,7 @@ export function AgingReportTable({
   const [sortBy, setSortBy] = useState<'aging-desc' | 'aging-asc' | 'id-asc' | 'dept-asc' | 'recent-update'>('aging-desc');
   const [pageSize, setPageSize] = useState<number>(25);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isExportingRemarks, setIsExportingRemarks] = useState(false);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -172,10 +160,7 @@ export function AgingReportTable({
   // Load backend metadata
   const loadBackendData = useCallback(async () => {
     try {
-      const [mappingsRes, assignmentsRes] = await Promise.all([
-        fetchDepartmentMappings(),
-        fetchStoredAssignments(),
-      ]);
+      const mappingsRes = await fetchDepartmentMappings();
 
       if (mappingsRes && mappingsRes.mappings) {
         setDeptMappings(mappingsRes.mappings);
@@ -186,9 +171,6 @@ export function AgingReportTable({
         setAvailableDepartments(depts);
       }
 
-      if (assignmentsRes) {
-        setDbAssignments(assignmentsRes);
-      }
     } catch (err) {
       console.warn('Could not load backend metadata:', err);
     }
@@ -267,13 +249,16 @@ export function AgingReportTable({
       };
     }
 
+    if (!committedRemarks.current) {
+      committedRemarks.current = { ...baseTable, rows: baseTable.rows.map(row => ({ ...row, isUnsaved: false })) };
+    }
     const mergedRows: AgingRemarksRow[] = baseTable.rows.map((row) => {
-      const dbRecord = dbAssignments[row.requestId];
-      let dept = dbRecord?.department || row.department;
-      let resp = dbRecord?.responsibleOrDependency || row.responsibleOrDependency;
-      let update = dbRecord?.recentUpdate !== undefined ? dbRecord.recentUpdate : row.recentUpdate;
-      let lastUpdated = dbRecord?.updatedAt || row.lastUpdated;
-      let updatedBy = dbRecord?.updatedBy || row.updatedBy;
+      const saved = savedRows[row.requestId];
+      let dept = saved?.department ?? row.department;
+      let resp = saved?.responsibleOrDependency ?? row.responsibleOrDependency;
+      let update = saved?.recentUpdate ?? row.recentUpdate;
+      let lastUpdated = saved?.lastUpdated ?? row.lastUpdated;
+      let updatedBy = saved?.updatedBy ?? row.updatedBy;
       let isUnsaved = false;
 
       const localEdit = unsavedEdits[row.requestId];
@@ -307,7 +292,7 @@ export function AgingReportTable({
     data.generatedAt,
     data.reportPeriod,
     routedIncidents,
-    dbAssignments,
+    savedRows,
     unsavedEdits,
     normalizeResponsibleTeam,
   ]);
@@ -385,171 +370,95 @@ export function AgingReportTable({
     }
   };
 
+  const acceptSavedSnapshot = (snapshot: AgingReportData) => {
+    const remarks = snapshot.remarksTable!;
+    committedRemarks.current = remarks;
+    setSavedRows(Object.fromEntries(remarks.rows.map(row => [row.requestId, row])));
+  };
+
   const handleSaveRow = async (row: AgingRemarksRow) => {
+    if (isPublicView || isSavingRemarks) return;
     const local = unsavedEdits[row.requestId];
-    const deptToSave = local?.department ?? row.department;
-    const teamToSave = local?.responsibleOrDependency ?? row.responsibleOrDependency;
-    const updateToSave = local?.recentUpdate ?? row.recentUpdate;
-
-    setSavingRows((prev) => ({ ...prev, [row.requestId]: true }));
-
+    const base = committedRemarks.current || remarksData;
+    const remarks = { ...base, rows: base.rows.map(saved => saved.requestId === row.requestId
+      ? { ...row, ...local, isUnsaved: true } : saved) };
+    setSavingRows(prev => ({ ...prev, [row.requestId]: true }));
     try {
-      const result = await persistAssignment({
-        requestId: row.requestId,
-        department: deptToSave,
-        responsibleOrDependency: teamToSave,
-        recentUpdate: updateToSave,
-        updatedBy: accountName,
+      const snapshot = await saveAgingSnapshot({ ...data, highImpactIncidents }, remarks, accountName, routedIncidents);
+      acceptSavedSnapshot(snapshot);
+      setUnsavedEdits(prev => {
+        const next = { ...prev };
+        if (next[row.requestId] === local) delete next[row.requestId];
+        return next;
       });
-
-      if (result.success && result.assignment) {
-        setDbAssignments((prev) => ({
-          ...prev,
-          [row.requestId]: result.assignment!,
-        }));
-
-        setUnsavedEdits((prev) => {
-          const next = { ...prev };
-          delete next[row.requestId];
-          return next;
-        });
-
-        if (onUpdateRemarksRow) {
-          onUpdateRemarksRow(
-            row.requestId,
-            updateToSave,
-            teamToSave,
-            deptToSave,
-            result.assignment.updatedAt,
-            accountName,
-            false
-          );
-        }
-
-        setToastMessage({
-          text: `✓ Saved incident ${row.requestId} assignment successfully.`,
-          type: 'success',
-        });
-      }
-    } catch {
-      setToastMessage({
-        text: `Error saving incident ${row.requestId}.`,
-        type: 'error',
-      });
+      const saved = snapshot.remarksTable!.rows.find(item => item.requestId === row.requestId)!;
+      onUpdateRemarksRow?.(saved.requestId, saved.recentUpdate, saved.responsibleOrDependency,
+        saved.department, saved.lastUpdated, saved.updatedBy, false);
+      setToastMessage({ text: 'Saved this update to the current report.', type: 'success' });
+    } catch (error) {
+      setToastMessage({ text: error instanceof Error ? error.message : 'Could not save this update.', type: 'error' });
     } finally {
-      setSavingRows((prev) => ({ ...prev, [row.requestId]: false }));
+      setSavingRows(prev => ({ ...prev, [row.requestId]: false }));
     }
   };
 
   const handleBulkSave = async () => {
-    const unsavedKeys = Object.keys(unsavedEdits);
-    if (unsavedKeys.length === 0) return;
-
+    if (isPublicView || isSavingRemarks) return;
+    const pending = unsavedEdits;
+    const keys = Object.keys(pending);
+    if (!keys.length) return;
+    const base = committedRemarks.current || remarksData;
+    const byId = new Map(remarksData.rows.map(row => [row.requestId, row]));
+    const remarks = { ...base, rows: base.rows.map(row => pending[row.requestId]
+      ? { ...byId.get(row.requestId)!, isUnsaved: true } : row) };
     setIsBulkSaving(true);
-    const payload: StoredIncidentAssignmentClient[] = [];
-
-    for (const reqId of unsavedKeys) {
-      const row = remarksData.rows.find((r) => r.requestId === reqId);
-      if (!row) continue;
-      const local = unsavedEdits[reqId];
-      payload.push({
-        requestId: reqId,
-        department: local.department ?? row.department,
-        responsibleOrDependency: local.responsibleOrDependency ?? row.responsibleOrDependency,
-        recentUpdate: local.recentUpdate ?? row.recentUpdate,
-        updatedBy: accountName,
-      });
-    }
-
     try {
-      const result = await persistAssignmentsBulk(payload);
-      if (result.success) {
-        const fresh = await fetchStoredAssignments();
-        setDbAssignments(fresh);
-        setUnsavedEdits({});
-        setToastMessage({
-          text: `✓ Successfully saved ${result.savedCount ?? payload.length} incident assignments.`,
-          type: 'success',
-        });
+      const snapshot = await saveAgingSnapshot({ ...data, highImpactIncidents }, remarks, accountName, routedIncidents);
+      acceptSavedSnapshot(snapshot);
+      setUnsavedEdits(prev => {
+        const next = { ...prev };
+        for (const id of keys) if (next[id] === pending[id]) delete next[id];
+        return next;
+      });
+      for (const row of snapshot.remarksTable!.rows) {
+        if (pending[row.requestId]) onUpdateRemarksRow?.(row.requestId, row.recentUpdate,
+          row.responsibleOrDependency, row.department, row.lastUpdated, row.updatedBy, false);
       }
-    } catch {
-      setToastMessage({ text: 'Error performing bulk save.', type: 'error' });
-    } finally {
-      setIsBulkSaving(false);
-    }
+      setToastMessage({ text: 'Saved all pending updates to the current report.', type: 'success' });
+    } catch (error) {
+      setToastMessage({ text: error instanceof Error ? error.message : 'Could not save these updates.', type: 'error' });
+    } finally { setIsBulkSaving(false); }
   };
 
   const handleSaveCompleteReport = async () => {
-    const period = data.reportPeriod || 'Current Period';
-    const id = `aging-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
-
-    saveReport({
-      id,
-      type: 'aging',
-      title: data.reportTitle || `Aging Incident Report - ${period}`,
-      period,
-      reportData: {
-        ...data,
-        remarksTable: remarksData,
-      },
-      routedIncidents,
-    });
-
-    await persistServerAgingReport({
-      id,
-      title: data.reportTitle || `Aging Incident Report - ${period}`,
-      period,
-      reportData: {
-        ...data,
-        remarksTable: remarksData,
-      },
-      routedIncidents,
-      savedBy: accountName,
-      savedAt: new Date().toISOString(),
-    });
-
-    setIsSaved(true);
-    if (onSaveReport) onSaveReport();
-    setToastMessage({
-      text: '✓ Report archive saved successfully.',
-      type: 'success',
-    });
-    setTimeout(() => setIsSaved(false), 4000);
+    if (isPublicView || isSavingRemarks) return;
+    setIsSavingReport(true);
+    try {
+      const snapshot = await saveAgingSnapshot({ ...data, highImpactIncidents }, remarksData, accountName, routedIncidents, true);
+      acceptSavedSnapshot(snapshot);
+      setUnsavedEdits({});
+      onSaveReport?.(snapshot);
+      setIsSaved(true);
+      setToastMessage({ text: 'Report saved. Earlier reports are unchanged.', type: 'success' });
+      setTimeout(() => setIsSaved(false), 4000);
+    } catch (error) {
+      setToastMessage({ text: error instanceof Error ? error.message : 'Could not save this report.', type: 'error' });
+    } finally { setIsSavingReport(false); }
   };
 
-  const handleClick = (title: string, ids: string[]) => {
-    if (onCellClick && ids && ids.length > 0) {
-      onCellClick(title, ids);
-    }
-  };
+  const renderIncidentCount = (count: number, title: string, ids?: string[]) =>
+    onCellClick && ids?.length ? (
+      <button
+        type="button"
+        className="aging-matrix-count"
+        onClick={() => onCellClick(title, ids)}
+        aria-label={`${title}, ${count} incidents`}
+      >
+        {count}
+      </button>
+    ) : count;
 
-  // KPI Metrics Calculation for Remarks Table
-  const kpiMetrics = useMemo(() => {
-    const rows = remarksData.rows;
-    let critical = 0; // > 30 days
-    let high = 0; // 15 - 30 days
-    let moderate = 0; // 8 - 14 days
-    let low = 0; // < 8 days
-    let unsaved = 0;
-
-    for (const r of rows) {
-      if (r.agingDays > 30) critical++;
-      else if (r.agingDays >= 15) high++;
-      else if (r.agingDays >= 8) moderate++;
-      else low++;
-
-      if (r.isUnsaved) unsaved++;
-    }
-
-    return {
-      total: rows.length,
-      critical,
-      high,
-      moderate,
-      low,
-      unsaved,
-    };
-  }, [remarksData.rows]);
+  const unsavedCount = useMemo(() => remarksData.rows.filter(row => row.isUnsaved).length, [remarksData.rows]);
 
   const filterOptions = useMemo(() => {
     const deptSet = new Set<string>();
@@ -641,70 +550,27 @@ export function AgingReportTable({
   const startIndex = pageSize === -1 ? 0 : (safePage - 1) * pageSize;
   const endIndex = pageSize === -1 ? totalItems : Math.min(startIndex + pageSize, totalItems);
 
-  const paginatedRows = useMemo(() => {
-    if (pageSize === -1) return filteredAndSortedRows;
+  const visibleRows = useMemo(() => {
+    if (isPublicView || pageSize === -1) return filteredAndSortedRows;
     return filteredAndSortedRows.slice(startIndex, endIndex);
-  }, [filteredAndSortedRows, pageSize, startIndex, endIndex]);
+  }, [filteredAndSortedRows, isPublicView, pageSize, startIndex, endIndex]);
 
-  const handleCopyToClipboard = useCallback(() => {
-    if (filteredAndSortedRows.length === 0) return;
-    const headers = [
-      'RequestID',
-      'Department',
-      'Category',
-      'Sub Category',
-      'Description',
-      'Aging Days',
-      'Recent Update',
-      'Responsible or Dependency',
-    ];
-    const tsvRows = filteredAndSortedRows.map((r) =>
-      [
-        r.requestId,
-        r.department,
-        r.category,
-        r.subCategory,
-        (r.description || '').replace(/[\r\n\t]+/g, ' '),
-        r.agingDays,
-        (r.recentUpdate || '').replace(/[\r\n\t]+/g, ' '),
-        r.responsibleOrDependency,
-      ].join('\t')
-    );
-    const text = [headers.join('\t'), ...tsvRows].join('\n');
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setToastMessage({
-          text: `✓ Copied ${filteredAndSortedRows.length} aging records to clipboard (ready to paste in Excel).`,
-          type: 'success',
-        });
-      })
-      .catch(() => {
-        setToastMessage({ text: 'Could not access clipboard.', type: 'error' });
-      });
-  }, [filteredAndSortedRows]);
+  const handleExportXlsx = async () => {
+    if (!totalItems || isExportingRemarks) return;
 
-  const handleExportCSV = () => {
-    if (filteredAndSortedRows.length === 0) return;
-    const headers = ['RequestID', 'Department', 'Category', 'Sub Category', 'Description', 'Aging Days', 'Recent Update', 'Responsible Team'];
-    const rows = filteredAndSortedRows.map((r) => [
-      `"${r.requestId}"`,
-      `"${r.department}"`,
-      `"${r.category}"`,
-      `"${r.subCategory}"`,
-      `"${(r.description || '').replace(/"/g, '""')}"`,
-      r.agingDays,
-      `"${(r.recentUpdate || '').replace(/"/g, '""')}"`,
-      `"${r.responsibleOrDependency}"`,
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Aging_Incidents_Remarks_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setIsExportingRemarks(true);
+    try {
+      const { exportAgingRemarksToXlsx } = await import('@/lib/report/export');
+      exportAgingRemarksToXlsx(filteredAndSortedRows, data.reportPeriod || '');
+      setToastMessage({ text: `Exported ${totalItems} aging records.`, type: 'success' });
+    } catch (error) {
+      const text = error instanceof Error && error.message.includes('32767')
+        ? 'One of the exported fields exceeds Excel’s 32,767-character cell limit.'
+        : 'Could not export the Excel workbook. Try again.';
+      setToastMessage({ text, type: 'error' });
+    } finally {
+      setIsExportingRemarks(false);
+    }
   };
 
   // Calculate bucket totals
@@ -715,10 +581,6 @@ export function AgingReportTable({
     }
     return res as Record<AgingBucket, number>;
   }, [data.agingRows]);
-
-  const prevWeekGrand = data.previousWeek.grandTotal ?? 0;
-  const currentAgingGrand = data.agingGrandTotal;
-  const agingDelta = currentAgingGrand - prevWeekGrand;
 
   const getBucketColor = (bucket: AgingBucket, count: number) => {
     if (count === 0) return '#475569';
@@ -733,35 +595,10 @@ export function AgingReportTable({
     }
   };
 
-  const getRateBadge = (rate: number | null) => {
-    if (rate === null) return <span style={{ color: '#64748b' }}>—</span>;
-    const isMet = rate >= 85;
-    const isWarn = rate >= 70 && rate < 85;
-    const bg = isMet ? '#00b050' : isWarn ? '#ffc000' : '#c00000';
-    const color = isWarn ? '#000000' : '#ffffff';
-
-    return (
-      <span
-        style={{
-          display: 'inline-block',
-          background: bg,
-          color,
-          fontSize: '11px',
-          fontWeight: 800,
-          padding: '2px 8px',
-          borderRadius: '4px',
-          minWidth: '52px',
-          textAlign: 'center',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-        }}
-      >
-        {rate.toFixed(1)}%
-      </span>
-    );
-  };
+  const formatComparisonRate = (rate: number | null) => rate === null ? '—' : `${rate.toFixed(1)}%`;
 
   return (
-    <div ref={reportRef} style={{ width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '18px' }} id="aging-report-canvas">
+    <div ref={reportRef} className="aging-report" data-public-view={isPublicView} data-active-tab={activeTab} style={{ width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }} id="aging-report-canvas">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -777,7 +614,7 @@ export function AgingReportTable({
             borderRadius: '10px',
             fontSize: '13px',
             fontWeight: 600,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+            boxShadow: '0 8px 30px var(--ui-shadow, rgba(0,0,0,0.5))',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
@@ -797,38 +634,39 @@ export function AgingReportTable({
 
       {/* ══ Modern Header Bar ══ */}
       <div
+        className="aging-report-header"
         style={{
-          background: 'linear-gradient(145deg, #111c30 0%, #0d1a2e 100%)',
-          border: '1px solid #1e293b',
+          background: 'linear-gradient(145deg, var(--ui-surface, #111c30) 0%, var(--ui-surface, #0d1a2e) 100%)',
+          border: '1px solid var(--ui-panel-border, var(--ui-border))',
           borderRadius: '16px',
-          padding: '18px 24px',
+          padding: 'var(--aging-header-padding, 18px 24px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '14px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+          boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div
             style={{
-              width: '44px',
-              height: '44px',
+              width: 'var(--aging-header-icon-size, 44px)',
+              height: 'var(--aging-header-icon-size, 44px)',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, #d97706, #dc2626)',
+              background: 'var(--aging-header-icon-background, linear-gradient(135deg, #d97706, #dc2626))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '22px',
-              boxShadow: '0 4px 14px rgba(217,119,6,0.3)',
+              boxShadow: 'var(--aging-header-icon-shadow, 0 4px 14px rgba(217,119,6,0.3))',
             }}
           >
             ⏳
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '-0.01em' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, letterSpacing: '-0.01em' }}>
                 Aging Incident Report
               </h2>
               <span
@@ -839,7 +677,7 @@ export function AgingReportTable({
                   borderRadius: '999px',
                   background: 'rgba(245,158,11,0.15)',
                   border: '1px solid rgba(245,158,11,0.3)',
-                  color: '#fbbf24',
+                  color: 'var(--ui-warning, #fbbf24)',
                 }}
               >
                 {data.reportPeriod || 'Current Period'}
@@ -851,15 +689,15 @@ export function AgingReportTable({
         {/* Right Action Controls: Admin Actions */}
         {!isPublicView && (
           <div style={{ display: 'flex', gap: '8px' }}>
-            {kpiMetrics.unsaved > 0 && (
+            {unsavedCount > 0 && (
               <button
                 type="button"
                 onClick={handleBulkSave}
-                disabled={isBulkSaving}
+                disabled={isSavingRemarks}
                 style={{
                   background: 'rgba(245,158,11,0.15)',
                   border: '1px solid #f59e0b',
-                  color: '#fbbf24',
+                  color: 'var(--ui-warning, #fbbf24)',
                   padding: '7px 12px',
                   borderRadius: '8px',
                   fontSize: '11px',
@@ -867,16 +705,17 @@ export function AgingReportTable({
                   cursor: 'pointer',
                 }}
               >
-                {isBulkSaving ? '💾 Saving…' : `💾 Save Unsaved (${kpiMetrics.unsaved})`}
+                {isBulkSaving ? '💾 Saving…' : `💾 Save Unsaved (${unsavedCount})`}
               </button>
             )}
             <button
               type="button"
               onClick={handleSaveCompleteReport}
+              disabled={isSavingRemarks}
               style={{
                 background: isSaved ? 'rgba(16,185,129,0.15)' : '#2563eb',
                 border: isSaved ? '1px solid #10b981' : 'none',
-                color: '#ffffff',
+                color: isSaved ? 'var(--ui-success, #ffffff)' : '#ffffff',
                 padding: '7px 14px',
                 borderRadius: '8px',
                 fontSize: '12px',
@@ -885,653 +724,183 @@ export function AgingReportTable({
                 boxShadow: isSaved ? 'none' : '0 2px 10px rgba(37,99,235,0.3)',
               }}
             >
-              {isSaved ? '✓ Archived' : '💾 Archive Report'}
+              {isSavingReport ? 'Saving…' : isSaved ? '✓ Archived' : '💾 Archive Report'}
             </button>
           </div>
         )}
       </div>
 
-      {/* ══ Top Tab Switcher ══ */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '6px',
-          overflowX: 'auto',
-          borderBottom: '1px solid #1e293b',
-          paddingBottom: '2px',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setActiveTab('aging')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'aging' ? '#17243a' : 'transparent',
-            color: activeTab === 'aging' ? '#60a5fa' : '#94a3b8',
-            fontWeight: activeTab === 'aging' ? 800 : 600,
-            fontSize: '12px',
-            cursor: 'pointer',
-            borderBottom: activeTab === 'aging' ? '2px solid #2563eb' : '2px solid transparent',
-            transition: 'all 0.12s ease',
-          }}
-        >
-          <span style={{ fontSize: '14px' }}>📊</span>
-          <span>Aging Module (SLA &amp; Distribution)</span>
+      <div className="aging-report-tabs" role="group" aria-label="Aging report views">
+        <button type="button" aria-pressed={activeTab === 'aging'} onClick={() => setActiveTab('aging')}>
+          <ChartColumn size={16} aria-hidden="true" />
+          <span>SLA &amp; Distribution</span>
         </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('remarks')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'remarks' ? '#17243a' : 'transparent',
-            color: activeTab === 'remarks' ? '#60a5fa' : '#94a3b8',
-            fontWeight: activeTab === 'remarks' ? 800 : 600,
-            fontSize: '12px',
-            cursor: 'pointer',
-            borderBottom: activeTab === 'remarks' ? '2px solid #2563eb' : '2px solid transparent',
-            transition: 'all 0.12s ease',
-          }}
-        >
-          <span style={{ fontSize: '14px' }}>📝</span>
+        <button type="button" aria-pressed={activeTab === 'remarks'} onClick={() => setActiveTab('remarks')}>
+          <NotebookText size={16} aria-hidden="true" />
           <span>Remarks Table</span>
           {remarksData.totalRecords > 0 && (
-            <span
-              style={{
-                background: activeTab === 'remarks' ? '#2563eb' : '#1e293b',
-                color: '#ffffff',
-                fontSize: '10px',
-                fontWeight: 800,
-                padding: '1px 6px',
-                borderRadius: '999px',
-              }}
-            >
-              {remarksData.totalRecords}
-            </span>
+            <span className="aging-report-tab-count">{remarksData.totalRecords}</span>
+          )}
+        </button>
+        <button type="button" aria-pressed={activeTab === 'high-impact'} onClick={() => setActiveTab('high-impact')}>
+          <Flame size={16} aria-hidden="true" />
+          <span>High Impact</span>
+          {highImpactIncidents.length > 0 && (
+            <span className="aging-report-tab-count" style={{ background: '#dc2626' }}>{highImpactIncidents.length}</span>
           )}
         </button>
       </div>
 
       {/* ══ TAB 1: AGING MODULE (SLA & DISTRIBUTION) ══ */}
       {activeTab === 'aging' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {/* ── Executive Summary Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Aging IRs</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#f8fafc' }}>{currentAgingGrand}</div>
-              <span style={{ fontSize: '10px', color: agingDelta > 0 ? '#f87171' : '#34d399', fontWeight: 700 }}>
-                {agingDelta === 0 ? '±0 vs last week' : agingDelta > 0 ? `+${agingDelta} vs last week` : `${agingDelta} vs last week`}
-              </span>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 1 Month)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: bucketTotals['>1month'] > 0 ? '#f87171' : '#f8fafc' }}>{bucketTotals['>1month']}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (2–4 Weeks)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fb923c' }}>{bucketTotals['2-4weeks']}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (1–2 Wks)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fbbf24' }}>{bucketTotals['1-2weeks']}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 1 Wk)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#34d399' }}>
-                {bucketTotals['sameday'] + bucketTotals['1-3days'] + bucketTotals['4-6days']}
-              </div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Overall FR SLA</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#60a5fa' }}>
-                {formatSLAPercentage(data.slaTotals.firstResponse.slaPassRate)}
-              </div>
-            </div>
-          </div>
-
-          {/* ── TABLE 1: First Response & Resolution SLA Compliance Table ── */}
-          <div
-            style={{
-              background: '#111c30',
-              border: '1px solid #1e293b',
-              borderRadius: '12px',
-              overflow: 'hidden',
-            }}
+        <div className="aging-module">
+          <ReportDetailsStrip
+            from={remarksData.periodFrom}
+            to={remarksData.periodTo}
+            totalRecords={remarksData.rows.length ? remarksData.totalRecords : data.agingGrandTotal}
           >
-            <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b', background: '#17243a' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '13px' }}>⚡</span>
-                <h3 style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  First Response &amp; Resolution SLA Compliance
-                </h3>
-              </div>
-            </div>
+            <ReportImageExport
+              sources={[
+                { panel: slaPanelRef, title: 'SLA Compliance', filename: 'aging-sla-compliance.png' },
+                { panel: distributionPanelRef, title: 'Aging Distribution', filename: 'aging-distribution.png' },
+              ]}
+              dialogTitle="Save Aging images"
+              period={data.reportPeriod}
+            />
+          </ReportDetailsStrip>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', border: '2px solid #000000' }}>
-                <thead>
-                  {/* Main Group Headers (Old Design Corporate Colors) */}
-                  <tr>
-                    <th
-                      rowSpan={2}
-                      style={{
-                        padding: '7px 12px',
-                        textAlign: 'left',
-                        background: '#4472c4',
-                        color: '#ffffff',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                        width: '160px',
-                      }}
-                    >
-                      FINAL TEAM
-                    </th>
-                    <th
-                      rowSpan={2}
-                      style={{
-                        padding: '7px 10px',
-                        textAlign: 'center',
-                        background: '#2f5597',
-                        color: '#ffffff',
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                        width: '80px',
-                      }}
-                    >
-                      TOTAL IRS
-                    </th>
-                    <th
-                      colSpan={3}
-                      style={{
-                        padding: '7px 12px',
-                        textAlign: 'center',
-                        background: '#5b9bd5',
-                        color: '#ffffff',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                      }}
-                    >
-                      FIRST RESPONSE
-                    </th>
-                    <th
-                      colSpan={3}
-                      style={{
-                        padding: '7px 12px',
-                        textAlign: 'center',
-                        background: '#70ad47',
-                        color: '#ffffff',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                      }}
-                    >
-                      RESOLUTION TIME
-                    </th>
+          <section ref={slaPanelRef} className="aging-matrix-panel" aria-label="SLA compliance">
+            <div className="aging-sla-table-scroll">
+              <table className="aging-sla-comparison-table" role="table" aria-label="First response and resolution by technician">
+                <colgroup><col className="aging-matrix-team-column" /><col style={{ width: '10%' }} /></colgroup>
+                <colgroup>
+                  <col style={{ width: '6%' }} /><col style={{ width: '6%' }} />
+                  <col style={{ width: '12%' }} /><col style={{ width: '12%' }} />
+                </colgroup>
+                <colgroup>
+                  <col style={{ width: '6%' }} /><col style={{ width: '6%' }} />
+                  <col style={{ width: '12%' }} /><col style={{ width: '12%' }} />
+                </colgroup>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th className="aging-matrix-team-heading" rowSpan={2} scope="col" role="columnheader">Technician</th>
+                    <th rowSpan={2} scope="col" role="columnheader">Total IRs</th>
+                    <th className="aging-matrix-group" colSpan={4} scope="colgroup" role="columnheader"><SLAMetricHeading metric="response" /></th>
+                    <th className="aging-matrix-group is-resolution" colSpan={4} scope="colgroup" role="columnheader"><SLAMetricHeading metric="resolution" /></th>
                   </tr>
-                  {/* Sub-column Headers */}
-                  <tr>
-                    <th style={{
-                      padding: '5px 8px',
-                      textAlign: 'center',
-                      background: '#c00000',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      border: '1px solid #1f3864',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      Failed
-                    </th>
-                    <th style={{
-                      padding: '5px 8px',
-                      textAlign: 'center',
-                      background: '#548235',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      border: '1px solid #1f3864',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      Passed
-                    </th>
-                    <th style={{
-                      padding: '5px 8px',
-                      textAlign: 'center',
-                      background: '#1f4e79',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 800,
-                      border: '1px solid #1f3864',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      SLA Pass Rate
-                    </th>
-
-                    <th style={{
-                      padding: '5px 8px',
-                      textAlign: 'center',
-                      background: '#c00000',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      border: '1px solid #1f3864',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      Failed
-                    </th>
-                    <th style={{
-                      padding: '5px 8px',
-                      textAlign: 'center',
-                      background: '#548235',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      border: '1px solid #1f3864',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      Passed
-                    </th>
-                    <th style={{
-                      padding: '5px 8px',
-                      textAlign: 'center',
-                      background: '#1f4e79',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 800,
-                      border: '1px solid #1f3864',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      SLA Pass Rate
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.slaRows.map((row) => (
-                    <tr
-                      key={row.teamName}
-                      style={{ borderBottom: '1px solid #cbd5e1' }}
-                    >
-                      <td style={{ padding: '9px 16px', fontWeight: 700, background: '#d6e4f0', color: '#1f3864', border: '1px solid #94a3b8' }}>
-                        {row.teamName}
-                      </td>
-                      <td
-                        style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #cbd5e1' }}
-                        onClick={() => handleClick(`${row.teamName} — Total IRs`, row.incidentIds)}
-                        title="Click to view total incidents"
-                      >
-                        {row.totalIRs > 0 ? row.totalIRs : 0}
-                      </td>
-
-                      {/* First Response */}
-                      <td
-                        style={{
-                          padding: '9px 12px',
-                          textAlign: 'center',
-                          cursor: row.firstResponse.failed > 0 ? 'pointer' : 'default',
-                          background: row.firstResponse.failed > 0 ? '#fce4ec' : '#ffffff',
-                          color: row.firstResponse.failed > 0 ? '#c00000' : '#64748b',
-                          fontWeight: row.firstResponse.failed > 0 ? 800 : 500,
-                          border: '1px solid #cbd5e1',
-                        }}
-                        onClick={() => handleClick(`${row.teamName} — FR Failed`, row.firstResponse.failedIds)}
-                        title="Click to view First Response failed incidents"
-                      >
-                        {row.firstResponse.failed}
-                      </td>
-                      <td
-                        style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #cbd5e1' }}
-                        onClick={() => handleClick(`${row.teamName} — FR Passed`, row.firstResponse.passedIds)}
-                        title="Click to view First Response passed incidents"
-                      >
-                        {row.firstResponse.passed}
-                      </td>
-                      <td style={{ padding: '9px 14px', textAlign: 'center', background: '#ffffff', border: '1px solid #cbd5e1' }}>
-                        {getRateBadge(row.firstResponse.slaPassRate)}
-                      </td>
-
-                      {/* Resolution Time */}
-                      <td
-                        style={{
-                          padding: '9px 12px',
-                          textAlign: 'center',
-                          cursor: row.resolutionTime.failed > 0 ? 'pointer' : 'default',
-                          background: row.resolutionTime.failed > 0 ? '#fce4ec' : '#ffffff',
-                          color: row.resolutionTime.failed > 0 ? '#c00000' : '#64748b',
-                          fontWeight: row.resolutionTime.failed > 0 ? 800 : 500,
-                          border: '1px solid #cbd5e1',
-                        }}
-                        onClick={() => handleClick(`${row.teamName} — RT Failed`, row.resolutionTime.failedIds)}
-                        title="Click to view Resolution failed incidents"
-                      >
-                        {row.resolutionTime.failed}
-                      </td>
-                      <td
-                        style={{ padding: '9px 12px', textAlign: 'center', cursor: 'pointer', background: '#ffffff', color: '#000000', fontWeight: 700, border: '1px solid #cbd5e1' }}
-                        onClick={() => handleClick(`${row.teamName} — RT Passed`, row.resolutionTime.passedIds)}
-                        title="Click to view Resolution passed incidents"
-                      >
-                        {row.resolutionTime.passed}
-                      </td>
-                      <td style={{ padding: '9px 14px', textAlign: 'center', background: '#ffffff', border: '1px solid #cbd5e1' }}>
-                        {getRateBadge(row.resolutionTime.slaPassRate)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: '#ffd966', fontWeight: 900, border: '2px solid #000000' }}>
-                    <td style={{ padding: '10px 16px', background: '#ffd966', color: '#000000', fontSize: '11px', textTransform: 'uppercase', border: '1px solid #b38600' }}>
-                      TOTAL
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', border: '1px solid #b38600' }}>
-                      {data.slaTotals.totalIRs}
-                    </td>
-
-                    {/* FR Totals */}
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: data.slaTotals.firstResponse.failed > 0 ? '#c00000' : '#000000', border: '1px solid #b38600' }}>
-                      {data.slaTotals.firstResponse.failed}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', border: '1px solid #b38600' }}>
-                      {data.slaTotals.firstResponse.passed}
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center', background: '#ffd966', border: '1px solid #b38600' }}>
-                      {getRateBadge(data.slaTotals.firstResponse.slaPassRate)}
-                    </td>
-
-                    {/* RT Totals */}
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: data.slaTotals.resolutionTime.failed > 0 ? '#c00000' : '#000000', border: '1px solid #b38600' }}>
-                      {data.slaTotals.resolutionTime.failed}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#000000', border: '1px solid #b38600' }}>
-                      {data.slaTotals.resolutionTime.passed}
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center', background: '#ffd966', border: '1px solid #b38600' }}>
-                      {getRateBadge(data.slaTotals.resolutionTime.slaPassRate)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          {/* ── TABLE 2: Aging Incident Report Distribution Matrix ── */}
-          <div
-            style={{
-              background: '#111c30',
-              border: '1px solid #1e293b',
-              borderRadius: '12px',
-              overflow: 'hidden',
-            }}
-          >
-            <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b', background: '#17243a' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '13px' }}>📅</span>
-                <h3 style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Aging Incident Report (Distribution Matrix)
-                </h3>
-              </div>
-            </div>
-
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', border: '2px solid #000000' }}>
-                <thead>
-                  <tr>
-                    <th
-                      rowSpan={2}
-                      style={{
-                        padding: '10px 14px',
-                        textAlign: 'left',
-                        background: '#4472c4',
-                        color: '#ffffff',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                        width: '180px',
-                      }}
-                    >
-                      FINAL TEAM
-                    </th>
-                    <th
-                      colSpan={6}
-                      style={{
-                        padding: '10px 14px',
-                        textAlign: 'center',
-                        background: '#d9e1f2',
-                        color: '#1f3864',
-                        fontSize: '12px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                      }}
-                    >
-                      AGING INCIDENT REPORT
-                    </th>
-                    <th
-                      rowSpan={2}
-                      style={{
-                        padding: '10px 12px',
-                        textAlign: 'center',
-                        background: '#c00000',
-                        color: '#ffffff',
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                        width: '110px',
-                      }}
-                    >
-                      <div>TOTAL AGING IRS</div>
-                      <div style={{ fontSize: '10px', fontWeight: 700 }}>as of this week</div>
-                    </th>
-                    <th
-                      rowSpan={2}
-                      style={{
-                        padding: '10px 12px',
-                        textAlign: 'center',
-                        background: '#ffc000',
-                        color: '#000000',
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        border: '1px solid #1f3864',
-                        width: '110px',
-                      }}
-                    >
-                      <div>TOTAL AGING IRS</div>
-                      <div style={{ fontSize: '10px', fontWeight: 700 }}>as of last week</div>
-                    </th>
-                  </tr>
-                  <tr>
-                    {AGING_BUCKET_ORDER.map((b) => (
-                      <th
-                        key={b}
-                        style={{
-                          padding: '8px 10px',
-                          textAlign: 'center',
-                          background: '#4472c4',
-                          color: '#ffffff',
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          border: '1px solid #1f3864',
-                          minWidth: '85px',
-                        }}
-                      >
-                        {AGING_BUCKET_LABELS[b]}
-                      </th>
+                  <tr role="row">
+                    {['response', 'resolution'].map(metric => (
+                      <React.Fragment key={metric}>
+                        <th className="aging-matrix-failed-heading" scope="col" role="columnheader">Failed</th>
+                        <th scope="col" role="columnheader">Passed</th>
+                        <th scope="col" role="columnheader" data-period="current">SLA pass rate<br />This week</th>
+                        <th scope="col" role="columnheader" data-period="previous" title={data.previousWeek.sourcePeriod}>SLA pass rate<br />Last week</th>
+                      </React.Fragment>
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {data.agingRows.map((row) => {
-                    const prevWeekTotal = data.previousWeek.teamTotals[row.teamName];
-                    return (
-                      <tr
-                        key={row.teamName}
-                        style={{ borderBottom: '1px solid #cbd5e1' }}
-                      >
-                        <td style={{ padding: '9px 16px', fontWeight: 700, background: '#d6e4f0', color: '#1f3864', border: '1px solid #94a3b8' }}>
-                          {row.teamName}
-                        </td>
-
-                        {/* Bucket Cells */}
-                        {AGING_BUCKET_ORDER.map((bucket) => {
-                          const count = row.buckets[bucket] || 0;
-                          const ids = row.bucketIncidentIds[bucket] || [];
-                          return (
-                            <td
-                              key={bucket}
-                              style={{
-                                padding: '9px 10px',
-                                textAlign: 'center',
-                                cursor: count > 0 ? 'pointer' : 'default',
-                                background: '#ffffff',
-                                color: '#000000',
-                                fontWeight: count > 0 ? 800 : 400,
-                                border: '1px solid #cbd5e1',
-                              }}
-                              onClick={() => {
-                                if (count > 0) handleClick(`${row.teamName} — ${AGING_BUCKET_LABELS[bucket]}`, ids);
-                              }}
-                              title={count > 0 ? `Click to view ${count} incidents in ${AGING_BUCKET_LABELS[bucket]}` : ''}
-                            >
-                              {count > 0 ? count : '—'}
-                            </td>
-                          );
-                        })}
-
-                        {/* Total This Week */}
-                        <td
-                          style={{
-                            padding: '9px 12px',
-                            textAlign: 'center',
-                            fontWeight: 800,
-                            background: '#ffffff',
-                            color: '#c00000',
-                            fontSize: '13px',
-                            border: '1px solid #cbd5e1',
-                            cursor: row.totalAging > 0 ? 'pointer' : 'default',
-                          }}
-                          onClick={() => {
-                            if (row.totalAging > 0) handleClick(`${row.teamName} — Total Aging IRs`, row.incidentIds);
-                          }}
-                        >
-                          {row.totalAging > 0 ? row.totalAging : '—'}
-                        </td>
-
-                        {/* Total Last Week */}
-                        <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 800, background: '#ffffff', color: '#c00000', fontSize: '13px', border: '1px solid #cbd5e1' }}>
-                          {prevWeekTotal !== null && prevWeekTotal !== undefined ? prevWeekTotal : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                <tbody role="rowgroup">
+                  {data.slaRows.map(row => (
+                    <tr role="row" key={row.teamName}>
+                      <th scope="row" role="rowheader">{row.teamName}</th>
+                      <td role="cell" data-label="Tickets">{renderIncidentCount(row.totalIRs || 0, `${row.teamName} — Total IRs`, row.incidentIds)}</td>
+                      <td role="cell" data-label="Failed" className={row.firstResponse.failed > 0 ? 'sla-failed-count' : undefined}>
+                        {renderIncidentCount(row.firstResponse.failed, `${row.teamName} — FR Failed`, row.firstResponse.failedIds)}
+                      </td>
+                      <td role="cell" data-label="Passed">{renderIncidentCount(row.firstResponse.passed, `${row.teamName} — FR Passed`, row.firstResponse.passedIds)}</td>
+                      <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(row.firstResponse.slaPassRate)}</td>
+                      <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.firstResponse[row.teamName] ?? null)}</td>
+                      <td role="cell" data-label="Failed" className={row.resolutionTime.failed > 0 ? 'sla-failed-count' : undefined}>
+                        {renderIncidentCount(row.resolutionTime.failed, `${row.teamName} — RT Failed`, row.resolutionTime.failedIds)}
+                      </td>
+                      <td role="cell" data-label="Passed">{renderIncidentCount(row.resolutionTime.passed, `${row.teamName} — RT Passed`, row.resolutionTime.passedIds)}</td>
+                      <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(row.resolutionTime.slaPassRate)}</td>
+                      <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.resolutionTime[row.teamName] ?? null)}</td>
+                    </tr>
+                  ))}
                 </tbody>
-                <tfoot>
-                  <tr style={{ background: '#ffd966', fontWeight: 900, border: '2px solid #000000' }}>
-                    <td style={{ padding: '10px 16px', background: '#ffd966', color: '#000000', fontSize: '11px', textTransform: 'uppercase', border: '1px solid #b38600' }}>
-                      TOTAL
-                    </td>
-                    {AGING_BUCKET_ORDER.map((bucket) => {
-                      const count = bucketTotals[bucket] || 0;
-                      return (
-                        <td
-                          key={bucket}
-                          style={{
-                            padding: '10px 10px',
-                            textAlign: 'center',
-                            background: '#ffd966',
-                            color: '#000000',
-                            fontWeight: 800,
-                            border: '1px solid #b38600',
-                          }}
-                        >
-                          {count > 0 ? count : '—'}
-                        </td>
-                      );
-                    })}
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#c00000', fontWeight: 900, fontSize: '14px', border: '1px solid #b38600' }}>
-                      {data.agingGrandTotal > 0 ? data.agingGrandTotal : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#ffd966', color: '#c00000', fontWeight: 900, fontSize: '14px', border: '1px solid #b38600' }}>
-                      {data.previousWeek.grandTotal !== null ? data.previousWeek.grandTotal : '—'}
-                    </td>
+                <tfoot role="rowgroup">
+                  <tr role="row">
+                    <th scope="row" role="rowheader">Total</th>
+                    <td role="cell" data-label="Tickets">{data.slaTotals.totalIRs}</td>
+                    <td role="cell" data-label="Failed" data-failed={data.slaTotals.firstResponse.failed > 0}>{data.slaTotals.firstResponse.failed}</td>
+                    <td role="cell" data-label="Passed">{data.slaTotals.firstResponse.passed}</td>
+                    <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(data.slaTotals.firstResponse.slaPassRate)}</td>
+                    <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.firstResponseTotal ?? null)}</td>
+                    <td role="cell" data-label="Failed" data-failed={data.slaTotals.resolutionTime.failed > 0}>{data.slaTotals.resolutionTime.failed}</td>
+                    <td role="cell" data-label="Passed">{data.slaTotals.resolutionTime.passed}</td>
+                    <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(data.slaTotals.resolutionTime.slaPassRate)}</td>
+                    <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.resolutionTimeTotal ?? null)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-          </div>
+          </section>
+
+          <section ref={distributionPanelRef} className="aging-matrix-panel" aria-labelledby={distributionHeadingId}>
+            <div className="aging-sla-table-scroll">
+              <table className="aging-distribution-table" role="table" aria-labelledby={distributionHeadingId}>
+                <colgroup>
+                  <col className="aging-matrix-team-column" />
+                  {AGING_BUCKET_ORDER.map(bucket => <col key={bucket} />)}
+                </colgroup>
+                <colgroup><col style={{ width: '11%' }} /><col style={{ width: '11%' }} /></colgroup>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th className="aging-matrix-title" colSpan={AGING_BUCKET_ORDER.length + 1} scope="colgroup" role="columnheader">
+                      <h3 id={distributionHeadingId}>Aging Incident Report</h3>
+                    </th>
+                    <th rowSpan={2} scope="col" role="columnheader" data-period="current">Total aging IRs<br />This week</th>
+                    <th rowSpan={2} scope="col" role="columnheader" data-period="previous" title={data.previousWeek.sourcePeriod}>Total aging IRs<br />Last week</th>
+                  </tr>
+                  <tr role="row">
+                    <th className="aging-matrix-team-heading" scope="col" role="columnheader">Technician</th>
+                    {AGING_BUCKET_ORDER.map(bucket => (
+                      <th key={bucket} scope="col" role="columnheader">{AGING_BUCKET_LABELS[bucket]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody role="rowgroup">
+                  {data.agingRows.map(row => (
+                    <tr role="row" key={row.teamName}>
+                      <th scope="row" role="rowheader">{row.teamName}</th>
+                      {AGING_BUCKET_ORDER.map(bucket => {
+                        const count = row.buckets[bucket] || 0;
+                        return (
+                          <td role="cell" key={bucket} data-label={AGING_BUCKET_LABELS[bucket]}>
+                            {count > 0 ? renderIncidentCount(count, `${row.teamName} — ${AGING_BUCKET_LABELS[bucket]}`, row.bucketIncidentIds[bucket]) : '—'}
+                          </td>
+                        );
+                      })}
+                      <td role="cell" data-period="current" data-label="This week">
+                        {row.totalAging > 0 ? renderIncidentCount(row.totalAging, `${row.teamName} — Total Aging IRs`, row.incidentIds) : '—'}
+                      </td>
+                      <td role="cell" data-period="previous" data-label="Last week">{data.previousWeek.teamTotals[row.teamName] ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot role="rowgroup">
+                  <tr role="row">
+                    <th scope="row" role="rowheader">Total</th>
+                    {AGING_BUCKET_ORDER.map(bucket => <td role="cell" key={bucket} data-label={AGING_BUCKET_LABELS[bucket]}>{bucketTotals[bucket] || '—'}</td>)}
+                    <td role="cell" data-period="current" data-label="This week">{data.agingGrandTotal > 0 ? data.agingGrandTotal : '—'}</td>
+                    <td role="cell" data-period="previous" data-label="Last week">{data.previousWeek.grandTotal ?? '—'}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
         </div>
       )}
 
       {/* ══ TAB 2: REMARKS TABLE (ENHANCED MODERN DATA TABLE) ══ */}
       {activeTab === 'remarks' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* ── Summary KPI Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total Records</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#f8fafc' }}>{kpiMetrics.total}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Critical (&gt; 30d)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: kpiMetrics.critical > 0 ? '#f87171' : '#64748b' }}>{kpiMetrics.critical}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>High (15–30d)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fb923c' }}>{kpiMetrics.high}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Moderate (8–14d)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fbbf24' }}>{kpiMetrics.moderate}</div>
-            </div>
-
-            <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Recent (&lt; 8d)</span>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#34d399' }}>{kpiMetrics.low}</div>
-            </div>
-          </div>
-
           {/* ── Search & Filter Toolbar ── */}
           <div
+            className="aging-remarks-toolbar"
             style={{
-              background: '#111c30',
-              border: '1px solid #1e293b',
-              borderRadius: '12px',
+              background: 'var(--ui-surface, #111c30)',
               padding: '12px 16px',
               display: 'flex',
               alignItems: 'center',
@@ -1542,7 +911,7 @@ export function AgingReportTable({
           >
             {/* Search Input */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '240px' }}>
-              <span style={{ fontSize: '14px', color: '#64748b' }}>🔍</span>
+              <span style={{ fontSize: '14px', color: 'var(--ui-muted, #64748b)' }}>🔍</span>
               <input
                 type="text"
                 placeholder="Search records…"
@@ -1550,20 +919,19 @@ export function AgingReportTable({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
                   width: '100%',
-                  background: '#091426',
-                  border: '1px solid #1e293b',
+                  background: 'var(--ui-inset, #091426)',
+                  border: '1px solid var(--ui-control-border)',
                   borderRadius: '8px',
                   padding: '7px 12px',
                   fontSize: '12px',
-                  color: '#f8fafc',
-                  outline: 'none',
+                  color: 'var(--ui-text, #f8fafc)',
                 }}
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--ui-muted, #64748b)', cursor: 'pointer' }}
                 >
                   ✕
                 </button>
@@ -1575,7 +943,6 @@ export function AgingReportTable({
               <select
                 value={deptFilter}
                 onChange={(e) => setDeptFilter(e.target.value)}
-                style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
               >
                 <option value="ALL">All Departments</option>
                 {filterOptions.departments.map((d) => (
@@ -1586,7 +953,6 @@ export function AgingReportTable({
               <select
                 value={teamFilter}
                 onChange={(e) => setTeamFilter(e.target.value)}
-                style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
               >
                 <option value="ALL">All Teams</option>
                 {filterOptions.teams.map((t) => (
@@ -1597,7 +963,6 @@ export function AgingReportTable({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                style={{ background: '#091426', border: '1px solid #1e293b', borderRadius: '8px', padding: '6px 10px', fontSize: '11px', color: '#94a3b8', outline: 'none', cursor: 'pointer' }}
               >
                 <option value="aging-desc">Aging: High → Low</option>
                 <option value="aging-asc">Aging: Low → High</option>
@@ -1616,7 +981,7 @@ export function AgingReportTable({
                     setSeverityFilter('ALL');
                     setOnlyUnsavedFilter(false);
                   }}
-                  style={{ background: 'transparent', border: '1px solid #243650', color: '#94a3b8', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer' }}
+                  style={{ background: 'transparent', border: '1px solid var(--ui-border, #243650)', color: 'var(--ui-secondary, #94a3b8)', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer' }}
                 >
                   Clear
                 </button>
@@ -1624,44 +989,12 @@ export function AgingReportTable({
 
               <button
                 type="button"
-                onClick={handleCopyToClipboard}
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid #1e293b',
-                  color: '#94a3b8',
-                  borderRadius: '8px',
-                  padding: '6px 10px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-                title="Copy filtered rows to clipboard for Excel"
+                className="aging-export-action"
+                onClick={handleExportXlsx}
+                disabled={totalItems === 0 || isExportingRemarks}
+                title="Export all matching rows in the current sort order"
               >
-                <span>📋</span> Copy TSV
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                style={{
-                  background: 'rgba(16,185,129,0.12)',
-                  border: '1px solid rgba(16,185,129,0.3)',
-                  color: '#34d399',
-                  borderRadius: '8px',
-                  padding: '6px 10px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-                title="Export filtered records to CSV"
-              >
-                <span>📥</span> Export CSV
+                <Download size={14} aria-hidden="true" /> {isExportingRemarks ? 'Exporting…' : 'Export XLSX'}
               </button>
             </div>
           </div>
@@ -1669,114 +1002,96 @@ export function AgingReportTable({
           {/* ── THE REMARKS TABLE (ENHANCED MODERN SAAS TABLE) ── */}
           <div
             style={{
-              background: '#111c30',
-              border: '1px solid #1e293b',
+              background: 'var(--ui-surface, #111c30)',
+              border: '1px solid var(--ui-panel-border, var(--ui-border))',
               borderRadius: '16px',
               overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+              boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
               display: 'flex',
               flexDirection: 'column',
             }}
           >
-            <div style={{ overflowX: 'auto', flex: 1 }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
-                <thead>
-                  <tr style={{ background: '#091426', borderBottom: '1px solid #1e293b' }}>
-                    <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '110px' }}>
+            <div style={{ overflowX: isPublicView ? undefined : 'auto', flex: 1 }}>
+              <table className={isPublicView ? 'aging-public-remarks-table' : undefined} role="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
+                <thead role="rowgroup">
+                  <tr role="row" style={{ background: 'var(--ui-inset, #091426)', borderBottom: '1px solid var(--ui-border, #1e293b)' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '110px' }}>
                       RequestID
                     </th>
-                    <th style={{ padding: '12px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '130px' }}>
                       Department
                     </th>
-                    <th style={{ padding: '12px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '8%' : '130px' }}>
                       Category
                     </th>
-                    <th style={{ padding: '12px 14px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '130px' }}>
                       Sub Category
                     </th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: '220px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : undefined, minWidth: isPublicView ? undefined : '220px' }}>
                       Description
                     </th>
-                    <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '100px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '100px' }}>
                       Aging Days
                     </th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: '320px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : undefined, minWidth: isPublicView ? undefined : '320px' }}>
                       Recent Update
                     </th>
-                    <th style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '150px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '10%' : '150px' }}>
                       Responsible Team
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {filteredAndSortedRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                    <tr role="row">
+                      <td role="cell" colSpan={8} style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '13px' }}>
                         No matching aging incidents found.
                       </td>
                     </tr>
                   ) : (
-                    paginatedRows.map((row) => {
+                    visibleRows.map((row) => {
                       const isRowUnsaved = Boolean(row.isUnsaved);
                       const isSaving = Boolean(savingRows[row.requestId]);
                       const currentTeam = normalizeResponsibleTeam(row.responsibleOrDependency);
                       const allowedTeams = getAllowedTeams(row.department);
 
-                      const severityColor =
-                        row.agingDays > 30 ? '#ef4444' : row.agingDays >= 15 ? '#f97316' : row.agingDays >= 8 ? '#f59e0b' : '#10b981';
-
-                      const severityBg =
-                        row.agingDays > 30 ? 'rgba(239,68,68,0.12)' : row.agingDays >= 15 ? 'rgba(249,115,22,0.12)' : row.agingDays >= 8 ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)';
-
-                      const severityBorder =
-                        row.agingDays > 30 ? 'rgba(239,68,68,0.3)' : row.agingDays >= 15 ? 'rgba(249,115,22,0.3)' : row.agingDays >= 8 ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)';
+                      const severityColor = row.agingDays > 30 ? 'var(--ui-danger)'
+                        : row.agingDays >= 15 ? 'var(--ui-orange)'
+                        : row.agingDays >= 8 ? 'var(--ui-warning)'
+                        : 'var(--ui-success)';
 
                       return (
                         <tr
+                          role="row"
                           key={row.requestId}
                           style={{
-                            borderBottom: '1px solid rgba(30,41,59,0.7)',
+                            borderBottom: '1px solid var(--ui-border)',
                             background: isRowUnsaved && !isPublicView ? 'rgba(245,158,11,0.05)' : 'transparent',
                             transition: 'background 0.12s ease',
                           }}
                           onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'rgba(37,99,235,0.06)')}
                           onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = isRowUnsaved && !isPublicView ? 'rgba(245,158,11,0.05)' : 'transparent')}
                         >
-                          {/* 1. Request ID with Drilldown Modal */}
-                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleClick(`Incident Details — ${row.requestId}`, [row.requestId])}
-                              style={{
-                                background: 'rgba(37,99,235,0.15)',
-                                border: '1px solid rgba(37,99,235,0.35)',
-                                color: '#60a5fa',
-                                fontWeight: 800,
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
-                                cursor: 'pointer',
-                              }}
-                              title="Click to view full incident details"
-                            >
-                              {row.requestId}
-                            </button>
+                          {/* 1. Request ID opens the matching SDP request. */}
+                          <td role="cell" data-label="Request ID" style={{ padding: '12px 14px', textAlign: isPublicView ? undefined : 'center' }}>
+                            <RequestIdLink requestId={row.requestId} />
                             {isRowUnsaved && !isPublicView && (
-                              <span style={{ color: '#f59e0b', fontSize: '9px', marginLeft: '4px' }}>●</span>
+                              <span style={{ color: 'var(--ui-warning, #f59e0b)', fontSize: '9px', marginLeft: '4px' }}>●</span>
                             )}
                           </td>
 
                           {/* 2. Department */}
-                          <td style={{ padding: '12px 14px', color: '#93c5fd', fontWeight: 600 }}>
+                          <td role="cell" data-label="Department" style={{ padding: '12px 14px', color: 'var(--ui-link, #93c5fd)', fontWeight: 600 }}>
                             {isPublicView ? (
-                              <span style={{ background: 'rgba(255,255,255,0.04)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' }}>
+                              <span style={{ color: 'var(--ui-text, #e2e8f0)', fontSize: '12px', fontWeight: 500 }}>
                                 {row.department || 'Not Assigned'}
                               </span>
                             ) : (
                               <select
                                 value={row.department || 'Not Assigned'}
+                                disabled={isSavingRemarks}
                                 onChange={(e) => handleDepartmentChange(row, e.target.value)}
-                                style={{ background: '#091426', border: '1px solid #1e293b', color: '#93c5fd', borderRadius: '6px', padding: '4px 6px', fontSize: '11px', outline: 'none' }}
+                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-link, #93c5fd)', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
                               >
                                 <option value="Not Assigned">Not Assigned</option>
                                 {availableDepartments.filter((d) => d !== 'Not Assigned').map((d) => (
@@ -1787,29 +1102,29 @@ export function AgingReportTable({
                           </td>
 
                           {/* 3. Category */}
-                          <td style={{ padding: '12px 14px', color: '#cbd5e1' }} title={row.category}>
+                          <td role="cell" data-label="Category" style={{ padding: '12px 14px', color: 'var(--ui-secondary, #cbd5e1)' }} title={row.category}>
                             {row.category || '—'}
                           </td>
 
                           {/* 4. Sub Category */}
-                          <td style={{ padding: '12px 14px', color: '#94a3b8' }} title={row.subCategory}>
+                          <td role="cell" data-label="Sub Category" style={{ padding: '12px 14px', color: 'var(--ui-secondary, #94a3b8)' }} title={row.subCategory}>
                             {row.subCategory || '—'}
                           </td>
 
                           {/* 5. Description */}
-                          <td style={{ padding: '12px 16px', color: '#f8fafc', lineHeight: 1.5 }} title={row.description}>
-                            <div style={{ maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                          <td role="cell" data-label="Description" style={{ padding: '12px 16px', color: 'var(--ui-text, #f8fafc)', lineHeight: 1.5 }} title={row.description}>
+                            <div style={isPublicView ? { whiteSpace: 'pre-wrap' } : { maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                               {row.description || '—'}
                             </div>
                           </td>
 
                           {/* 6. Aging Days (Color-coded Pill) */}
-                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <td role="cell" data-label="Aging Days" style={{ padding: '12px 14px', textAlign: isPublicView ? undefined : 'center' }}>
                             <span
                               style={{
                                 display: 'inline-block',
-                                background: severityBg,
-                                border: `1px solid ${severityBorder}`,
+                                background: `color-mix(in srgb, ${severityColor} 9%, var(--ui-surface))`,
+                                border: `1px solid ${severityColor}`,
                                 color: severityColor,
                                 fontSize: '11px',
                                 fontWeight: 800,
@@ -1822,46 +1137,25 @@ export function AgingReportTable({
                             </span>
                           </td>
 
-                          {/* 7. Recent Update (Uniform Single-Color Highlight) */}
-                          <td style={{ padding: '10px 14px', verticalAlign: 'top', minWidth: '300px' }}>
+                          {/* 7. Recent Update */}
+                          <td role="cell" data-label="Recent Update" style={{ padding: '8px 10px', verticalAlign: 'top', minWidth: isPublicView ? undefined : '340px' }}>
                             {isPublicView ? (
                               row.recentUpdate && row.recentUpdate.trim() ? (
-                                <div
-                                  style={{
-                                    background: 'rgba(56, 189, 248, 0.05)',
-                                    border: '1px solid rgba(56, 189, 248, 0.22)',
-                                    borderLeft: '3px solid #38bdf8',
-                                    borderRadius: '8px',
-                                    padding: '8px 12px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '6px',
-                                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.18)',
-                                  }}
-                                >
+                                <div className="aging-update-card">
                                   {/* Update Content with Single-Color Date Chips */}
-                                  <div
-                                    style={{
-                                      fontSize: '12px',
-                                      color: '#f8fafc',
-                                      lineHeight: 1.55,
-                                      fontWeight: 400,
-                                      wordBreak: 'break-word',
-                                    }}
-                                  >
+                                  <div className="aging-update-copy">
                                     {renderSingleColorUpdateText(row.recentUpdate)}
                                   </div>
 
                                   {row.lastUpdated && (
-                                    <div style={{ fontSize: '10.5px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                                      <span>🕒</span>
+                                    <div className="aging-update-meta">
                                       <span>{new Date(row.lastUpdated).toLocaleDateString()}</span>
-                                      {row.updatedBy && <span style={{ color: '#cbd5e1' }}>by {row.updatedBy}</span>}
+                                      {row.updatedBy && <span>by {row.updatedBy}</span>}
                                     </div>
                                   )}
                                 </div>
                               ) : (
-                                <span style={{ color: '#64748b', fontSize: '13px', display: 'inline-block', padding: '4px 6px' }}>—</span>
+                                <span style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', display: 'inline-block', padding: '4px 6px' }}>—</span>
                               )
                             ) : (
                               <div
@@ -1878,37 +1172,38 @@ export function AgingReportTable({
                               >
                                 <textarea
                                   value={row.recentUpdate || ''}
+                                  disabled={isSavingRemarks}
                                   onChange={(e) => handleRemarksChange(row, e.target.value)}
                                   placeholder="Type recent update notes…"
-                                  rows={2}
+                                  aria-label={`Recent update for ${row.requestId}`}
+                                  rows={3}
                                   style={{
                                     width: '100%',
-                                    background: '#091426',
-                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    background: 'var(--ui-inset, #091426)',
+                                    border: '1px solid var(--ui-control-border)',
                                     borderRadius: '6px',
                                     padding: '6px 8px',
-                                    fontSize: '12px',
-                                    lineHeight: 1.5,
-                                    color: '#f8fafc',
-                                    outline: 'none',
+                                    fontSize: '13px',
+                                    lineHeight: 1.65,
+                                    color: 'var(--ui-text, #f8fafc)',
                                     resize: 'vertical',
                                   }}
                                 />
 
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                                   {row.lastUpdated && (
-                                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                                    <span style={{ fontSize: '10px', color: 'var(--ui-secondary, #94a3b8)' }}>
                                       🕒 {new Date(row.lastUpdated).toLocaleDateString()}
                                     </span>
                                   )}
                                   <button
                                     type="button"
                                     onClick={() => handleSaveRow(row)}
-                                    disabled={isSaving}
+                                    disabled={isSavingRemarks}
                                     style={{
-                                      background: isRowUnsaved ? '#0284c7' : 'transparent',
-                                      border: isRowUnsaved ? '1px solid #38bdf8' : '1px solid #1e293b',
-                                      color: isRowUnsaved ? '#ffffff' : '#64748b',
+                                      background: isRowUnsaved ? 'var(--ui-link)' : 'transparent',
+                                      border: `1px solid ${isRowUnsaved ? 'var(--ui-link)' : 'var(--ui-control-border)'}`,
+                                      color: isRowUnsaved ? '#ffffff' : 'var(--ui-muted, #64748b)',
                                       borderRadius: '4px',
                                       padding: '3px 8px',
                                       fontSize: '10px',
@@ -1925,28 +1220,17 @@ export function AgingReportTable({
                           </td>
 
                           {/* 8. Responsible Team */}
-                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <td role="cell" data-label="Responsible Team" style={{ padding: '12px 14px', textAlign: isPublicView ? undefined : 'center' }}>
                             {isPublicView ? (
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  background: 'rgba(8,145,178,0.12)',
-                                  border: '1px solid rgba(8,145,178,0.3)',
-                                  color: '#38bdf8',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  padding: '2px 8px',
-                                  borderRadius: '6px',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
+                              <span style={{ color: 'var(--ui-text, #e2e8f0)', fontSize: '12px', fontWeight: 500 }}>
                                 {currentTeam || '—'}
                               </span>
                             ) : (
                               <select
                                 value={currentTeam}
+                                disabled={isSavingRemarks}
                                 onChange={(e) => handleResponsibleChange(row, e.target.value)}
-                                style={{ background: '#091426', border: '1px solid #1e293b', color: '#38bdf8', borderRadius: '6px', padding: '4px 6px', fontSize: '11px', outline: 'none' }}
+                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-link, #38bdf8)', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
                               >
                                 {(!currentTeam || currentTeam === 'Not Assigned') && <option value="">-- Team --</option>}
                                 {allowedTeams.map((t) => (
@@ -1964,16 +1248,16 @@ export function AgingReportTable({
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {!isPublicView && totalPages > 1 && (
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--ui-border, #1e293b)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)' }}>
                     Showing {startIndex + 1}–{Math.min(endIndex, totalItems)} of {totalItems} records
                   </span>
                   <select
                     value={pageSize}
                     onChange={(e) => setPageSize(Number(e.target.value))}
-                    style={{ background: '#091426', border: '1px solid #1e293b', color: '#94a3b8', borderRadius: '6px', padding: '3px 8px', fontSize: '11px' }}
+                    style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-secondary, #94a3b8)', borderRadius: '6px', padding: '3px 8px', fontSize: '11px' }}
                   >
                     <option value={10}>10 per page</option>
                     <option value={25}>25 per page</option>
@@ -1988,9 +1272,9 @@ export function AgingReportTable({
                     disabled={safePage <= 1}
                     onClick={() => setCurrentPage((p) => p - 1)}
                     style={{
-                      background: '#091426',
-                      border: '1px solid #1e293b',
-                      color: safePage <= 1 ? '#475569' : '#94a3b8',
+                      background: 'var(--ui-inset, #091426)',
+                      border: '1px solid var(--ui-border, #1e293b)',
+                      color: safePage <= 1 ? '#475569' : 'var(--ui-secondary, #94a3b8)',
                       padding: '5px 12px',
                       borderRadius: '6px',
                       fontSize: '11px',
@@ -2000,7 +1284,7 @@ export function AgingReportTable({
                   >
                     ← Prev
                   </button>
-                  <span style={{ fontSize: '11px', color: '#f8fafc', padding: '5px 10px', fontWeight: 700 }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ui-text, #f8fafc)', padding: '5px 10px', fontWeight: 700 }}>
                     Page {safePage} of {totalPages}
                   </span>
                   <button
@@ -2008,9 +1292,9 @@ export function AgingReportTable({
                     disabled={safePage >= totalPages}
                     onClick={() => setCurrentPage((p) => p + 1)}
                     style={{
-                      background: '#091426',
-                      border: '1px solid #1e293b',
-                      color: safePage >= totalPages ? '#475569' : '#94a3b8',
+                      background: 'var(--ui-inset, #091426)',
+                      border: '1px solid var(--ui-border, #1e293b)',
+                      color: safePage >= totalPages ? '#475569' : 'var(--ui-secondary, #94a3b8)',
                       padding: '5px 12px',
                       borderRadius: '6px',
                       fontSize: '11px',
@@ -2024,6 +1308,131 @@ export function AgingReportTable({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ══ TAB 3: HIGH IMPACT INCIDENTS ══ */}
+      {activeTab === 'high-impact' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Admin-only: add form */}
+          {!isPublicView && (
+            <HighImpactInput
+              remarksRows={remarksData.rows}
+              routedIncidents={routedIncidents}
+              existingIds={highImpactIncidents.map((h) => h.requestId)}
+              accountName={accountName}
+              onAdd={(item) => {
+                const updated = [...highImpactIncidents, item];
+                setHighImpactIncidents(updated);
+                onSaveReport?.({ ...data, highImpactIncidents: updated });
+              }}
+            />
+          )}
+
+          {/* High Impact Incidents Table */}
+          {highImpactIncidents.length === 0 ? (
+            <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', padding: '20px 0', textAlign: 'center' }}>
+              No high impact incidents designated for this period.
+            </p>
+          ) : (
+            <div style={{ background: 'var(--ui-surface, #111c30)', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--ui-border, #1e293b)' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--ui-border, #1e293b)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Flame size={16} style={{ color: '#ef4444' }} aria-hidden="true" />
+                <span style={{ fontWeight: 700, fontSize: '13px', color: '#ef4444' }}>High Impact Incidents</span>
+                <span style={{ marginLeft: 'auto', background: '#dc2626', color: '#fff', borderRadius: '10px', padding: '1px 8px', fontSize: '11px', fontWeight: 700 }}>
+                  {highImpactIncidents.length}
+                </span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--ui-inset, #091426)', textAlign: 'left' }}>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', whiteSpace: 'nowrap' }}>Request ID</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Department</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Category</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', textAlign: 'center' }}>Aging Days</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Impact Level</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Reason</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Responsible</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Recent Update</th>
+                      {!isPublicView && <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)' }}>Added By</th>}
+                      {!isPublicView && <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', textAlign: 'center' }}>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {highImpactIncidents.map((item, idx) => {
+                      const impactColor =
+                        item.impactLevel === 'Critical' ? '#ef4444'
+                        : item.impactLevel === 'High' ? '#f97316'
+                        : item.impactLevel === 'Major' ? '#a855f7'
+                        : '#eab308';
+                      const impactEmoji =
+                        item.impactLevel === 'Critical' ? '🔴'
+                        : item.impactLevel === 'High' ? '🟠'
+                        : item.impactLevel === 'Major' ? '🟣'
+                        : '🟡';
+                      return (
+                        <tr
+                          key={item.requestId}
+                          style={{ borderTop: idx === 0 ? undefined : '1px solid var(--ui-border, #1e293b)', verticalAlign: 'top' }}
+                        >
+                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                            <RequestIdLink requestId={item.requestId} />
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>{item.department}</td>
+                          <td style={{ padding: '10px 12px' }}>{item.category}{item.subCategory ? ` / ${item.subCategory}` : ''}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: item.agingDays > 30 ? '#ef4444' : item.agingDays > 14 ? '#f97316' : 'inherit' }}>
+                            {item.agingDays}d
+                          </td>
+                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                            <span style={{ color: impactColor, fontWeight: 700 }}>{impactEmoji} {item.impactLevel}</span>
+                          </td>
+                          <td style={{ padding: '10px 12px', maxWidth: '220px' }}>{item.reason}</td>
+                          <td style={{ padding: '10px 12px' }}>{item.responsibleOrDependency}</td>
+                          <td style={{ padding: '10px 12px', maxWidth: '200px', fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)' }}>
+                            {item.recentUpdate || '—'}
+                          </td>
+                          {!isPublicView && (
+                            <td style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--ui-muted, #64748b)' }}>
+                              {item.addedBy || '—'}
+                            </td>
+                          )}
+                          {!isPublicView && (
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                title="Remove from High Impact"
+                                onClick={() => {
+                                  const updated = highImpactIncidents.filter((h) => h.requestId !== item.requestId);
+                                  setHighImpactIncidents(updated);
+                                  onSaveReport?.({ ...data, highImpactIncidents: updated });
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: 'rgba(239,68,68,0.1)',
+                                  border: '1px solid rgba(239,68,68,0.3)',
+                                  color: '#ef4444',
+                                  borderRadius: '6px',
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <Trash2 size={12} aria-hidden="true" /> Remove
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
