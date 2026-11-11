@@ -107,6 +107,24 @@ export async function persistAssignmentsBulk(assignments: StoredIncidentAssignme
   }
 }
 
+export async function fetchServerWeeklyReports(): Promise<Record<string, unknown>[]> {
+  try {
+    const response = await fetch('/api/reports/weekly', { cache: 'no-store' });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && Array.isArray(data.reports)) return data.reports;
+    }
+  } catch (error) { console.warn('Could not load weekly SLA reports:', error); }
+  return [];
+}
+
+export async function persistServerWeeklyReport(report: Record<string, unknown>): Promise<boolean> {
+  try {
+    const response = await fetch('/api/reports/weekly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) });
+    return response.ok;
+  } catch { return false; }
+}
+
 export async function fetchServerAgingReports(): Promise<Record<string, unknown>[]> {
   try {
     const res = await fetch('/api/reports/aging');

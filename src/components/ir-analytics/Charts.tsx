@@ -10,36 +10,41 @@ import type { DistributionBar, TimeSeriesPoint, AgingDistributionRow } from '@/t
 
 // ─── Color palettes ────────────────────────────────────────────────────────────
 
-const PALETTE = [
-  '#3b82f6', '#a78bfa', '#22c55e', '#f59e0b', '#ef4444',
-  '#0ea5e9', '#8b5cf6', '#10b981', '#f97316', '#ec4899',
-  '#06b6d4', '#84cc16', '#6366f1', '#14b8a6', '#f43f5e',
+export const CHART_COLORS = [
+  '#1d4ed8', '#6d28d9', '#08764c', '#995900', '#b91c1c',
+  '#03698b', '#9e2072', '#475569', '#a34213', '#3e701f',
+  '#006e68', '#4d55ad', '#6b4f34', '#831843', '#356079',
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  Open: '#3b82f6',
-  Pending: '#eab308',
-  'In-progress': '#f97316',
-  'In Progress': '#f97316',
-  'Work in Progress': '#f97316',
-  'Awaiting Problem': '#ec4899',
-  'On Hold': '#a855f7',
-  Resolved: '#22c55e',
-  Closed: '#10b981',
-  Cancelled: '#64748b',
-  Unknown: '#64748b',
+  Open: '#1d4ed8',
+  Pending: '#995900',
+  'In-progress': '#a34213',
+  'In Progress': '#a34213',
+  'Work in Progress': '#a34213',
+  'Awaiting Problem': '#9e2072',
+  'On Hold': '#6d28d9',
+  Resolved: '#3e701f',
+  Closed: '#08764c',
+  Cancelled: '#475569',
+  Unknown: '#475569',
 };
 
 const AGING_COLORS: Record<string, string> = {
-  '0–2 days': '#22c55e',
-  '3–6 days': '#84cc16',
-  '7–13 days': '#f59e0b',
-  '14–29 days': '#f97316',
-  '30+ days': '#ef4444',
-  'Resolved': '#64748b',
+  '0–2 days': '#08764c',
+  '3–6 days': '#3e701f',
+  '7–13 days': '#995900',
+  '14–29 days': '#a34213',
+  '30+ days': '#b91c1c',
+  'Resolved': '#475569',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export function analyticsChartColor(color: string) {
+  return `color-mix(in srgb, ${color} var(--analytics-series-strength, 100%), #e5f2ff)`;
+}
+const HOVER_FILTER = 'brightness(var(--analytics-hover-brightness, .8))';
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
@@ -83,9 +88,9 @@ export function BarChart({
     const totalH = displayData.length * (bHeight + gap) + 16;
 
     return (
-      <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div className="analytics-chart-card" style={{ background: 'var(--ui-surface, #111c30)', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <h3 style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ui-text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
             {title}
           </h3>
         </div>
@@ -94,7 +99,7 @@ export function BarChart({
             {displayData.map((d, i) => {
               const y = i * (bHeight + gap) + 4;
               const barW = Math.max(4, (d.value / maxVal) * chartW);
-              const color = colorMap?.[d.label] ?? PALETTE[i % PALETTE.length];
+              const color = analyticsChartColor(colorMap?.[d.label] ?? CHART_COLORS[i % CHART_COLORS.length]);
               const isHov = hoveredIdx === i;
               return (
                 <g
@@ -109,7 +114,7 @@ export function BarChart({
                     x={labelW - 8}
                     y={y + bHeight / 2 + 4}
                     textAnchor="end"
-                    fill={isHov ? '#38bdf8' : '#cbd5e1'}
+                    fill={isHov ? 'var(--ui-link, #38bdf8)' : 'var(--ui-secondary, #cbd5e1)'}
                     fontSize="10.5"
                     fontWeight={isHov ? '800' : '600'}
                   >
@@ -121,7 +126,7 @@ export function BarChart({
                     width={chartW}
                     height={bHeight}
                     rx="4"
-                    fill="rgba(15,23,42,0.8)"
+                    fill="var(--ui-inset, rgba(15,23,42,0.8))"
                   />
                   <rect
                     x={labelW}
@@ -130,14 +135,12 @@ export function BarChart({
                     height={bHeight}
                     rx="4"
                     fill={color}
-                    opacity={isHov ? 1 : hoveredIdx !== null ? 0.6 : 0.88}
-                    filter={isHov ? 'brightness(1.15)' : 'none'}
-                    style={{ transition: 'opacity 0.15s ease, filter 0.15s ease' }}
+                    filter={isHov ? HOVER_FILTER : undefined}
                   />
                   <text
                     x={labelW + barW + 6}
                     y={y + bHeight / 2 + 4}
-                    fill={isHov ? '#ffffff' : '#f8fafc'}
+                    fill={isHov ? 'var(--ui-text, #ffffff)' : 'var(--ui-text, #f8fafc)'}
                     fontSize="11"
                     fontWeight="800"
                   >
@@ -165,9 +168,9 @@ export function BarChart({
   const gap = (chartW / displayData.length) * 0.46;
 
   return (
-    <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <div className="analytics-chart-card" style={{ background: 'var(--ui-surface, #111c30)', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <h3 style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ui-text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
           {title}
         </h3>
       </div>
@@ -179,8 +182,8 @@ export function BarChart({
             const val = Math.round(maxVal * frac);
             return (
               <g key={frac}>
-                <line x1={padL} y1={y} x2={svgW - padR} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" strokeDasharray="3 3" />
-                <text x={padL - 6} y={y + 3.5} textAnchor="end" fill="#64748b" fontSize="9.5" fontWeight="600">{val}</text>
+                <line x1={padL} y1={y} x2={svgW - padR} y2={y} stroke="var(--ui-grid, rgba(255,255,255,0.06))" strokeWidth="1" strokeDasharray="3 3" />
+                <text x={padL - 6} y={y + 3.5} textAnchor="end" fill="var(--ui-muted, #64748b)" fontSize="9.5" fontWeight="600">{val}</text>
               </g>
             );
           })}
@@ -189,7 +192,7 @@ export function BarChart({
             const x = padL + i * (barW + gap) + gap / 2;
             const barH2 = Math.max(3, (d.value / maxVal) * chartH);
             const y = padT + chartH - barH2;
-            const color = colorMap?.[d.label] ?? PALETTE[i % PALETTE.length];
+            const color = analyticsChartColor(colorMap?.[d.label] ?? CHART_COLORS[i % CHART_COLORS.length]);
             const isHov = hoveredIdx === i;
             return (
               <g
@@ -207,15 +210,13 @@ export function BarChart({
                   height={barH2}
                   rx="4"
                   fill={color}
-                  opacity={isHov ? 1 : hoveredIdx !== null ? 0.6 : 0.88}
-                  filter={isHov ? 'brightness(1.18)' : 'none'}
-                  style={{ transition: 'opacity 0.15s ease, filter 0.15s ease' }}
+                  filter={isHov ? HOVER_FILTER : undefined}
                 />
                 <text
                   x={x + barW / 2}
                   y={y - 5}
                   textAnchor="middle"
-                  fill={isHov ? '#ffffff' : '#f8fafc'}
+                  fill={isHov ? 'var(--ui-text, #ffffff)' : 'var(--ui-text, #f8fafc)'}
                   fontSize={isHov ? '11.5' : '10.5'}
                   fontWeight="800"
                 >
@@ -225,7 +226,7 @@ export function BarChart({
                   x={x + barW / 2}
                   y={svgH - padB + 14}
                   textAnchor="middle"
-                  fill={isHov ? '#38bdf8' : '#94a3b8'}
+                  fill={isHov ? 'var(--ui-link, #38bdf8)' : 'var(--ui-secondary, #94a3b8)'}
                   fontSize="10"
                   fontWeight={isHov ? '800' : '600'}
                   transform={`rotate(-26, ${x + barW / 2}, ${svgH - padB + 14})`}
@@ -276,7 +277,15 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
     const iy2 = cy + innerR * Math.sin(endAngle);
     const largeArc = angle > Math.PI ? 1 : 0;
 
-    const path = [
+    const path = d.value === total ? [
+      `M ${cx} ${cy - r}`,
+      `A ${r} ${r} 0 1 1 ${cx} ${cy + r}`,
+      `A ${r} ${r} 0 1 1 ${cx} ${cy - r}`,
+      `M ${cx} ${cy - innerR}`,
+      `A ${innerR} ${innerR} 0 1 0 ${cx} ${cy + innerR}`,
+      `A ${innerR} ${innerR} 0 1 0 ${cx} ${cy - innerR}`,
+      'Z',
+    ].join(' ') : [
       `M ${x1} ${y1}`,
       `A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`,
       `L ${ix2} ${iy2}`,
@@ -284,7 +293,7 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
       'Z',
     ].join(' ');
 
-    const color = colorMap?.[d.label] ?? PALETTE[i % PALETTE.length];
+    const color = analyticsChartColor(colorMap?.[d.label] ?? CHART_COLORS[i % CHART_COLORS.length]);
 
     return { path, color, d, i };
   });
@@ -292,9 +301,9 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
   const hoveredSlice = hoveredIdx !== null ? slices[hoveredIdx] : null;
 
   return (
-    <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <div className="analytics-chart-card" style={{ background: 'var(--ui-surface, #111c30)', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <h3 style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ui-text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
           {title}
         </h3>
       </div>
@@ -305,8 +314,8 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
               key={sliceD.label}
               d={path}
               fill={color}
-              opacity={hoveredIdx === i ? 1 : 0.88}
-              stroke="#0d1a2e"
+              filter={hoveredIdx === i ? HOVER_FILTER : undefined}
+              stroke="var(--ui-surface)"
               strokeWidth="2"
               style={{ cursor: onSliceClick ? 'pointer' : 'default', transition: 'all 0.12s' }}
               onClick={() => onSliceClick?.(sliceD.ids ?? [], sliceD.label)}
@@ -315,10 +324,10 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
             />
           ))}
           {/* Center label */}
-          <text x={cx} y={cy - 2} textAnchor="middle" fill="#f8fafc" fontSize="17" fontWeight="900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <text x={cx} y={cy - 2} textAnchor="middle" fill="var(--ui-text, #f8fafc)" fontSize="17" fontWeight="900" style={{ fontVariantNumeric: 'tabular-nums' }}>
             {hoveredSlice ? hoveredSlice.d.value : total}
           </text>
-          <text x={cx} y={cy + 13} textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="600">
+          <text x={cx} y={cy + 13} textAnchor="middle" fill="var(--ui-secondary, #94a3b8)" fontSize="9" fontWeight="600">
             {hoveredSlice ? truncate(hoveredSlice.d.label, 9) : 'Total'}
           </text>
         </svg>
@@ -336,7 +345,7 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
                   cursor: onSliceClick ? 'pointer' : 'default',
                   padding: '2px 4px',
                   borderRadius: '4px',
-                  background: isHov ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  background: isHov ? 'var(--ui-wash, rgba(255,255,255,0.06))' : 'transparent',
                   transition: 'background 0.1s',
                 }}
                 onClick={() => onSliceClick?.(sliceD.ids ?? [], sliceD.label)}
@@ -347,19 +356,17 @@ export function DonutChart({ data, title, colorMap, onSliceClick }: DonutChartPr
                 <span style={{
                   fontSize: '11px',
                   fontWeight: isHov ? '700' : '500',
-                  color: isHov ? '#ffffff' : '#cbd5e1',
+                  color: isHov ? 'var(--ui-text, #ffffff)' : 'var(--ui-secondary, #cbd5e1)',
                   flex: 1,
                   minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  overflowWrap: 'anywhere',
                 }}>
                   {sliceD.label}
                 </span>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#f8fafc', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                   {sliceD.value}
                 </span>
-                <span style={{ fontSize: '9.5px', color: '#64748b', flexShrink: 0, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ fontSize: '9.5px', color: 'var(--ui-muted, #64748b)', flexShrink: 0, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                   {((sliceD.value / total) * 100).toFixed(0)}%
                 </span>
               </div>
@@ -381,10 +388,11 @@ interface LineChartProps {
   onPointClick?: (ids: string[], label: string) => void;
 }
 
-export function LineChart({ data, title, color = '#3b82f6', height = 210, onPointClick }: LineChartProps) {
+export function LineChart({ data, title, color: seriesColor = CHART_COLORS[0], height = 210, onPointClick }: LineChartProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   if (!data.length) return <EmptyChart title={title} />;
 
+  const color = analyticsChartColor(seriesColor);
   const svgW = 380;
   const svgH = height;
   const padL = 30;
@@ -412,9 +420,9 @@ export function LineChart({ data, title, color = '#3b82f6', height = 210, onPoin
   const hov = hoveredIdx !== null ? points[hoveredIdx] : null;
 
   return (
-    <div style={{ background: '#111c30', border: '1px solid #1e293b', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <div className="analytics-chart-card" style={{ background: 'var(--ui-surface, #111c30)', borderRadius: '14px', padding: '16px 16px', boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <h3 style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ui-text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
           {title}
         </h3>
       </div>
@@ -431,8 +439,8 @@ export function LineChart({ data, title, color = '#3b82f6', height = 210, onPoin
             const y = padT + chartH * (1 - frac);
             return (
               <g key={frac}>
-                <line x1={padL} y1={y} x2={svgW - padR} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" strokeDasharray="3 3" />
-                <text x={padL - 6} y={y + 3.5} textAnchor="end" fill="#64748b" fontSize="9.5" fontWeight="600">
+                <line x1={padL} y1={y} x2={svgW - padR} y2={y} stroke="var(--ui-grid, rgba(255,255,255,0.06))" strokeWidth="1" strokeDasharray="3 3" />
+                <text x={padL - 6} y={y + 3.5} textAnchor="end" fill="var(--ui-muted, #64748b)" fontSize="9.5" fontWeight="600">
                   {Math.round(maxVal * frac)}
                 </text>
               </g>
@@ -450,7 +458,7 @@ export function LineChart({ data, title, color = '#3b82f6', height = 210, onPoin
               cy={p.y}
               r={hoveredIdx === p.i ? 5.5 : 3}
               fill={hoveredIdx === p.i ? '#ffffff' : color}
-              stroke={hoveredIdx === p.i ? color : '#0d1a2e'}
+              stroke={hoveredIdx === p.i ? color : 'var(--ui-surface)'}
               strokeWidth="2"
               style={{ cursor: onPointClick ? 'pointer' : 'default', transition: 'all 0.12s' }}
               onClick={() => onPointClick?.(p.d.ids ?? [], p.d.label)}
@@ -467,15 +475,15 @@ export function LineChart({ data, title, color = '#3b82f6', height = 210, onPoin
                 width={76}
                 height={24}
                 rx="5"
-                fill="#1e293b"
-                stroke="#3b82f6"
+                fill="var(--ui-surface, #1e293b)"
+                stroke={color}
                 strokeWidth="1.5"
               />
               <text
                 x={Math.min(hov.x - 38, svgW - padR - 76) + 38}
                 y={hov.y - 14}
                 textAnchor="middle"
-                fill="#f8fafc"
+                fill="var(--ui-text, #f8fafc)"
                 fontSize="10.5"
                 fontWeight="800"
               >
@@ -495,7 +503,7 @@ export function LineChart({ data, title, color = '#3b82f6', height = 210, onPoin
                 x={p.x}
                 y={svgH - padB + 16}
                 textAnchor="middle"
-                fill="#94a3b8"
+                fill="var(--ui-secondary, #94a3b8)"
                 fontSize="9.5"
                 fontWeight="600"
               >
@@ -512,19 +520,18 @@ export function LineChart({ data, title, color = '#3b82f6', height = 210, onPoin
 
 function EmptyChart({ title }: { title: string }) {
   return (
-    <div style={{
-      background: '#111c30',
-      border: '1px solid #1e293b',
+    <div className="analytics-chart-card" style={{
+      background: 'var(--ui-surface, #111c30)',
       borderRadius: '16px',
       padding: '28px 20px',
       textAlign: 'center',
-      color: '#94a3b8',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+      color: 'var(--ui-secondary, #94a3b8)',
+      boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
     }}>
-      <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>{title}</h3>
+      <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>{title}</h3>
       <div style={{ fontSize: '32px', marginBottom: '10px' }}>📊</div>
-      <p style={{ fontSize: '13px', fontWeight: 600, color: '#cbd5e1' }}>No data available for this chart.</p>
-      <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Import data and apply filters to see results.</p>
+      <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ui-secondary, #cbd5e1)' }}>No data available for this chart.</p>
+      <p style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', marginTop: '4px' }}>Import data and apply filters to see results.</p>
     </div>
   );
 }

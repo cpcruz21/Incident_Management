@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useReducer, useCallback, useState, useEffect } from 'react';
-import { PinLogin } from '@/components/ui/PinLogin';
+import { AdminLogin } from '@/components/ui/AdminLogin';
 import { Dashboard } from '@/components/ui/Dashboard';
 import type { DashboardView } from '@/components/ui/Dashboard';
 import type { Account } from '@/lib/auth';
-import { isAdmin } from '@/lib/auth';
+
 import { appReducer, initialState } from '@/lib/store';
 import type { AppStep } from '@/lib/store';
-import { Stepper } from '@/components/ui/Stepper';
+import { incidentReportSteps, Stepper } from '@/components/ui/Stepper';
+import { ReportWorkflowHeader } from '@/components/report/ReportWorkflowHeader';
 import { FileUpload } from '@/components/upload/FileUpload';
 import { ValidationSummaryView } from '@/components/validation/ValidationSummary';
 import { RoutingPreview } from '@/components/routing/RoutingPreview';
@@ -22,7 +23,7 @@ import { MonthlyReportWorkflow } from '@/components/monthly/MonthlyReportWorkflo
 import { parseFile } from '@/lib/excel/parser';
 import { autoDetectMapping, mapAllRows } from '@/lib/excel/mapper';
 import { applyRouting } from '@/lib/routing/routing-engine';
-import { calculateSLAReport, splitIncidentsByWeek, calculateWeeklyCompletion } from '@/lib/sla/calculator';
+import { calculateSLAReport, calculateWeeklyCompletion } from '@/lib/sla/calculator';
 import { exportAsPng } from '@/lib/report/export';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
@@ -37,34 +38,20 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    try {
-      const stored = localStorage.getItem('smac_active_session');
-      if (stored) {
-        setCurrentAccount(JSON.parse(stored));
-      }
-    } catch { }
+    try { localStorage.removeItem('smac_active_session'); } catch { }
+    fetch('/api/auth/session', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => setCurrentAccount(result?.account || null))
+      .catch(() => setCurrentAccount(null))
+      .finally(() => setMounted(true));
   }, []);
 
   const handleLogin = useCallback((account: Account) => {
     setCurrentAccount(account);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('smac_active_session', JSON.stringify(account));
-      } catch { }
-    }
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    setCurrentAccount(null);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem('smac_active_session');
-      } catch { }
-    }
   }, []);
 
   const [activeView, setActiveView] = useState<DashboardView>('dashboard');
+  const [weeklyArchiveId, setWeeklyArchiveId] = useState<string>();
   const [agingStoredReport, setAgingStoredReport] = useState<{
     data: AgingReportData;
     incidents?: Incident[];
@@ -77,6 +64,7 @@ export default function HomePage() {
 
   const handleOpenStoredReport = useCallback((storedReport: StoredReport) => {
     if (storedReport.type === 'weekly') {
+      setWeeklyArchiveId(storedReport.id);
       dispatch({
         type: 'LOAD_STORED_REPORT',
         reportData: storedReport.reportData as WeeklyReportData,
@@ -109,16 +97,8 @@ export default function HomePage() {
 
       if (!result.success) {
         dispatch({ type: 'SET_ERROR', error: result.errors.join('. ') });
-        dispatch({ type: 'SET_PROCESSING', isProcessing: false });
         return;
       }
-
-      dispatch({
-        type: 'SET_FILE',
-        fileName: file.name,
-        rawData: result.data as Record<string, unknown>[],
-        columns: result.columns,
-      });
 
       // Auto-detect column mapping
       const detectedMapping = autoDetectMapping(result.columns);
@@ -126,10 +106,16 @@ export default function HomePage() {
         ...state.columnMapping,
         ...detectedMapping,
       };
-      dispatch({ type: 'SET_COLUMN_MAPPING', mapping: fullMapping });
-
       // Map and validate
       const { incidents, validationSummary } = mapAllRows(result.data, fullMapping);
+      setWeeklyArchiveId(undefined);
+      dispatch({
+        type: 'SET_FILE',
+        fileName: file.name,
+        rawData: result.data as Record<string, unknown>[],
+        columns: result.columns,
+      });
+      dispatch({ type: 'SET_COLUMN_MAPPING', mapping: fullMapping });
       dispatch({ type: 'SET_VALIDATION', incidents, summary: validationSummary });
 
       // Auto-advance to validation
@@ -153,18 +139,14 @@ export default function HomePage() {
 
   // PREVIOUS WEEK
   const handleProceedToPreviousWeek = useCallback(() => {
-    // Calculate SLA for all routed incidents in the raw dataset
-    const slaReport = calculateSLAReport(state.routedIncidents, REPORT_TEAMS);
-    dispatch({ type: 'SET_SLA_REPORT', report: slaReport });
-
-    // Transition to the manual input step for previous week SLA.
     dispatch({ type: 'SET_STEP', step: 'previous-week' });
-  }, [state.routedIncidents]);
+  }, []);
 
   //REPORT GENERATION 
   const handleGenerateReport = useCallback(() => {
-    const currentWeekReport = calculateSLAReport(state.routedIncidents, REPORT_TEAMS);
-    const weeklyCompletion = calculateWeeklyCompletion(state.routedIncidents);
+    const currentWeekReport = state.reportData?.currentWeek ?? calculateSLAReport(state.routedIncidents, REPORT_TEAMS);
+    const weeklyCompletion = state.reportData?.weeklyCompletion ?? calculateWeeklyCompletion(state.routedIncidents);
+    setWeeklyArchiveId((id) => id || `report-weekly-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
     const reportData: WeeklyReportData = {
       reportTitle: 'Closed Incident Weekly Report',
@@ -173,12 +155,12 @@ export default function HomePage() {
       currentWeek: currentWeekReport,
       previousWeek: state.previousWeekSLA,
       weeklyCompletion,
-      teamOrder: REPORT_TEAMS,
+      teamOrder: currentWeekReport.firstResponse.map(row => row.teamName),
     };
 
     dispatch({ type: 'SET_REPORT_DATA', data: reportData });
     dispatch({ type: 'SET_STEP', step: 'report' });
-  }, [state.routedIncidents, state.previousWeekSLA, state.reportPeriod]);
+  }, [state.routedIncidents, state.previousWeekSLA, state.reportPeriod, state.reportData]);
 
   //NAVIGATION
   const handleStepClick = useCallback((step: AppStep) => {
@@ -200,47 +182,60 @@ export default function HomePage() {
   }, []);
 
 
-  const [agingKey, setAgingKey] = useState<number>(Date.now());
+  const [agingKey, setAgingKey] = useState(0);
+  const [logoutError, setLogoutError] = useState('');
+
+  const handleLogout = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/session', { method: 'DELETE' });
+      if (!response.ok) throw new Error('Sign-out failed');
+      setCurrentAccount(null);
+      setActiveView('dashboard');
+      dispatch({ type: 'RESET' });
+      setAgingStoredReport(null);
+      setMonthlyStoredReport(null);
+      setLogoutError('');
+    } catch {
+      setLogoutError('Could not sign out. Try again.');
+    }
+  }, []);
 
   const handleSelectReport = useCallback((view: DashboardView) => {
     if (view === 'weekly') {
       dispatch({ type: 'RESET' });
+      setWeeklyArchiveId(undefined);
       setActiveView('weekly');
     } else if (view === 'aging') {
       setAgingStoredReport(null);
-      setAgingKey(Date.now());
+      setAgingKey((key) => key + 1);
       setActiveView('aging');
     } else {
+      if (view === 'monthly') setMonthlyStoredReport(null);
       setActiveView(view);
     }
   }, []);
 
-  // 1) Not logged in or mounting → PIN screen
-  if (!mounted || !currentAccount) {
-    return <PinLogin onLogin={handleLogin} />;
-  }
+  if (!mounted) return <main className="admin-login" role="status">Checking session...</main>;
+  if (!currentAccount) return <AdminLogin onLogin={handleLogin} />;
 
-  // 2) Dashboard
-  if (activeView === 'dashboard') {
-    return (
+  function workspace(content?: React.ReactNode) {
+    return currentAccount && (
       <Dashboard
         account={currentAccount}
+        activeView={activeView}
         onSelectReport={handleSelectReport}
         onOpenStoredReport={handleOpenStoredReport}
-        onLogout={() => {
-          handleLogout();
-          setActiveView('dashboard');
-          dispatch({ type: 'RESET' });
-          setAgingStoredReport(null);
-          setMonthlyStoredReport(null);
-        }}
-      />
+        onLogout={handleLogout}
+        logoutError={logoutError}
+      >
+        {content}
+      </Dashboard>
     );
   }
 
   // 3) Monthly Report Module
   if (activeView === 'monthly') {
-    return (
+    return workspace(
       <MonthlyReportWorkflow
         account={currentAccount}
         initialStoredReport={monthlyStoredReport}
@@ -255,9 +250,9 @@ export default function HomePage() {
 
   // 4) Aging Trends Module
   if (activeView === 'aging') {
-    return (
+    return workspace(
       <AgingReportWorkflow
-        key={agingStoredReport ? `stored-${Date.now()}` : `new-${agingKey}`}
+        key={agingStoredReport ? `stored-${agingStoredReport.data.reportId || agingStoredReport.data.generatedAt}` : `new-${agingKey}`}
         account={currentAccount}
         onBack={() => {
           setAgingStoredReport(null);
@@ -270,70 +265,42 @@ export default function HomePage() {
     );
   }
 
-  // 5) Weekly SLA Report (existing workflow)
-  return (
-    <main className="app-main">
-      {/* Header */}
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-brand">
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setActiveView('dashboard');
-                dispatch({ type: 'RESET' });
-              }}
-              style={{ marginRight: '0.5rem' }}
-              title="Back to dashboard"
-            >
-              ←
-            </button>
-            <span className="brand-icon">📊</span>
-            <div>
-              <h1 className="brand-title">Weekly Aging Incident Report</h1>
-              <p className="brand-subtitle">Transform raw incident data into accurate SLA reports</p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {state.fileName && (
-              <div className="header-file-info">
-                <span className="file-badge">📄 {state.fileName}</span>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => dispatch({ type: 'RESET' })}
-                >
-                  Reset
-                </button>
-              </div>
-            )}
-            {/* Logged-in user badge */}
-            <button
-              className="header-user-badge"
-              onClick={handleLogout}
-              title="Click to log out"
-            >
-              👤 {currentAccount.name}
-              {isAdmin(currentAccount) && (
-                <span className="badge-role">Admin</span>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
+  if (activeView !== 'weekly') return workspace();
 
-      {/* Stepper */}
-      <div className="stepper-container">
-        <Stepper
-          currentStep={state.currentStep}
-          onStepClick={handleStepClick}
-        />
-      </div>
+  // 5) Weekly SLA Report (existing workflow)
+  return workspace(
+    <main className="app-main">
+      <ReportWorkflowHeader
+        title="Weekly SLA Report"
+        fileName={state.fileName}
+        busy={state.isProcessing}
+        onBack={() => {
+          setActiveView('dashboard');
+          dispatch({ type: 'RESET' });
+        }}
+        onReset={() => {
+          dispatch({ type: 'RESET' });
+          setWeeklyArchiveId(undefined);
+        }}
+      />
+      <Stepper
+        steps={incidentReportSteps}
+        currentStep={state.currentStep}
+        onStepClick={handleStepClick}
+        busy={state.isProcessing}
+        availableSteps={[
+          'upload',
+          ...(state.validationSummary ? ['validation' as const] : []),
+          ...(state.routingSummary ? ['routing' as const, 'previous-week' as const] : []),
+          ...(state.reportData && !state.routingSummary ? ['previous-week' as const] : []),
+        ]}
+      />
 
       {/* Error Banner */}
       {state.error && (
-        <div className="error-banner">
-          <span>⚠️ {state.error}</span>
-          <button onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
+        <div className="error-banner report-workflow-error" role="alert">
+          <span>{state.error}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
         </div>
       )}
 
@@ -341,34 +308,24 @@ export default function HomePage() {
       <div className="app-content">
         {/* STEP 1: Upload */}
         {state.currentStep === 'upload' && (
-          <div className="step-content">
-            <div className="step-intro">
-              <h2>Upload Raw Incident Data</h2>
-              <p>
-                Upload your incident report file (XLSX or CSV) exported from ServiceDesk Plus or
-                similar system. The system will auto-detect columns and validate the data.
-              </p>
+          <section className="report-setup" aria-labelledby="report-setup-title">
+            <h2 id="report-setup-title">Report setup</h2>
+            <div className="report-setup-fields">
+              <div className="report-setup-field">
+                <label htmlFor="report-period">
+                  Report period <span>(optional)</span>
+                </label>
+                <input
+                  id="report-period"
+                  type="text"
+                  placeholder="e.g., September 29 - October 5, 2026"
+                  value={state.reportPeriod}
+                  onChange={(e) => dispatch({ type: 'SET_REPORT_PERIOD', period: e.target.value })}
+                />
+              </div>
             </div>
-            <FileUpload
-              onFileSelected={handleFileSelected}
-              isProcessing={state.isProcessing}
-            />
-
-            {/* Report Period Input */}
-            <div className="period-input-section">
-              <label htmlFor="report-period" className="period-label">
-                Report Period (optional)
-              </label>
-              <input
-                id="report-period"
-                type="text"
-                className="period-input"
-                placeholder="e.g., September 29 - October 5, 2026"
-                value={state.reportPeriod}
-                onChange={(e) => dispatch({ type: 'SET_REPORT_PERIOD', period: e.target.value })}
-              />
-            </div>
-          </div>
+            <FileUpload onFileSelected={handleFileSelected} isProcessing={state.isProcessing} />
+          </section>
         )}
 
         {/* STEP 2: Validation */}
@@ -393,8 +350,9 @@ export default function HomePage() {
         {state.currentStep === 'previous-week' && (
           <PreviousWeekInput
             initialValues={state.previousWeekSLA}
+            autoFill={!state.reportData}
             onSave={(values) => dispatch({ type: 'SET_PREVIOUS_WEEK', previousWeek: values })}
-            onBack={() => dispatch({ type: 'SET_STEP', step: 'routing' })}
+            onBack={() => dispatch({ type: 'SET_STEP', step: state.reportData ? 'report' : 'routing' })}
             onProceed={handleGenerateReport}
           />
         )}
@@ -407,19 +365,16 @@ export default function HomePage() {
                 <button
                   className="btn btn-secondary"
                   onClick={() => {
-                    if (!state.rawData) {
-                      setActiveView('dashboard');
-                    } else {
-                      dispatch({ type: 'SET_STEP', step: 'previous-week' });
-                    }
+                    dispatch({ type: 'SET_STEP', step: 'previous-week' });
                   }}
                 >
-                  {state.rawData ? '← Back' : '← Back to Dashboard'}
+                  Edit previous week
                 </button>
                 <button
                   className="btn btn-secondary"
                   onClick={() => {
                     dispatch({ type: 'RESET' });
+                    setWeeklyArchiveId(undefined);
                   }}
                   title="Create a new report from scratch"
                 >
@@ -441,6 +396,7 @@ export default function HomePage() {
               data={state.reportData}
               onCellClick={handleCellClick}
               routedIncidents={state.routedIncidents}
+              archiveId={weeklyArchiveId}
             />
           </div>
         )}
@@ -454,24 +410,6 @@ export default function HomePage() {
         onClose={() => dispatch({ type: 'CLOSE_DETAIL_MODAL' })}
       />
 
-      {/* Footer */}
-      <footer style={{
-        marginTop: '60px',
-        borderTop: '1px solid rgba(37,99,235,0.18)',
-        background: 'linear-gradient(180deg, #091426 0%, #050b16 100%)',
-        padding: '24px 20px',
-        textAlign: 'center',
-      }}>
-        <p style={{
-          margin: 0,
-          fontSize: '12px',
-          color: '#94a3b8',
-          letterSpacing: '0.02em',
-          fontWeight: 500,
-        }}>
-          &copy; 2026 Equitable Computer Services Inc. All rights reserved.
-        </p>
-      </footer>
     </main>
   );
 }

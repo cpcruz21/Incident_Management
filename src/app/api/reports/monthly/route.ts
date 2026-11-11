@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getAdminSession, requireAdmin } from '@/lib/server/auth';
+import { recordAudit } from '@/lib/server/audit';
+
 import {
   getServerStoredMonthlyReports,
   saveServerStoredMonthlyReport,
 } from '@/lib/server/storage';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
@@ -23,6 +28,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     if (!body || typeof body !== 'object') {
@@ -32,6 +39,7 @@ export async function POST(request: Request) {
       );
     }
     saveServerStoredMonthlyReport(body);
+    recordAudit(getAdminSession(), 'report.published', { type: 'monthly', id: typeof body.id === 'string' ? body.id : undefined });
     return NextResponse.json({
       success: true,
       message: 'Monthly report persisted to server successfully',

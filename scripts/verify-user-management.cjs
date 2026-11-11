@@ -1,0 +1,62 @@
+const assert = require('node:assert/strict');
+require('./register-typescript.cjs');
+require.extensions['.css'] = () => {};
+const { accountFormErrors, accountPasswordErrors } = require('../src/lib/users/account-form.ts');
+const { isValidPassword } = require('../src/lib/users/password-policy.ts');
+const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
+const { UserManagement } = require('../src/components/ui/UserManagement.tsx');
+const { Dashboard } = require('../src/components/ui/Dashboard.tsx');
+
+assert.deepEqual(accountFormErrors(' Jamie Santos ', ' jsantos ', []), {});
+assert.ok(accountFormErrors('', 'jsantos', []).name);
+assert.ok(accountFormErrors('a'.repeat(101), 'jsantos', []).name);
+assert.ok(accountFormErrors('Jamie Santos', '', []).username);
+for (const username of ['ab', 'a'.repeat(65), 'jamie santos', '<script>', 'jamie@santos']) {
+  assert.ok(accountFormErrors('Jamie Santos', username, []).username, username);
+}
+assert.ok(accountFormErrors('Jamie Santos', ' SUPER-ADMIN ', []).username);
+assert.ok(accountFormErrors('Jamie Santos', 'Jamie.Santos', ['JAMIE.SANTOS']).username);
+assert.deepEqual(accountFormErrors('Jamie Santos', 'jamie_santos-2', []), {});
+assert.ok(accountPasswordErrors('short', 'short').password);
+assert.ok(accountPasswordErrors('a'.repeat(257), 'a'.repeat(257)).password);
+assert.ok(accountPasswordErrors('long-enough-password', 'different-password').confirmation);
+assert.deepEqual(accountPasswordErrors('  custom password!  ', '  custom password!  '), {});
+assert.deepEqual(accountPasswordErrors('Abcdef!1', 'Abcdef!1'), {});
+for (const password of ['Abcde!1', 'Abcdefgh', '1234567!', 'Abcdefg ', 'a'.repeat(256) + '!']) assert.equal(isValidPassword(password), false, password);
+assert.equal(isValidPassword('密碼測試安全!1'), true);
+assert.equal(isValidPassword('Aa!0123456789abcdef'), true);
+
+const account = { id: 'test-owner', name: 'Test Owner', username: 'test.owner', role: 'super-admin' };
+const owner = renderToStaticMarkup(React.createElement(UserManagement, { account }));
+assert.match(owner, /New account/);
+assert.match(owner, /Accounts/);
+assert.match(owner, /Search name or username/);
+assert.match(owner, /administrator access/);
+assert.match(owner, /Confirm password/);
+assert.match(owner, /name="password"/);
+assert.match(owner, /Full name/);
+assert.match(owner, /name="name"/);
+assert.doesNotMatch(owner, /Generated password|Copy sign-in details|password is generated/);
+assert.doesNotMatch(owner, /Change password/); // personal settings have their own page
+assert.match(owner, /Loading accounts/);
+const admin = renderToStaticMarkup(React.createElement(UserManagement, { account: { ...account, role: 'admin' } }));
+assert.doesNotMatch(admin, /New account|Search name or username/);
+assert.match(admin, /Account Settings/);
+assert.match(admin, /Change password/);
+assert.match(admin, /aria-label="My account"/);
+const workspaceProps = { account, activeView: 'audit', onSelectReport() {}, onOpenStoredReport() {}, onLogout() {}, logoutError: '' };
+const auditModule = renderToStaticMarkup(React.createElement(Dashboard, workspaceProps));
+assert.match(auditModule, /Audit Logs/);
+assert.match(auditModule, /Audit log/);
+assert.doesNotMatch(auditModule, /New account/);
+const restricted = renderToStaticMarkup(React.createElement(Dashboard, { ...workspaceProps, account: { ...account, role: 'admin' } }));
+assert.doesNotMatch(restricted, /Audit Logs|Audit log/);
+assert.doesNotMatch(owner, /Audit log/);
+const personal = renderToStaticMarkup(React.createElement(Dashboard, { ...workspaceProps, activeView: 'account' }));
+assert.match(personal, /<h1>Account Settings<\/h1>/);
+assert.match(personal, /Change password/);
+assert.doesNotMatch(personal, /New account|Search name or username/);
+assert.doesNotMatch(personal, /admin-toolbar/);
+assert.doesNotMatch(personal, /admin-theme-control|aria-label="Dark mode"/);
+console.log('User Management verified: separate name and username, password validation, duplicate/reserved usernames, and role visibility. No real accounts created.');

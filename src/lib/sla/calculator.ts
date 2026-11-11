@@ -2,6 +2,9 @@ import type { Incident } from '@/types/incident';
 import type { TeamSLAResult, SLAReport, WeeklyCompletion } from '@/types/sla';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import { toValidDate, isCreatedOutsideOfficeHours, isISSTeam } from '@/lib/aging/calculator';
+import { getImportedSLAStatus } from './status';
+import { getIncidentTeam, getReportTeamOrder } from '@/lib/report/teams';
+export { isStatusOverdue } from './status';
 
 
 export type PriorityLevel = 'P1' | 'P2' | 'P3' | 'P4';
@@ -104,37 +107,6 @@ export function getBusinessMinutes(start: Date, end: Date): number {
   return totalMinutes;
 }
 
-// Ticket validation
-export function isStatusOverdue(value: unknown): boolean | null {
-  if (value === undefined || value === null) return null;
-  const str = String(value).trim().toLowerCase();
-  if (str === '') return null;
-
-  if (
-    str === 'true' ||
-    str === 'yes' ||
-    str === 'overdue' ||
-    str === 'breached' ||
-    str === 'failed' ||
-    str === '1'
-  ) {
-    return true; // Overdue = true (SLA Failed)
-  }
-  if (
-    str === 'false' ||
-    str === 'no' ||
-    str === 'met' ||
-    str === 'passed' ||
-    str === 'pass' ||
-    str === 'complied' ||
-    str === 'compliant' ||
-    str === '0'
-  ) {
-    return false; // Overdue = false (SLA Passed)
-  }
-  return null;
-}
-
 /**
  * Evaluates First Response SLA for an incident.
  * For non-ISS teams: if the ticket was created outside office hours (before 8:30 AM or after 5:30 PM)
@@ -146,6 +118,8 @@ export function evaluateFirstResponseOverdue(
   teamName: string,
   referenceDate: Date = new Date()
 ): boolean {
+  if (inc.acceptableFirstResponseApproval) return false;
+
   const iss = isISSTeam(teamName, inc);
 
   // For non-ISS teams: tickets created outside office hours or on weekends
@@ -155,19 +129,9 @@ export function evaluateFirstResponseOverdue(
   }
 
   // 1. Check raw SDP status
-  const rawStatus = isStatusOverdue(inc.rawFirstResponseStatus);
+  const rawStatus = getImportedSLAStatus(inc, 'firstResponse');
   if (rawStatus !== null) {
     return rawStatus;
-  }
-
-  // Check in rawData if mapping missed it
-  if (inc.rawData) {
-    for (const [key, val] of Object.entries(inc.rawData)) {
-      if (/first\s*response.*(overdue|status|sla)/i.test(key)) {
-        const s = isStatusOverdue(val);
-        if (s !== null) return s;
-      }
-    }
   }
 
   // 2. Compute from timestamps using SLA matrix
@@ -198,19 +162,9 @@ export function evaluateResolutionOverdue(
   referenceDate: Date = new Date()
 ): boolean {
   // 1. Check raw SDP status
-  const rawStatus = isStatusOverdue(inc.rawResolutionStatus);
+  const rawStatus = getImportedSLAStatus(inc, 'resolution');
   if (rawStatus !== null) {
     return rawStatus;
-  }
-
-  // Check in rawData if mapping missed it
-  if (inc.rawData) {
-    for (const [key, val] of Object.entries(inc.rawData)) {
-      if (/^(overdue\s*status|resolution\s*overdue|resolution\s*sla|resolution\s*status)/i.test(key)) {
-        const s = isStatusOverdue(val);
-        if (s !== null) return s;
-      }
-    }
   }
 
   // 2. Compute from timestamps using SLA matrix (24/7 calendar elapsed minutes)
@@ -232,7 +186,6 @@ function calculateFirstResponseSLA(teamName: string, incidents: Incident[]): Tea
 
   for (const inc of incidents) {
     const isOverdue = evaluateFirstResponseOverdue(inc, teamName);
-    inc.firstResponseOverdue = isOverdue;
 
     if (isOverdue) {
       failedIncidentIds.push(inc.requestId);
@@ -265,7 +218,6 @@ function calculateResolutionSLA(teamName: string, incidents: Incident[]): TeamSL
 
   for (const inc of incidents) {
     const isOverdue = evaluateResolutionOverdue(inc);
-    inc.resolutionOverdue = isOverdue;
 
     if (isOverdue) {
       failedIncidentIds.push(inc.requestId);
@@ -303,9 +255,9 @@ function calculateTotalRow(teamResults: TeamSLAResult[]): TeamSLAResult {
     totalIncidents += result.total;
     totalFailed += result.failed;
     totalPassed += result.passed;
-    allIncidentIds.push(...result.incidentIds);
-    allFailedIds.push(...result.failedIncidentIds);
-    allPassedIds.push(...result.passedIncidentIds);
+    for (const id of result.incidentIds) allIncidentIds.push(id);
+    for (const id of result.failedIncidentIds) allFailedIds.push(id);
+    for (const id of result.passedIncidentIds) allPassedIds.push(id);
   }
 
   const slaPassRate = totalIncidents > 0 ? (totalPassed / totalIncidents) * 100 : null;
@@ -327,7 +279,7 @@ function groupByTeam(incidents: Incident[]): Record<string, Incident[]> {
   const groups: Record<string, Incident[]> = {};
 
   for (const inc of incidents) {
-    const team = inc.assignedTeam;
+    const team = getIncidentTeam(inc);
     if (!groups[team]) {
       groups[team] = [];
     }
@@ -347,7 +299,7 @@ export function calculateSLAReport(
   const firstResponse: TeamSLAResult[] = [];
   const resolutionTime: TeamSLAResult[] = [];
 
-  for (const team of teamOrder) {
+  for (const team of getReportTeamOrder(incidents, teamOrder)) {
     const teamIncidents = grouped[team] || [];
     firstResponse.push(calculateFirstResponseSLA(team, teamIncidents));
     resolutionTime.push(calculateResolutionSLA(team, teamIncidents));

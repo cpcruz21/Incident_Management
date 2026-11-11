@@ -1,16 +1,20 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { EquicomLogoFilter } from '@/components/ui/EquicomLogoFilter';
 import './globals.css';
+import './theme.css';
+import './report-workflow.css';
+import './admin-light.css';
+import './monthly-report.css';
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
+const isUat = process.env.SMAC_UAT === 'true';
 
 export const metadata: Metadata = {
-  title: 'Weekly SLA Report Generator',
-  description: 'Transform raw incident data into pixel-accurate weekly SLA reports automatically.',
+  title: isUat ? 'SMAC Reporting | UAT' : 'SMAC Reporting',
+  description: 'Incident management and reporting workspace.',
+  robots: isUat ? { index: false, follow: false } : undefined,
 };
+
+export const viewport: Viewport = { colorScheme: 'light' };
 
 export default function RootLayout({
   children,
@@ -18,8 +22,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+    <html lang="en">
+      <body>
+        {isUat && <div className="uat-notice">UAT · Use synthetic test data only</div>}
+        <EquicomLogoFilter />{children}
+      </body>
     </html>
   );
 }

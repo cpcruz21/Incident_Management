@@ -11,31 +11,33 @@ import type {
 } from '@/types/aging';
 import { AGING_BUCKET_ORDER } from '@/types/aging';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
+import { getIncidentTeam, getReportTeamOrder } from '@/lib/report/teams';
 
 
 
 // Helper to safely convert any Date, string, or number to a valid Date object
 export function toValidDate(val: unknown): Date | null {
-  if (!val) return null;
+  if (val === undefined || val === null || val === '' || typeof val === 'boolean') return null;
   if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
   if (typeof val === 'number') {
     // Excel numeric date (days since Dec 30, 1899)
     if (val > 20000 && val < 60000) {
       const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-      if (!isNaN(d.getTime())) return d;
+      if (!isNaN(d.getTime())) return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
     }
+    if (!Number.isFinite(val) || Math.abs(val) < 100000000000) return null;
+    const timestamp = new Date(val);
+    return isNaN(timestamp.getTime()) ? null : timestamp;
   }
 
   const strVal = String(val).trim();
   if (!strVal || strVal === 'Not Assigned' || strVal === '—' || strVal === '-') return null;
 
-  // Try direct Date constructor
-  const d = new Date(strVal);
-  if (!isNaN(d.getTime())) return d;
+  if (/^\d+(?:\.\d+)?$/.test(strVal) && Number(strVal) > 20000 && Number(strVal) < 60000) return toValidDate(Number(strVal));
 
   // Match formats: DD-MM-YYYY, MM-DD-YYYY, or YYYY-MM-DD with / or -
   const match = strVal.match(
-    /^(\d{1,4})[-/](\d{1,2})[-/](\d{1,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?)?/i
+    /^(\d{1,4})[-/](\d{1,2})[-/](\d{1,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?)?$/i
   );
   if (match) {
     const [, p1, p2, p3, hourStr, minStr, secStr, ampm] = match;
@@ -72,15 +74,22 @@ export function toValidDate(val: unknown): Date | null {
     const sec = parseInt(secStr || '0', 10);
 
     if (ampm) {
+      if (hour < 1 || hour > 12) return null;
       if (ampm.toUpperCase() === 'PM' && hour < 12) hour += 12;
       if (ampm.toUpperCase() === 'AM' && hour === 12) hour = 0;
     }
 
+    if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate() || hour > 23 || min > 59 || sec > 59) return null;
     const parsed = new Date(year, month - 1, day, hour, min, sec);
     if (!isNaN(parsed.getTime())) return parsed;
+    return null;
   }
 
-  return null;
+  // Zoned ISO timestamps and named-month formats retain their explicit timezone.
+  const iso = strVal.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (iso && (Number(iso[2]) < 1 || Number(iso[2]) > 12 || Number(iso[3]) < 1 || Number(iso[3]) > new Date(Number(iso[1]), Number(iso[2]), 0).getDate())) return null;
+  const parsed = new Date(strVal);
+  return isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**
@@ -142,12 +151,11 @@ function classifyAge(createdTime: unknown, referenceDate: unknown): AgingBucket 
   const ref = toValidDate(referenceDate) || new Date();
   if (!created) return 'sameday';
 
-  const diffMs = ref.getTime() - created.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const diffDays = calculateAgingDays(created, ref);
 
   if (diffDays > 30) return '>1month';
-  if (diffDays > 14) return '2-4weeks';
-  if (diffDays > 7) return '1-2weeks';
+  if (diffDays >= 14) return '2-4weeks';
+  if (diffDays >= 7) return '1-2weeks';
   if (diffDays > 3) return '4-6days';
   if (diffDays > 0) return '1-3days';
   return 'sameday';
@@ -160,29 +168,17 @@ export function filterOpenIncidents(incidents: Incident[]): Incident[] {
     let statusText = (inc.requestStatus || '').toLowerCase().trim();
     if (!statusText && inc.rawData) {
       for (const [k, v] of Object.entries(inc.rawData)) {
-        if (/request\s*status|status/i.test(k)) {
+        if (/^(request\s*status|ticket\s*status|status)$/i.test(k.trim())) {
           statusText = String(v ?? '').toLowerCase().trim();
           if (statusText) break;
         }
       }
     }
 
-    // Explicitly closed / resolved / cancelled statuses are NOT open
-    if (
-      statusText.includes('close') ||
-      statusText.includes('resolve') ||
-      statusText.includes('cancel') ||
-      statusText.includes('completed')
-    ) {
-      return false;
-    }
-
-    // If marked completed with a valid date and no open status override, it is closed
-    if (inc.completedTime && !statusText.includes('open') && !statusText.includes('pending') && !statusText.includes('progress')) {
-      return false;
-    }
-
-    return true;
+    // The imported request status wins, including reopened/assigned/unresolved tickets
+    // that still carry an earlier completion timestamp.
+    if (statusText) return !/^(closed?|resolved?|completed?|cancelled|canceled)\b/.test(statusText);
+    return !toValidDate(inc.completedTime);
   });
 }
 
@@ -217,14 +213,14 @@ export function calculateAgingDistribution(
   // Group incidents by team
   const grouped: Record<string, Incident[]> = {};
   for (const inc of incidents) {
-    const team = inc.assignedTeam;
+    const team = getIncidentTeam(inc);
     if (!grouped[team]) grouped[team] = [];
     grouped[team].push(inc);
   }
 
   const results: TeamAgingResult[] = [];
 
-  for (const team of teamOrder) {
+  for (const team of getReportTeamOrder(incidents, teamOrder)) {
     const teamIncidents = grouped[team] || [];
     const buckets = createEmptyBuckets();
     const bucketIncidentIds = createEmptyBucketIds();
@@ -264,7 +260,7 @@ export function calculateAgingSLA(
 ): { rows: AgingSLARow[]; totals: AgingSLATotals } {
   const grouped: Record<string, Incident[]> = {};
   for (const inc of incidents) {
-    const team = inc.assignedTeam;
+    const team = getIncidentTeam(inc);
     if (!grouped[team]) grouped[team] = [];
     grouped[team].push(inc);
   }
@@ -276,7 +272,7 @@ export function calculateAgingSLA(
   let grandRTFailed = 0;
   let grandRTPassed = 0;
 
-  for (const team of teamOrder) {
+  for (const team of getReportTeamOrder(incidents, teamOrder)) {
     const teamIncidents = grouped[team] || [];
     const totalIRs = teamIncidents.length;
 
@@ -428,13 +424,14 @@ export function splitAgingByWeek(
   return { currentWeek, previousWeek };
 }
 
-/** Calculate exact aging days between incident creation date and reference date */
+/** Calendar aging days, shared by distribution buckets and the Remarks table. */
 export function calculateAgingDays(createdTime: unknown, referenceDate: unknown = new Date()): number {
   const created = toValidDate(createdTime);
   const ref = toValidDate(referenceDate) || new Date();
   if (!created) return 0;
-  const diffMs = ref.getTime() - created.getTime();
-  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  const createdDay = Date.UTC(created.getFullYear(), created.getMonth(), created.getDate());
+  const referenceDay = Date.UTC(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  return Math.max(0, Math.round((referenceDay - createdDay) / (1000 * 60 * 60 * 24)));
 }
 
 /**

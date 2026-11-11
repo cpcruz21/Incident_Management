@@ -105,7 +105,7 @@ export function ValidationSummaryView({
           <div className="validation-issues">
             {summary.errors.slice(0, 20).map((err, i) => (
               <div key={i} className="issue-row issue-error">
-                <span className="issue-id">{err.requestId}</span>
+                <span className="issue-id request-id-highlight">{err.requestId}</span>
                 <span className="issue-messages">{err.messages.join(', ')}</span>
               </div>
             ))}
@@ -123,7 +123,7 @@ export function ValidationSummaryView({
           <div className="validation-issues">
             {summary.warnings.slice(0, 10).map((warn, i) => (
               <div key={i} className="issue-row issue-warning">
-                <span className="issue-id">{warn.requestId}</span>
+                <span className="issue-id request-id-highlight">{warn.requestId}</span>
                 <span className="issue-messages">{warn.messages.join(', ')}</span>
               </div>
             ))}

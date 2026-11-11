@@ -46,14 +46,6 @@ export function RoutingPreview({ summary, onProceed, onBack }: RoutingPreviewPro
               Verify auto-assigned group and final team resolution based on Category, Sub Category, and Item.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button className="btn btn-secondary btn-sm" onClick={onBack}>
-              ← Back to Validation
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={onProceed}>
-              Proceed to SLA Report →
-            </button>
-          </div>
         </div>
       </div>
 
@@ -152,7 +144,7 @@ export function RoutingPreview({ summary, onProceed, onBack }: RoutingPreviewPro
             ) : (
               filteredResults.map((r) => (
                 <tr key={r.requestId} className={r.wasReassigned ? 'row-reassigned' : ''}>
-                  <td className="cell-id">{r.requestId}</td>
+                  <td className="cell-id"><span className="request-id-highlight">{r.requestId}</span></td>
                   <td style={{ color: 'var(--text-secondary)' }}>{r.sourceTeam}</td>
                   <td style={{ fontWeight: 500 }}>{r.category}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{r.subCategory || '-'}</td>

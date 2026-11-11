@@ -1,0 +1,9 @@
+simulation: sdp-links
+routing: path
+mocks:
+  - name: sdp-and-oauth
+    routeKey: sdp
+    origin:
+      - equicom.sdpondemand.manageengine.com
+      - accounts.zoho.com
+    path: postman/mocks/sdp

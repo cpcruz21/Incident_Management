@@ -1,26 +1,12 @@
-export type AccountRole = 'admin';
+export type AccountRole = 'super-admin' | 'admin';
 
 export interface Account {
   id: string;
   name: string;
   role: AccountRole;
-  pin: string;
-}
-
-export const ACCOUNTS: Account[] = [
-  {
-    id: 'smac-admin',
-    name: 'SMAC',
-    role: 'admin',
-    pin: '1234',
-  },
-];
-
-// helpers
-export function findAccountByPin(pin: string): Account | null {
-  return ACCOUNTS.find((a) => a.pin === pin) ?? null;
+  username: string;
 }
 
 export function isAdmin(account: Account | null): boolean {
-  return account?.role === 'admin';
+  return account?.role === 'admin' || account?.role === 'super-admin';
 }

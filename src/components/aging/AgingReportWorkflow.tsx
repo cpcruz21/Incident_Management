@@ -2,10 +2,11 @@
 
 import React, { useReducer, useCallback } from 'react';
 import type { Account } from '@/lib/auth';
-import { isAdmin } from '@/lib/auth';
+
 import { agingReducer, agingInitialState } from '@/lib/aging-store';
 import type { AgingStep } from '@/lib/aging-store';
-import { AgingStepper } from '@/components/aging/AgingStepper';
+import { incidentReportSteps, Stepper } from '@/components/ui/Stepper';
+import { ReportWorkflowHeader } from '@/components/report/ReportWorkflowHeader';
 import { FileUpload } from '@/components/upload/FileUpload';
 import { ValidationSummaryView } from '@/components/validation/ValidationSummary';
 import { RoutingPreview } from '@/components/routing/RoutingPreview';
@@ -17,16 +18,9 @@ import { DetailModal } from '@/components/report/DetailModal';
 import { parseFile } from '@/lib/excel/parser';
 import { autoDetectMapping, mapAllRows } from '@/lib/excel/mapper';
 import { applyRouting } from '@/lib/routing/routing-engine';
-import {
-  calculateAgingSLA,
-  calculateAgingDistribution,
-  calculatePreviousWeekAging,
-  splitAgingByWeek,
-  filterOpenIncidents,
-  buildRemarksTableData,
-} from '@/lib/aging/calculator';
+import { buildRemarksTableData, toValidDate } from '@/lib/aging/calculator';
+import { createAgingReport, loadPreviousAgingReport } from '@/lib/aging/report';
 import { exportAsPng } from '@/lib/report/export';
-import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
 import type { ColumnMapping, Incident } from '@/types/incident';
 import type { AgingReportData } from '@/types/aging';
@@ -62,6 +56,7 @@ export function AgingReportWorkflow({
           ...baseState,
           currentStep: 'report' as AgingStep,
           reportData: populatedData,
+          previousWeekAging: populatedData.previousWeek,
           routedIncidents: initialRoutedIncidents || [],
           incidents: initialRoutedIncidents || [],
         };
@@ -119,53 +114,46 @@ export function AgingReportWorkflow({
   }, [state.incidents, state.routingConfig]);
 
   // PREVIOUS WEEK
-  const handleProceedToPreviousWeek = useCallback(() => {
-    // Instead of auto-calculating, just transition to the manual input step.
-    // The previous week aging form state will just start with empty (null) values.
-    dispatch({ type: 'SET_STEP', step: 'previous-week' });
+  const handleProceedToPreviousWeek = useCallback(async () => {
+    dispatch({ type: 'SET_PROCESSING', isProcessing: true });
+    dispatch({ type: 'SET_ERROR', error: null });
+    try {
+      const previousWeek = await loadPreviousAgingReport();
+      dispatch({ type: 'SET_PREVIOUS_WEEK', previousWeek });
+      dispatch({ type: 'SET_STEP', step: 'previous-week' });
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', error: error instanceof Error ? error.message : 'Could not load the last saved Aging report.' });
+    } finally {
+      dispatch({ type: 'SET_PROCESSING', isProcessing: false });
+    }
   }, []);
 
   //REPORT GENERATION 
-  const handleGenerateReport = useCallback(() => {
-    // Current week incidents (for aging we just want the whole dataset effectively)
-    const { currentWeek } = splitAgingByWeek(state.routedIncidents);
-    
-    // Find the latest created time in the dataset to use as the reference date ("today" for the report)
-    let maxDate = new Date(0);
-    for (const inc of currentWeek) {
-      if (inc.createdTime && inc.createdTime > maxDate) maxDate = inc.createdTime;
+  const handleGenerateReport = useCallback(async () => {
+    if (state.isProcessing) return;
+    if (!state.rawData && state.reportData) {
+      dispatch({ type: 'SET_REPORT_DATA', data: { ...state.reportData, previousWeek: state.previousWeekAging } });
+      dispatch({ type: 'SET_STEP', step: 'report' });
+      return;
     }
-    const referenceDate = maxDate.getTime() === 0 ? new Date() : maxDate;
-
-    // Both tables for Aging IR should use only OPEN incidents!
-    const currentWeekOpen = filterOpenIncidents(currentWeek);
-    
-    // SLA logic for Aging IR uses only open incidents, measured against referenceDate
-    const { rows: slaRows, totals: slaTotals } = calculateAgingSLA(currentWeekOpen, REPORT_TEAMS, referenceDate);
-    
-    // Aging Distribution logic uses only OPEN incidents, measured against referenceDate
-    const agingRows = calculateAgingDistribution(currentWeekOpen, REPORT_TEAMS, referenceDate);
-    const agingGrandTotal = agingRows.reduce((acc, row) => acc + row.totalAging, 0);
-
-    // Remarks Table for all open aging incidents (limit removed)
-    const remarksTable = buildRemarksTableData(state.routedIncidents, referenceDate, state.reportPeriod);
-
-    const reportData: AgingReportData = {
-      reportTitle: 'Aging Incident Report',
-      reportPeriod: state.reportPeriod || `Week of ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
-      generatedAt: new Date(),
-      slaRows,
-      slaTotals,
-      agingRows,
-      agingGrandTotal,
-      previousWeek: state.previousWeekAging,
-      remarksTable,
-      teamOrder: REPORT_TEAMS,
-    };
-
-    dispatch({ type: 'SET_REPORT_DATA', data: reportData });
-    dispatch({ type: 'SET_STEP', step: 'report' });
-  }, [state.routedIncidents, state.previousWeekAging, state.reportPeriod]);
+    dispatch({ type: 'SET_PROCESSING', isProcessing: true });
+    dispatch({ type: 'SET_ERROR', error: null });
+    try {
+      const reportData = await createAgingReport(
+        state.routedIncidents,
+        state.reportPeriod,
+        state.reportData || state.previousWeekAging.sourceReportId ? state.previousWeekAging : undefined,
+        state.reportAsOf ? toValidDate(state.reportAsOf)! : new Date()
+      );
+      dispatch({ type: 'SET_PREVIOUS_WEEK', previousWeek: reportData.previousWeek });
+      dispatch({ type: 'SET_REPORT_DATA', data: reportData });
+      dispatch({ type: 'SET_STEP', step: 'report' });
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', error: error instanceof Error ? error.message : 'Could not load the last saved Aging report.' });
+    } finally {
+      dispatch({ type: 'SET_PROCESSING', isProcessing: false });
+    }
+  }, [state.routedIncidents, state.previousWeekAging, state.reportPeriod, state.reportAsOf, state.rawData, state.reportData, state.isProcessing]);
 
   //NAVIGATION
   const handleStepClick = useCallback((step: AgingStep) => {
@@ -213,84 +201,59 @@ export function AgingReportWorkflow({
 
   return (
     <main className={`app-main ${state.currentStep === 'report' ? 'aging-fullscreen-dashboard' : ''}`}>
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-brand">
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={onBack}
-              style={{ marginRight: '0.5rem' }}
-              title="Back to dashboard"
-            >
-              ←
-            </button>
-            <span className="brand-icon">📈</span>
-            <div>
-              <h1 className="brand-title">Aging Trends Module</h1>
-              <p className="brand-subtitle">Analyze open incidents and SLA compliance</p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {state.fileName && (
-              <div className="header-file-info">
-                <span className="file-badge">📄 {state.fileName}</span>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => dispatch({ type: 'RESET' })}
-                >
-                  Reset
-                </button>
-              </div>
-            )}
-            <button className="header-user-badge">
-              👤 {account.name}
-              {isAdmin(account) && (
-                <span className="badge-role">Admin</span>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="stepper-container">
-        <AgingStepper
-          currentStep={state.currentStep}
-          onStepClick={handleStepClick}
-        />
-      </div>
+      <ReportWorkflowHeader
+        title="Aging Incident Report"
+        fileName={state.fileName}
+        busy={state.isProcessing}
+        onBack={onBack}
+        onReset={() => dispatch({ type: 'RESET' })}
+      />
+      <Stepper
+        steps={incidentReportSteps}
+        currentStep={state.currentStep}
+        onStepClick={handleStepClick}
+        busy={state.isProcessing}
+        availableSteps={[
+          'upload',
+          ...(state.validationSummary ? ['validation' as const] : []),
+          ...(state.routingSummary ? ['routing' as const, 'previous-week' as const] : []),
+        ]}
+      />
 
       {state.error && (
-        <div className="error-banner">
-          <span>⚠️ {state.error}</span>
-          <button onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
+        <div className="error-banner report-workflow-error" role="alert">
+          <span>{state.error}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
         </div>
       )}
 
       <div className={`app-content ${state.currentStep === 'report' ? 'aging-report-fullscreen' : ''}`}>
         {state.currentStep === 'upload' && (
-          <div className="step-content">
-            <div className="step-intro">
-              <h2>Upload Raw Incident Data</h2>
-              <p>Upload your incident report file (XLSX or CSV) for Aging Trends analysis.</p>
+          <section className="report-setup" aria-labelledby="report-setup-title">
+            <h2 id="report-setup-title">Report setup</h2>
+            <div className="report-setup-fields">
+              <div className="report-setup-field">
+                <label htmlFor="report-period">
+                  Report period <span>(optional)</span>
+                </label>
+                <input
+                  id="report-period"
+                  type="text"
+                  placeholder="e.g., September 29 - October 5, 2026"
+                  value={state.reportPeriod}
+                  onChange={(e) => dispatch({ type: 'SET_REPORT_PERIOD', period: e.target.value })}
+                />
+              </div>
+              <div className="report-setup-field">
+                <label htmlFor="aging-as-of">Aging as of</label>
+                <input id="aging-as-of" type="datetime-local"
+                  value={state.reportAsOf || (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })()}
+                  onChange={(event) => dispatch({ type: 'SET_REPORT_AS_OF', value: event.target.value })} />
+                <small>Use the extraction date for a historical import.</small>
+              </div>
             </div>
-            <FileUpload
-              onFileSelected={handleFileSelected}
-              isProcessing={state.isProcessing}
-            />
-            <div className="period-input-section">
-              <label htmlFor="report-period" className="period-label">
-                Report Period (optional)
-              </label>
-              <input
-                id="report-period"
-                type="text"
-                className="period-input"
-                placeholder="e.g., September 29 - October 5, 2026"
-                value={state.reportPeriod}
-                onChange={(e) => dispatch({ type: 'SET_REPORT_PERIOD', period: e.target.value })}
-              />
-            </div>
-          </div>
+            <FileUpload onFileSelected={handleFileSelected} isProcessing={state.isProcessing} />
+          </section>
         )}
 
         {state.currentStep === 'validation' && state.validationSummary && (
@@ -312,8 +275,11 @@ export function AgingReportWorkflow({
         {state.currentStep === 'previous-week' && (
           <AgingPreviousWeekInput
             initialValues={state.previousWeekAging}
+            busy={state.isProcessing}
+            autoFill={!state.reportData || !state.previousWeekAging.sla}
+            beforeGeneratedAt={state.reportData?.generatedAt}
             onSave={(values) => dispatch({ type: 'SET_PREVIOUS_WEEK', previousWeek: values })}
-            onBack={() => dispatch({ type: 'SET_STEP', step: 'routing' })}
+            onBack={() => dispatch({ type: 'SET_STEP', step: state.reportData ? 'report' : 'routing' })}
             onProceed={handleGenerateReport}
           />
         )}
@@ -333,6 +299,9 @@ export function AgingReportWorkflow({
                   }}
                 >
                   {state.rawData ? '← Back' : '← Back to Dashboard'}
+                </button>
+                <button className="btn btn-secondary" onClick={() => dispatch({ type: 'SET_STEP', step: 'previous-week' })}>
+                  Edit previous week
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -356,10 +325,12 @@ export function AgingReportWorkflow({
             </div>
 
             <AgingReportTable
+              key={state.reportData.reportId || String(state.reportData.generatedAt)}
               data={state.reportData}
               onCellClick={handleCellClick}
               routedIncidents={state.routedIncidents}
               onUpdateRemarksRow={handleUpdateRemarksRow}
+              onSaveReport={(data) => dispatch({ type: 'SET_REPORT_DATA', data })}
               accountName={account.name}
             />
           </div>

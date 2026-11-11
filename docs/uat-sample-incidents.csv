@@ -1,0 +1,5 @@
+Request ID,Technician,Category,Priority,Request Status,Created Time,Responded Date,First Response Overdue Status,Completed Time,Resolution Overdue Status,Department,Subject,Recent Update
+99000001,ECS ISS,Hardware,High,Closed,2026-11-02 09:00:00,2026-11-02 09:12:00,No,2026-11-02 11:00:00,No,QA Lab,UAT laptop setup,Sample ticket closed
+99000002,ECS SDS,Software,High,Closed,2026-11-03 09:00:00,2026-11-03 12:30:00,Yes,2026-11-05 16:00:00,Yes,QA Lab,UAT application error,Sample fix confirmed
+99000003,ECS ADMIN,Facility,Medium,Open,2026-11-04 10:00:00,2026-11-04 10:15:00,No,,Yes,QA Lab,UAT meeting room check,Sample follow-up pending
+99000004,ECS ISS,Network,Low,Open,2026-11-06 11:00:00,2026-11-06 11:15:00,No,,No,QA Lab,UAT network check,Sample diagnosis in progress

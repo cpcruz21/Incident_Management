@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getAdminSession, requireAdmin } from '@/lib/server/auth';
+import { recordAudit } from '@/lib/server/audit';
+
 import { getDepartmentMappings, saveDepartmentMappings } from '@/lib/server/storage';
 
 export async function GET() {
@@ -21,6 +24,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     if (!body || typeof body !== 'object') {
@@ -30,6 +35,7 @@ export async function POST(request: Request) {
       );
     }
     saveDepartmentMappings(body);
+    recordAudit(getAdminSession(), 'department.updated', { type: 'department', count: Object.keys(body).length });
     return NextResponse.json({
       success: true,
       message: 'Department mappings updated successfully',

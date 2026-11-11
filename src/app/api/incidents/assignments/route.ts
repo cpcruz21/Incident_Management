@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getAdminSession, requireAdmin } from '@/lib/server/auth';
+import { recordAudit } from '@/lib/server/audit';
+
 import {
   getStoredAssignments,
   saveAssignment,
@@ -9,6 +12,8 @@ import {
 } from '@/lib/server/storage';
 
 export async function GET() {
+  const denied = requireAdmin();
+  if (denied) return denied;
   try {
     const assignments = getStoredAssignments();
     return NextResponse.json({
@@ -28,6 +33,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
 
@@ -56,6 +63,7 @@ export async function POST(request: Request) {
       }
 
       const saved = saveAssignmentsBulk(validItems);
+      if (saved.length) recordAudit(getAdminSession(), 'incident.updated', { type: 'incident', count: saved.length });
       return NextResponse.json({
         success: true,
         savedCount: saved.length,
@@ -83,6 +91,7 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
       updatedBy: String(updatedBy || 'User').trim(),
     });
+    recordAudit(getAdminSession(), 'incident.updated', { type: 'incident', id: saved.requestId });
 
     return NextResponse.json({
       success: true,

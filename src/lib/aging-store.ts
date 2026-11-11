@@ -33,6 +33,7 @@ export interface AgingState {
   // Report
   reportData: AgingReportData | null;
   reportPeriod: string;
+  reportAsOf: string;
 
   // UI
   isProcessing: boolean;
@@ -57,6 +58,7 @@ export type AgingAction =
   | { type: 'SET_PREVIOUS_WEEK'; previousWeek: PreviousWeekAging }
   | { type: 'SET_REPORT_DATA'; data: AgingReportData }
   | { type: 'SET_REPORT_PERIOD'; period: string }
+  | { type: 'SET_REPORT_AS_OF'; value: string }
   | { type: 'SET_PROCESSING'; isProcessing: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'OPEN_DETAIL_MODAL'; title: string; incidentIds: string[] }
@@ -98,6 +100,7 @@ export const agingInitialState: AgingState = {
   previousWeekAging: createEmptyPreviousWeekAging(),
   reportData: null,
   reportPeriod: '',
+  reportAsOf: '',
   isProcessing: false,
   error: null,
   detailModal: {
@@ -150,6 +153,8 @@ export function agingReducer(state: AgingState, action: AgingAction): AgingState
 
     case 'SET_REPORT_PERIOD':
       return { ...state, reportPeriod: action.period };
+    case 'SET_REPORT_AS_OF':
+      return { ...state, reportAsOf: action.value };
 
     case 'SET_PROCESSING':
       return { ...state, isProcessing: action.isProcessing };
@@ -223,6 +228,7 @@ export function agingReducer(state: AgingState, action: AgingAction): AgingState
         ...state,
         currentStep: 'report',
         reportData: action.data,
+        previousWeekAging: action.data.previousWeek,
         routedIncidents: action.incidents || [],
         incidents: action.incidents || [],
         error: null,

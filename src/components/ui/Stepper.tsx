@@ -1,57 +1,52 @@
 'use client';
 
-import React from 'react';
-import type { AppStep } from '@/lib/store';
+import { Check } from 'lucide-react';
 
-interface Step {
-  id: AppStep;
-  label: string;
-  icon: string;
+export const incidentReportSteps = [
+  { id: 'upload', label: 'Upload' },
+  { id: 'validation', label: 'Validation' },
+  { id: 'routing', label: 'Routing' },
+  { id: 'previous-week', label: 'Previous week' },
+  { id: 'report', label: 'Report' },
+] as const;
+
+interface StepperProps<StepId extends string> {
+  steps: readonly { id: StepId; label: string }[];
+  currentStep: StepId;
+  onStepClick: (step: StepId) => void;
+  availableSteps: readonly StepId[];
+  busy?: boolean;
 }
 
-const STEPS: Step[] = [
-  { id: 'upload', label: 'Upload', icon: '📁' },
-  { id: 'validation', label: 'Validation', icon: '✅' },
-  { id: 'routing', label: 'Routing', icon: '🔀' },
-  { id: 'previous-week', label: 'Previous Week', icon: '📊' },
-  { id: 'report', label: 'Report', icon: '📋' },
-];
-
-interface StepperProps {
-  currentStep: AppStep;
-  onStepClick?: (step: AppStep) => void;
-  completedSteps?: AppStep[];
-}
-
-export function Stepper({ currentStep, onStepClick, completedSteps = [] }: StepperProps) {
-  const currentIndex = STEPS.findIndex((s) => s.id === currentStep);
+export function Stepper<StepId extends string>({
+  steps, currentStep, onStepClick, availableSteps, busy,
+}: StepperProps<StepId>) {
+  const currentIndex = steps.findIndex((step) => step.id === currentStep);
 
   return (
-    <div className="stepper">
-      {STEPS.map((step, index) => {
-        const isActive = step.id === currentStep;
-        const isCompleted = completedSteps.includes(step.id) || index < currentIndex;
-        const isClickable = onStepClick && (isCompleted || index <= currentIndex);
-
-        return (
-          <React.Fragment key={step.id}>
-            {index > 0 && (
-              <div className={`stepper-connector ${isCompleted ? 'completed' : ''}`} />
-            )}
-            <button
-              className={`stepper-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''} ${isClickable ? 'clickable' : ''}`}
-              onClick={() => isClickable && onStepClick?.(step.id)}
-              disabled={!isClickable}
-              type="button"
-            >
-              <span className="stepper-icon">
-                {isCompleted && !isActive ? '✓' : step.icon}
-              </span>
-              <span className="stepper-label">{step.label}</span>
-            </button>
-          </React.Fragment>
-        );
-      })}
-    </div>
+    <nav className="report-progress" aria-label="Report progress">
+      <ol className="report-progress-list">
+        {steps.map(({ id, label }, index) => {
+          const current = id === currentStep;
+          const completed = index < currentIndex;
+          const visitable = completed && availableSteps.includes(id) && !busy;
+          const content = (
+            <>
+              <span className="report-progress-index" aria-hidden="true">{completed ? <Check size={14} /> : index + 1}</span>
+              <span>{label}</span>
+            </>
+          );
+          return (
+            <li key={id} aria-current={current ? 'step' : undefined} data-complete={completed}>
+              {visitable ? (
+                <button className="report-progress-step" type="button" onClick={() => onStepClick(id)}>{content}</button>
+              ) : (
+                <span className="report-progress-step">{content}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }

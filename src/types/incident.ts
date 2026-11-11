@@ -87,6 +87,12 @@ export interface Incident {
   /** Whether the first response SLA was missed */
   firstResponseOverdue: boolean;
 
+  /** Manual monthly FR exception, confirmed by an administrator. Raw SLA data stays unchanged. */
+  acceptableFirstResponseApproval?: {
+    approvedBy: string;
+    approvedAt: string;
+  };
+
   /** Whether the resolution SLA was missed */
   resolutionOverdue: boolean;
 

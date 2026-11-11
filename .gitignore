@@ -8,6 +8,7 @@
 
 # next.js
 /.next/
+/.next-dev/
 /out/
 
 # production
@@ -35,3 +36,7 @@ next-env.d.ts
 
 # IDE / tool
 .gemini/
+
+# Runtime data
+/data/*/
+/.uat-runtime/

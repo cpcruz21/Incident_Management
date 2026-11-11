@@ -11,6 +11,7 @@
 import React, { useState, useMemo } from 'react';
 import type { NormalizedTicket } from '@/types/ir-analytics';
 import { isActiveTicket } from '@/lib/ir-analytics/engine';
+import { RequestIdLink } from '@/components/report/RequestIdLink';
 
 interface StagnantTableProps {
   tickets: NormalizedTicket[];
@@ -33,7 +34,7 @@ const INACTIVITY_COLORS = {
 };
 
 function getAlertBadge(days: number | null): { label: string; color: string; bg: string } {
-  if (days === null) return { label: 'Active', color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
+  if (days === null) return { label: 'Active', color: 'var(--ui-secondary, #94a3b8)', bg: 'rgba(148,163,184,0.1)' };
   if (days < 3) return { label: `${days}d • Normal`, color: INACTIVITY_COLORS.normal, bg: 'rgba(34,197,94,0.12)' };
   if (days < 7) return { label: `${days}d • Recent`, color: INACTIVITY_COLORS.attention, bg: 'rgba(132,204,22,0.12)' };
   if (days < 14) return { label: `${days}d • ⚠️ 7d+ Inactive`, color: INACTIVITY_COLORS.warning, bg: 'rgba(245,158,11,0.14)' };
@@ -143,13 +144,13 @@ export function StagnantTicketTable({
           textAlign: 'left',
           fontSize: '11px',
           fontWeight: 700,
-          color: active ? '#60a5fa' : '#64748b',
+          color: active ? 'var(--ui-link, #60a5fa)' : 'var(--ui-muted, #64748b)',
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
-          background: '#0d1a2e',
-          borderBottom: '1px solid #1e3a5f',
+          background: 'var(--ui-surface, #0d1a2e)',
+          borderBottom: '1px solid var(--ui-border, #1e3a5f)',
           userSelect: 'none',
         }}
       >
@@ -159,25 +160,25 @@ export function StagnantTicketTable({
   }
 
   return (
-    <div style={{ background: '#0d1a2e', border: '1px solid #243650', borderRadius: '14px', overflow: 'hidden' }}>
+    <div style={{ background: 'var(--ui-surface, #0d1a2e)', border: '1px solid var(--ui-panel-border, var(--ui-border))', borderRadius: '14px', overflow: 'hidden' }}>
       {/* ── Table Top Control Bar ── */}
       <div
         style={{
           padding: '16px 20px',
-          borderBottom: '1px solid #1e3a5f',
+          borderBottom: '1px solid var(--ui-border, #1e3a5f)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '14px',
-          background: '#101f36',
+          background: 'var(--ui-inset, #101f36)',
         }}
       >
         <div>
-          <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0 }}>
             {title}
           </h3>
-          <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0' }}>
+          <p style={{ fontSize: '12px', color: 'var(--ui-secondary, #94a3b8)', margin: '3px 0 0' }}>
             {sorted.length} {sorted.length === 1 ? 'ticket' : 'tickets'} matching criteria · Click any row to inspect complete history
           </p>
         </div>
@@ -185,20 +186,19 @@ export function StagnantTicketTable({
         {/* Search */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: '10px', top: '7px', fontSize: '12px', color: '#64748b' }}>🔍</span>
+            <span style={{ position: 'absolute', left: '10px', top: '7px', fontSize: '12px', color: 'var(--ui-muted, #64748b)' }}>🔍</span>
             <input
               type="text"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
               placeholder="Search ticket, tech, dept…"
               style={{
-                background: '#091426',
-                border: '1px solid #243650',
+                background: 'var(--ui-inset, #091426)',
+                border: '1px solid var(--ui-control-border)',
                 borderRadius: '8px',
-                color: '#f8fafc',
+                color: 'var(--ui-text, #f8fafc)',
                 fontSize: '12px',
                 padding: '6px 12px 6px 30px',
-                outline: 'none',
                 width: '220px',
               }}
             />
@@ -210,7 +210,7 @@ export function StagnantTicketTable({
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#94a3b8',
+                color: 'var(--ui-secondary, #94a3b8)',
                 fontSize: '14px',
                 cursor: 'pointer',
               }}
@@ -227,17 +227,17 @@ export function StagnantTicketTable({
           display: 'flex',
           gap: '6px',
           padding: '10px 16px',
-          background: '#0b1626',
-          borderBottom: '1px solid #1e3a5f',
+          background: 'var(--ui-page, #0b1626)',
+          borderBottom: '1px solid var(--ui-border, #1e3a5f)',
           overflowX: 'auto',
         }}
       >
         {[
-          { key: 'all' as ViewFilter, label: 'All Records', count: tickets.length, color: '#94a3b8' },
-          { key: 'active' as ViewFilter, label: 'Active Workload', count: activeCount, color: '#38bdf8' },
-          { key: 'stagnant' as ViewFilter, label: '⚠️ Stagnant (7+ Days)', count: stagnantCount, color: '#fbbf24' },
-          { key: 'critical' as ViewFilter, label: '🚨 Critical (30+ Days)', count: criticalCount, color: '#f87171' },
-          { key: 'resolved' as ViewFilter, label: '✅ Resolved & Closed', count: resolvedCount, color: '#4ade80' },
+          { key: 'all' as ViewFilter, label: 'All Records', count: tickets.length, color: 'var(--ui-secondary, #94a3b8)' },
+          { key: 'active' as ViewFilter, label: 'Active Workload', count: activeCount, color: 'var(--ui-link, #38bdf8)' },
+          { key: 'stagnant' as ViewFilter, label: '⚠️ Stagnant (7+ Days)', count: stagnantCount, color: 'var(--ui-warning, #fbbf24)' },
+          { key: 'critical' as ViewFilter, label: '🚨 Critical (30+ Days)', count: criticalCount, color: 'var(--ui-danger, #f87171)' },
+          { key: 'resolved' as ViewFilter, label: '✅ Resolved & Closed', count: resolvedCount, color: 'var(--ui-success, #4ade80)' },
         ].map((tab) => {
           const isActive = viewFilter === tab.key;
           return (
@@ -246,9 +246,9 @@ export function StagnantTicketTable({
               type="button"
               onClick={() => { setViewFilter(tab.key); setPage(0); }}
               style={{
-                background: isActive ? '#2563eb' : '#101f36',
-                border: isActive ? '1px solid #3b82f6' : '1px solid #1e3a5f',
-                color: isActive ? '#ffffff' : '#cbd5e1',
+                background: isActive ? '#2563eb' : 'var(--ui-inset, #101f36)',
+                border: isActive ? '1px solid #3b82f6' : '1px solid var(--ui-border, #1e3a5f)',
+                color: isActive ? '#ffffff' : 'var(--ui-secondary, #cbd5e1)',
                 borderRadius: '8px',
                 padding: '6px 14px',
                 fontSize: '12px',
@@ -264,7 +264,7 @@ export function StagnantTicketTable({
               <span>{tab.label}</span>
               <span
                 style={{
-                  background: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)',
+                  background: isActive ? '#173b9c' : 'var(--ui-wash)',
                   padding: '1px 6px',
                   borderRadius: '999px',
                   fontSize: '10px',
@@ -281,9 +281,9 @@ export function StagnantTicketTable({
 
       {/* ── Table Content ── */}
       {sorted.length === 0 ? (
-        <div style={{ padding: '48px 20px', textAlign: 'center', color: '#64748b' }}>
+        <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--ui-muted, #64748b)' }}>
           <div style={{ fontSize: '36px', marginBottom: '8px' }}>✨</div>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: '#94a3b8' }}>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ui-secondary, #94a3b8)' }}>
             No tickets found matching the selected filter
           </p>
           <p style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
@@ -306,11 +306,11 @@ export function StagnantTicketTable({
                       padding: '10px 14px',
                       fontSize: '11px',
                       fontWeight: 700,
-                      color: '#64748b',
+                      color: 'var(--ui-muted, #64748b)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.06em',
-                      background: '#0d1a2e',
-                      borderBottom: '1px solid #1e3a5f',
+                      background: 'var(--ui-surface, #0d1a2e)',
+                      borderBottom: '1px solid var(--ui-border, #1e3a5f)',
                       textAlign: 'left',
                     }}
                   >
@@ -321,11 +321,11 @@ export function StagnantTicketTable({
                       padding: '10px 14px',
                       fontSize: '11px',
                       fontWeight: 700,
-                      color: '#64748b',
+                      color: 'var(--ui-muted, #64748b)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.06em',
-                      background: '#0d1a2e',
-                      borderBottom: '1px solid #1e3a5f',
+                      background: 'var(--ui-surface, #0d1a2e)',
+                      borderBottom: '1px solid var(--ui-border, #1e3a5f)',
                       textAlign: 'center',
                       width: '80px',
                     }}
@@ -344,22 +344,22 @@ export function StagnantTicketTable({
                       key={t.rowKey}
                       onClick={() => onTicketClick(t)}
                       style={{
-                        background: i % 2 === 0 ? 'transparent' : 'rgba(16,31,54,0.3)',
+                        background: i % 2 === 0 ? 'transparent' : 'var(--ui-wash, rgba(16,31,54,0.3))',
                         cursor: 'pointer',
                         transition: 'background 0.15s ease',
                         borderLeft: isStagnant ? `3px solid ${alert.color}` : '3px solid transparent',
                       }}
                       onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'rgba(37,99,235,0.1)')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : 'rgba(16,31,54,0.3)')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : 'var(--ui-wash, rgba(16,31,54,0.3))')}
                     >
                       {/* Ticket & IR ID */}
                       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                        <div style={{ color: '#60a5fa', fontWeight: 800, fontSize: '13px' }}>
-                          {t.ticketId || '(No ID)'}
+                        <div style={{ color: 'var(--ui-link, #60a5fa)', fontWeight: 800, fontSize: '13px' }}>
+                          {t.ticketId ? <RequestIdLink requestId={t.ticketId} /> : '(No ID)'}
                         </div>
                         {t.irId && t.irId !== t.ticketId && (
-                          <div style={{ fontSize: '10px', color: '#a78bfa', marginTop: '2px', fontWeight: 600 }}>
-                            IR: {t.irId}
+                          <div style={{ fontSize: '10px', color: 'var(--ui-violet, #a78bfa)', marginTop: '2px', fontWeight: 600 }}>
+                            IR: <RequestIdLink requestId={t.irId} />
                           </div>
                         )}
                       </td>
@@ -370,16 +370,16 @@ export function StagnantTicketTable({
                       </td>
 
                       {/* Technician */}
-                      <td style={{ padding: '12px 14px', color: '#f8fafc', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 14px', color: 'var(--ui-text, #f8fafc)', whiteSpace: 'nowrap' }}>
                         {t.technician === 'Unassigned' || !t.technician ? (
-                          <span style={{ color: '#64748b', fontStyle: 'italic' }}>Unassigned</span>
+                          <span style={{ color: 'var(--ui-muted, #64748b)', fontStyle: 'italic' }}>Unassigned</span>
                         ) : (
                           <span style={{ fontWeight: 600 }}>{t.technician}</span>
                         )}
                       </td>
 
                       {/* Department */}
-                      <td style={{ padding: '12px 14px', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 14px', color: 'var(--ui-secondary, #cbd5e1)', whiteSpace: 'nowrap' }}>
                         {t.department || <span style={{ color: '#475569' }}>—</span>}
                       </td>
 
@@ -388,7 +388,7 @@ export function StagnantTicketTable({
                         <span
                           style={{
                             background: alert.bg,
-                            border: `1px solid ${alert.color}50`,
+                            border: `1px solid color-mix(in srgb, ${alert.color} 31%, transparent)`,
                             color: alert.color,
                             fontSize: '11px',
                             fontWeight: 700,
@@ -405,7 +405,7 @@ export function StagnantTicketTable({
                       <td
                         style={{
                           padding: '12px 14px',
-                          color: t.remarks ? '#94a3b8' : '#475569',
+                          color: t.remarks ? 'var(--ui-secondary, #94a3b8)' : '#475569',
                           maxWidth: '300px',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -422,7 +422,7 @@ export function StagnantTicketTable({
                         <span
                           style={{
                             fontSize: '11px',
-                            color: '#60a5fa',
+                            color: 'var(--ui-link, #60a5fa)',
                             fontWeight: 700,
                             background: 'rgba(37,99,235,0.12)',
                             padding: '4px 8px',
@@ -444,15 +444,15 @@ export function StagnantTicketTable({
             <div
               style={{
                 padding: '12px 18px',
-                borderTop: '1px solid #1e3a5f',
+                borderTop: '1px solid var(--ui-border, #1e3a5f)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 fontSize: '12px',
-                background: '#0d1a2e',
+                background: 'var(--ui-surface, #0d1a2e)',
               }}
             >
-              <span style={{ color: '#64748b' }}>
+              <span style={{ color: 'var(--ui-muted, #64748b)' }}>
                 Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length} tickets
               </span>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -460,7 +460,7 @@ export function StagnantTicketTable({
                   type="button"
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  style={{ ...paginationBtn, opacity: page === 0 ? 0.4 : 1 }}
+                  style={{ ...paginationBtn, color: page === 0 ? 'var(--ui-muted)' : paginationBtn.color }}
                 >
                   ← Prev
                 </button>
@@ -473,8 +473,8 @@ export function StagnantTicketTable({
                       onClick={() => setPage(p)}
                       style={{
                         ...paginationBtn,
-                        background: p === page ? '#2563eb' : '#101f36',
-                        color: p === page ? '#fff' : '#94a3b8',
+                        background: p === page ? '#2563eb' : 'var(--ui-inset, #101f36)',
+                        color: p === page ? '#fff' : 'var(--ui-secondary, #94a3b8)',
                       }}
                     >
                       {p + 1}
@@ -485,7 +485,7 @@ export function StagnantTicketTable({
                   type="button"
                   onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                   disabled={page === totalPages - 1}
-                  style={{ ...paginationBtn, opacity: page === totalPages - 1 ? 0.4 : 1 }}
+                  style={{ ...paginationBtn, color: page === totalPages - 1 ? 'var(--ui-muted)' : paginationBtn.color }}
                 >
                   Next →
                 </button>
@@ -499,10 +499,10 @@ export function StagnantTicketTable({
 }
 
 const paginationBtn: React.CSSProperties = {
-  background: '#101f36',
-  border: '1px solid #243650',
+  background: 'var(--ui-inset, #101f36)',
+  border: '1px solid var(--ui-border, #243650)',
   borderRadius: '6px',
-  color: '#94a3b8',
+  color: 'var(--ui-secondary, #94a3b8)',
   fontSize: '11px',
   fontWeight: 600,
   padding: '5px 10px',
@@ -511,12 +511,12 @@ const paginationBtn: React.CSSProperties = {
 
 function StatusBadge({ status, rawStatus }: { status: string; rawStatus: string }) {
   const colors: Record<string, { bg: string; color: string }> = {
-    open: { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa' },
-    pending: { bg: 'rgba(234,179,8,0.15)', color: '#fbbf24' },
-    'in-progress': { bg: 'rgba(249,115,22,0.15)', color: '#fb923c' },
-    resolved: { bg: 'rgba(34,197,94,0.15)', color: '#4ade80' },
-    closed: { bg: 'rgba(16,185,129,0.15)', color: '#34d399' },
-    unknown: { bg: 'rgba(100,116,139,0.15)', color: '#94a3b8' },
+    open: { bg: 'rgba(59,130,246,0.15)', color: 'var(--ui-link, #60a5fa)' },
+    pending: { bg: 'rgba(234,179,8,0.15)', color: 'var(--ui-warning, #fbbf24)' },
+    'in-progress': { bg: 'rgba(249,115,22,0.15)', color: 'var(--ui-orange, #fb923c)' },
+    resolved: { bg: 'rgba(34,197,94,0.15)', color: 'var(--ui-success, #4ade80)' },
+    closed: { bg: 'rgba(16,185,129,0.15)', color: 'var(--ui-success, #34d399)' },
+    unknown: { bg: 'rgba(100,116,139,0.15)', color: 'var(--ui-secondary, #94a3b8)' },
   };
   const style = colors[status] ?? colors.unknown;
   const label = rawStatus || status.charAt(0).toUpperCase() + status.slice(1);
@@ -524,7 +524,7 @@ function StatusBadge({ status, rawStatus }: { status: string; rawStatus: string 
     <span
       style={{
         background: style.bg,
-        border: `1px solid ${style.color}40`,
+        border: `1px solid color-mix(in srgb, ${style.color} 25%, transparent)`,
         color: style.color,
         fontSize: '11px',
         fontWeight: 700,
@@ -566,28 +566,28 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
     >
       <div
         style={{
-          background: '#0d1a2e',
-          border: '1px solid #243650',
+          background: 'var(--ui-surface, #0d1a2e)',
+          border: '1px solid var(--ui-panel-border, var(--ui-border))',
           borderRadius: '16px',
           width: '100%',
           maxWidth: '640px',
           maxHeight: '88vh',
           overflow: 'auto',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+          boxShadow: '0 20px 40px var(--ui-shadow, rgba(0,0,0,0.6))',
         }}
       >
         {/* Header */}
-        <div style={{ padding: '18px 24px', borderBottom: '1px solid #243650', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--ui-border, #243650)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-link, #60a5fa)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               Ticket Details & Audit
             </div>
-            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', margin: '2px 0 0' }}>
-              🎟️ {ticket.ticketId || '(No ID)'}
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: '2px 0 0' }}>
+              🎟️ {ticket.ticketId ? <RequestIdLink requestId={ticket.ticketId} /> : '(No ID)'}
             </h2>
             {ticket.irId && ticket.irId !== ticket.ticketId && (
-              <div style={{ fontSize: '12px', color: '#a78bfa', marginTop: '2px' }}>
-                Incident Report: <strong>{ticket.irId}</strong>
+              <div style={{ fontSize: '12px', color: 'var(--ui-violet, #a78bfa)', marginTop: '2px' }}>
+                Incident Report: <RequestIdLink requestId={ticket.irId} />
               </div>
             )}
           </div>
@@ -595,9 +595,9 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
             type="button"
             onClick={onClose}
             style={{
-              background: '#101f36',
-              border: '1px solid #243650',
-              color: '#94a3b8',
+              background: 'var(--ui-inset, #101f36)',
+              border: '1px solid var(--ui-border, #243650)',
+              color: 'var(--ui-secondary, #94a3b8)',
               borderRadius: '8px',
               width: '32px',
               height: '32px',
@@ -624,7 +624,7 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
                 padding: '12px 16px',
                 marginBottom: '20px',
                 fontSize: '12px',
-                color: ticket.daysSinceMovement >= 30 ? '#fca5a5' : '#fcd34d',
+                color: ticket.daysSinceMovement >= 30 ? 'var(--ui-danger, #fca5a5)' : 'var(--ui-warning, #fcd34d)',
                 lineHeight: 1.6,
               }}
             >
@@ -644,30 +644,30 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
           </div>
 
           {/* Timeline & Inactivity */}
-          <div style={{ background: '#101f36', border: '1px solid #1e3a5f', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-            <h4 style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.06em' }}>
+          <div style={{ background: 'var(--ui-inset, #101f36)', border: '1px solid var(--ui-panel-border, var(--ui-border))', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+            <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.06em' }}>
               Timeline & Inactivity Metrics
             </h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
-              <div><span style={{ color: '#64748b' }}>Created: </span><span style={{ color: '#f8fafc', fontWeight: 600 }}>{ticket.createdDate?.toLocaleDateString() ?? '—'}</span></div>
-              <div><span style={{ color: '#64748b' }}>Last Activity: </span><span style={{ color: '#f8fafc', fontWeight: 600 }}>{ticket.lastMovementDate?.toLocaleDateString() ?? '—'}</span></div>
-              <div><span style={{ color: '#64748b' }}>Days Inactive: </span><span style={{ color: (ticket.daysSinceMovement ?? 0) >= 7 ? '#f59e0b' : '#34d399', fontWeight: 800 }}>{ticket.daysSinceMovement ?? 0} days</span></div>
-              <div><span style={{ color: '#64748b' }}>Aging Since Open: </span><span style={{ color: '#f8fafc', fontWeight: 600 }}>{ticket.agingDays ?? '—'} days</span></div>
+              <div><span style={{ color: 'var(--ui-muted, #64748b)' }}>Created: </span><span style={{ color: 'var(--ui-text, #f8fafc)', fontWeight: 600 }}>{ticket.createdDate?.toLocaleDateString() ?? '—'}</span></div>
+              <div><span style={{ color: 'var(--ui-muted, #64748b)' }}>Last Activity: </span><span style={{ color: 'var(--ui-text, #f8fafc)', fontWeight: 600 }}>{ticket.lastMovementDate?.toLocaleDateString() ?? '—'}</span></div>
+              <div><span style={{ color: 'var(--ui-muted, #64748b)' }}>Days Inactive: </span><span style={{ color: (ticket.daysSinceMovement ?? 0) >= 7 ? 'var(--ui-warning, #f59e0b)' : 'var(--ui-success, #34d399)', fontWeight: 800 }}>{ticket.daysSinceMovement ?? 0} days</span></div>
+              <div><span style={{ color: 'var(--ui-muted, #64748b)' }}>Aging Since Open: </span><span style={{ color: 'var(--ui-text, #f8fafc)', fontWeight: 600 }}>{ticket.agingDays ?? '—'} days</span></div>
             </div>
           </div>
 
           {/* Delay Reason / Remarks */}
           <div style={{ marginBottom: '16px' }}>
-            <h4 style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.06em' }}>
+            <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.06em' }}>
               Delay Reason / Remarks
             </h4>
             <div
               style={{
                 fontSize: '12px',
-                color: ticket.remarks ? '#e2e8f0' : '#64748b',
+                color: ticket.remarks ? 'var(--ui-text, #e2e8f0)' : 'var(--ui-muted, #64748b)',
                 lineHeight: 1.6,
-                background: '#101f36',
-                border: '1px solid #1e3a5f',
+                background: 'var(--ui-inset, #101f36)',
+                border: '1px solid var(--ui-border, #1e3a5f)',
                 borderRadius: '8px',
                 padding: '12px 14px',
                 fontStyle: ticket.remarks ? 'normal' : 'italic',
@@ -680,16 +680,16 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
           {/* Description */}
           {ticket.description && (
             <div style={{ marginBottom: '16px' }}>
-              <h4 style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.06em' }}>
+              <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.06em' }}>
                 Description
               </h4>
               <p
                 style={{
                   fontSize: '12px',
-                  color: '#cbd5e1',
+                  color: 'var(--ui-secondary, #cbd5e1)',
                   lineHeight: 1.6,
-                  background: '#101f36',
-                  border: '1px solid #1e3a5f',
+                  background: 'var(--ui-inset, #101f36)',
+                  border: '1px solid var(--ui-border, #1e3a5f)',
                   borderRadius: '8px',
                   padding: '12px 14px',
                   margin: 0,
@@ -708,10 +708,10 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
 function DetailField({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>
         {label}
       </div>
-      <div style={{ fontSize: '13px', color: highlight ? '#fbbf24' : '#f8fafc', fontWeight: highlight ? 700 : 500 }}>
+      <div style={{ fontSize: '13px', color: highlight ? 'var(--ui-warning, #fbbf24)' : 'var(--ui-text, #f8fafc)', fontWeight: highlight ? 700 : 500 }}>
         {value}
       </div>
     </div>

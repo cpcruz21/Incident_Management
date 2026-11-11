@@ -138,7 +138,7 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
   };
 
   const sectionHeader = (text: string) => (
-    <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', marginBottom: '12px' }}>{text}</h3>
+    <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--ui-text, #f8fafc)', marginBottom: '12px' }}>{text}</h3>
   );
 
   // ── Step: Upload ──
@@ -151,31 +151,31 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
           onDragLeave={() => setIsDragging(false)}
           onClick={() => inputRef.current?.click()}
           style={{
-            border: `2px dashed ${isDragging ? '#3b82f6' : '#334e68'}`,
+            border: `2px dashed ${isDragging ? '#3b82f6' : 'var(--ui-border, #334e68)'}`,
             borderRadius: '12px',
             padding: '48px 24px',
             textAlign: 'center',
             cursor: 'pointer',
-            background: isDragging ? 'rgba(59,130,246,0.08)' : 'rgba(20,37,63,0.5)',
+            background: isDragging ? 'rgba(59,130,246,0.08)' : 'var(--ui-inset, rgba(20,37,63,0.5))',
             transition: 'all 0.2s ease',
           }}
         >
           <div style={{ fontSize: '48px', marginBottom: '12px' }}>📂</div>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ui-text, #f8fafc)', marginBottom: '8px' }}>
             Drop your file here or click to browse
           </div>
-          <div style={{ fontSize: '12px', color: '#64748b' }}>Supports CSV, XLSX, XLS</div>
+          <div style={{ fontSize: '12px', color: 'var(--ui-muted, #64748b)' }}>Supports CSV, XLSX, XLS</div>
           <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileChange} style={{ display: 'none' }} />
         </div>
 
         {isProcessing && (
-          <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '13px' }}>
+          <div style={{ textAlign: 'center', padding: '16px', color: 'var(--ui-secondary, #94a3b8)', fontSize: '13px' }}>
             <div className="spinner" style={{ margin: '0 auto 8px' }} />
             Parsing file…
           </div>
         )}
         {parseError && (
-          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '12px', color: '#fca5a5', fontSize: '12px', marginTop: '12px' }}>
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '12px', color: 'var(--ui-danger, #fca5a5)', fontSize: '12px', marginTop: '12px' }}>
             ⚠️ {parseError}
           </div>
         )}
@@ -186,15 +186,15 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
             {sectionHeader('Previous Import Batches')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {existingBatches.map((b) => (
-                <div key={b.id} style={{ background: '#0d1a2e', border: '1px solid #243650', borderRadius: '8px', padding: '12px', fontSize: '12px' }}>
-                  <div style={{ fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>{b.fileName}</div>
-                  <div style={{ color: '#64748b' }}>
+                <div key={b.id} style={{ background: 'var(--ui-surface, #0d1a2e)', border: '1px solid var(--ui-border, #243650)', borderRadius: '8px', padding: '12px', fontSize: '12px' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--ui-text, #f8fafc)', marginBottom: '4px' }}>{b.fileName}</div>
+                  <div style={{ color: 'var(--ui-muted, #64748b)' }}>
                     {new Date(b.importedAt).toLocaleString()} · {b.totalRows} rows · {b.uniqueTickets} unique tickets · {b.duplicateRows} duplicates
                   </div>
                 </div>
               ))}
             </div>
-            <p style={{ fontSize: '11px', color: '#64748b', marginTop: '8px' }}>
+            <p style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', marginTop: '8px' }}>
               ℹ️ Re-importing the same file will update existing records without inflating totals.
             </p>
           </div>
@@ -211,11 +211,11 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
         onBack={() => { setStep('upload'); setRawRows([]); setColumns([]); }}
         onNext={() => setStep('mapping')}
       >
-        <div style={{ marginBottom: '12px', fontSize: '12px', color: '#94a3b8' }}>
-          <span style={{ color: '#22c55e', fontWeight: 700 }}>✓ {rawRows.length} rows</span> parsed from{' '}
-          <span style={{ fontWeight: 700, color: '#f8fafc' }}>{fileName}</span>
+        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'var(--ui-secondary, #94a3b8)' }}>
+          <span style={{ color: 'var(--ui-success, #22c55e)', fontWeight: 700 }}>✓ {rawRows.length} rows</span> parsed from{' '}
+          <span style={{ fontWeight: 700, color: 'var(--ui-text, #f8fafc)' }}>{fileName}</span>
           {' · '}
-          <span style={{ color: '#a78bfa' }}>{columns.length} columns detected</span>
+          <span style={{ color: 'var(--ui-violet, #a78bfa)' }}>{columns.length} columns detected</span>
         </div>
 
         <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
@@ -223,29 +223,29 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
             <thead>
               <tr>
                 {columns.slice(0, 10).map((col) => (
-                  <th key={col} style={{ padding: '6px 8px', background: '#0d1a2e', border: '1px solid #243650', color: '#94a3b8', fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' }}>
+                  <th key={col} style={{ padding: '6px 8px', background: 'var(--ui-surface, #0d1a2e)', border: '1px solid var(--ui-border, #243650)', color: 'var(--ui-secondary, #94a3b8)', fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' }}>
                     {col}
                   </th>
                 ))}
-                {columns.length > 10 && <th style={{ padding: '6px 8px', color: '#64748b', border: '1px solid #243650' }}>+{columns.length - 10} more</th>}
+                {columns.length > 10 && <th style={{ padding: '6px 8px', color: 'var(--ui-muted, #64748b)', border: '1px solid var(--ui-border, #243650)' }}>+{columns.length - 10} more</th>}
               </tr>
             </thead>
             <tbody>
               {previewRows.map((row, i) => (
                 <tr key={i}>
                   {columns.slice(0, 10).map((col) => (
-                    <td key={col} style={{ padding: '5px 8px', border: '1px solid #1e3a5f', color: '#f8fafc', whiteSpace: 'nowrap', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <td key={col} style={{ padding: '5px 8px', border: '1px solid var(--ui-border, #1e3a5f)', color: 'var(--ui-text, #f8fafc)', whiteSpace: 'nowrap', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {String(row[col] ?? '')}
                     </td>
                   ))}
-                  {columns.length > 10 && <td style={{ border: '1px solid #1e3a5f', color: '#64748b' }}>…</td>}
+                  {columns.length > 10 && <td style={{ border: '1px solid var(--ui-border, #1e3a5f)', color: 'var(--ui-muted, #64748b)' }}>…</td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         {rawRows.length > 5 && (
-          <p style={{ fontSize: '11px', color: '#64748b' }}>Showing first 5 of {rawRows.length} rows.</p>
+          <p style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)' }}>Showing first 5 of {rawRows.length} rows.</p>
         )}
       </WizardWrapper>
     );
@@ -259,14 +259,14 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
         onBack={() => setStep('preview')}
         onNext={() => setStep('confirm')}
       >
-        <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: 'var(--ui-secondary, #94a3b8)', marginBottom: '16px' }}>
           Map your source columns to dashboard fields. The system has auto-detected matches.
-          Required fields: <span style={{ color: '#fca5a5' }}>IR ID</span> or <span style={{ color: '#fca5a5' }}>Ticket ID</span>.
+          Required fields: <span style={{ color: 'var(--ui-danger, #fca5a5)' }}>IR ID</span> or <span style={{ color: 'var(--ui-danger, #fca5a5)' }}>Ticket ID</span>.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
           {fields.map((field) => (
             <div key={field}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', display: 'block', marginBottom: '4px' }}>
                 {FIELD_LABELS[field]}
                 {(field === 'irId' || field === 'ticketId') && ' *'}
               </label>
@@ -274,10 +274,10 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
                 value={mapping[field] ?? ''}
                 onChange={(e) => setMapping((m) => ({ ...m, [field]: e.target.value || undefined }))}
                 style={{
-                  background: '#0d1a2e',
-                  border: `1px solid ${mapping[field] ? '#3b82f6' : '#243650'}`,
+                  background: 'var(--ui-surface, #0d1a2e)',
+                  border: `1px solid ${mapping[field] ? '#3b82f6' : 'var(--ui-border, #243650)'}`,
                   borderRadius: '6px',
-                  color: mapping[field] ? '#f8fafc' : '#64748b',
+                  color: mapping[field] ? 'var(--ui-text, #f8fafc)' : 'var(--ui-muted, #64748b)',
                   fontSize: '11px',
                   padding: '6px 8px',
                   width: '100%',
@@ -293,7 +293,7 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
           ))}
         </div>
         {!mapping.irId && !mapping.ticketId && (
-          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px', color: '#fca5a5', fontSize: '12px', marginTop: '12px' }}>
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px', color: 'var(--ui-danger, #fca5a5)', fontSize: '12px', marginTop: '12px' }}>
             ⚠️ Please map at least IR ID or Ticket ID to proceed.
           </div>
         )}
@@ -318,22 +318,22 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
           <InfoRow label="Existing Tickets" value={String(existingTickets.length)} />
         </div>
         <div style={{ marginTop: '16px' }}>
-          <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', marginBottom: '8px' }}>COLUMN MAPPINGS</h4>
+          <h4 style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ui-secondary, #94a3b8)', marginBottom: '8px' }}>COLUMN MAPPINGS</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
             {mappedFields.map(([field, col]) => (
               <div key={field} style={{ fontSize: '11px' }}>
-                <span style={{ color: '#64748b' }}>{FIELD_LABELS[field as keyof IRColumnMapping]}: </span>
-                <span style={{ color: '#93c5fd', fontWeight: 600 }}>{col as string}</span>
+                <span style={{ color: 'var(--ui-muted, #64748b)' }}>{FIELD_LABELS[field as keyof IRColumnMapping]}: </span>
+                <span style={{ color: 'var(--ui-link, #93c5fd)', fontWeight: 600 }}>{col as string}</span>
               </div>
             ))}
           </div>
         </div>
-        <div style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.2)', borderRadius: '8px', padding: '12px', marginTop: '16px', fontSize: '12px', color: '#93c5fd' }}>
+        <div style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.2)', borderRadius: '8px', padding: '12px', marginTop: '16px', fontSize: '12px', color: 'var(--ui-link, #93c5fd)' }}>
           ℹ️ Duplicate ticket IDs within this batch will be de-duplicated, keeping the latest record.
           Records matching existing ticket IDs will update the existing records.
         </div>
         {isProcessing && (
-          <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8' }}>
+          <div style={{ textAlign: 'center', padding: '16px', color: 'var(--ui-secondary, #94a3b8)' }}>
             <div className="spinner" style={{ margin: '0 auto 8px' }} />
             Processing…
           </div>
@@ -349,13 +349,13 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
       <WizardWrapper onClose={() => { onImportComplete(batchResult.tickets, batch); onClose(); }} title="Import Complete" hideClose>
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <div style={{ fontSize: '48px', marginBottom: '12px' }}>✅</div>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>Import Successful</h3>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ui-text, #f8fafc)', marginBottom: '16px' }}>Import Successful</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left', marginBottom: '24px' }}>
-            <StatBox label="Total Rows" value={batch.totalRows} color="#60a5fa" />
-            <StatBox label="Accepted Rows" value={batch.acceptedRows} color="#22c55e" />
-            <StatBox label="Duplicate Rows" value={batch.duplicateRows} color="#f59e0b" />
-            <StatBox label="Unique Tickets" value={batch.uniqueTickets} color="#a78bfa" />
-            <StatBox label="Unique IRs" value={batch.uniqueIRs} color="#38bdf8" />
+            <StatBox label="Total Rows" value={batch.totalRows} color="var(--ui-link, #60a5fa)" />
+            <StatBox label="Accepted Rows" value={batch.acceptedRows} color="var(--ui-success, #22c55e)" />
+            <StatBox label="Duplicate Rows" value={batch.duplicateRows} color="var(--ui-warning, #f59e0b)" />
+            <StatBox label="Unique Tickets" value={batch.uniqueTickets} color="var(--ui-violet, #a78bfa)" />
+            <StatBox label="Unique IRs" value={batch.uniqueIRs} color="var(--ui-link, #38bdf8)" />
           </div>
           <button
             type="button"
@@ -421,8 +421,8 @@ function WizardWrapper({
     >
       <div
         style={{
-          background: '#0d1a2e',
-          border: '1px solid #243650',
+          background: 'var(--ui-surface, #0d1a2e)',
+          border: '1px solid var(--ui-border, #243650)',
           borderRadius: '16px',
           width: '100%',
           maxWidth: '720px',
@@ -433,15 +433,15 @@ function WizardWrapper({
         }}
       >
         {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #243650', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--ui-border, #243650)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>{title}</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0 }}>{title}</h2>
             {step && totalSteps && (
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Step {step} of {totalSteps}</div>
+              <div style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', marginTop: '2px' }}>Step {step} of {totalSteps}</div>
             )}
           </div>
           {!hideClose && onClose && (
-            <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '18px', padding: '4px' }}>×</button>
+            <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--ui-muted, #64748b)', cursor: 'pointer', fontSize: '18px', padding: '4px' }}>×</button>
           )}
         </div>
 
@@ -452,9 +452,9 @@ function WizardWrapper({
 
         {/* Footer */}
         {(onBack || onNext) && (
-          <div style={{ padding: '12px 20px', borderTop: '1px solid #243650', display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--ui-border, #243650)', display: 'flex', justifyContent: 'space-between' }}>
             {onBack ? (
-              <button type="button" onClick={onBack} style={{ background: 'transparent', border: '1px solid #334e68', color: '#94a3b8', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+              <button type="button" onClick={onBack} style={{ background: 'transparent', border: '1px solid var(--ui-border, #334e68)', color: 'var(--ui-secondary, #94a3b8)', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                 ← Back
               </button>
             ) : <div />}
@@ -464,8 +464,8 @@ function WizardWrapper({
                 onClick={onNext}
                 disabled={nextDisabled}
                 style={{
-                  background: nextDisabled ? '#1e293b' : '#2563eb',
-                  color: nextDisabled ? '#64748b' : '#fff',
+                  background: nextDisabled ? 'var(--ui-inset, #1e293b)' : '#2563eb',
+                  color: nextDisabled ? 'var(--ui-muted, #64748b)' : '#fff',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '8px 20px',
@@ -486,18 +486,18 @@ function WizardWrapper({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderBottom: '1px solid #1e3a5f', paddingBottom: '8px' }}>
-      <span style={{ color: '#64748b' }}>{label}</span>
-      <span style={{ color: '#f8fafc', fontWeight: 700 }}>{value}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderBottom: '1px solid var(--ui-border, #1e3a5f)', paddingBottom: '8px' }}>
+      <span style={{ color: 'var(--ui-muted, #64748b)' }}>{label}</span>
+      <span style={{ color: 'var(--ui-text, #f8fafc)', fontWeight: 700 }}>{value}</span>
     </div>
   );
 }
 
 function StatBox({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div style={{ background: '#101f36', border: `1px solid ${color}30`, borderRadius: '8px', padding: '12px' }}>
+    <div style={{ background: 'var(--ui-inset, #101f36)', border: `1px solid ${color}30`, borderRadius: '8px', padding: '12px' }}>
       <div style={{ fontSize: '22px', fontWeight: 800, color }}>{value}</div>
-      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>{label}</div>
+      <div style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', marginTop: '4px' }}>{label}</div>
     </div>
   );
 }

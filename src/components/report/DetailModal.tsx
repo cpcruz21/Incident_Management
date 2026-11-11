@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { RequestIdLink } from './RequestIdLink';
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export function DetailModal({ isOpen, title, incidentIds, onClose }: DetailModal
           <div className="modal-list">
             {incidentIds.map((id) => (
               <div key={id} className="modal-incident-row">
-                <span className="incident-badge">{id}</span>
+                <RequestIdLink requestId={id} />
               </div>
             ))}
           </div>

@@ -21,11 +21,11 @@ import {
   convertIncidentsToNormalizedTickets,
 } from '@/lib/ir-analytics/engine';
 import type { Incident } from '@/types/incident';
-import { getStoredReports } from '@/lib/storage/report-storage';
+import { getLegacyStoredReports } from '@/lib/storage/report-storage';
 import { fetchServerAgingReports, fetchServerMonthlyReports } from '@/lib/api/client';
 import { IRSummaryCards } from './SummaryCards';
 import { IRFilterBar } from './FilterBar';
-import { BarChart, DonutChart, LineChart, STATUS_COLORS, AGING_COLORS } from './Charts';
+import { BarChart, DonutChart, LineChart, CHART_COLORS, STATUS_COLORS, AGING_COLORS, analyticsChartColor } from './Charts';
 
 export interface ReportSourceItem {
   id: string;
@@ -129,7 +129,7 @@ export function IRAnalyticsDashboard({
 
     // 3. Stored Reports Archive (Weekly / Monthly / Aging)
     try {
-      const localArchive = getStoredReports();
+      const localArchive = getLegacyStoredReports();
       for (const item of localArchive) {
         const alreadyInSources = sources.some((s) => s.id === item.id);
         if (!alreadyInSources && item.routedIncidents && item.routedIncidents.length > 0) {
@@ -264,9 +264,9 @@ export function IRAnalyticsDashboard({
 
   if (!isLoaded) {
     return (
-      <div style={{ textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }}>
+      <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--ui-secondary, #94a3b8)' }}>
         <div style={{ fontSize: '36px', marginBottom: '14px' }}>⏳</div>
-        <p style={{ fontSize: '15px', fontWeight: 600, color: '#64748b' }}>
+        <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--ui-muted, #64748b)' }}>
           Loading incident analytics from reporting modules…
         </p>
       </div>
@@ -293,8 +293,8 @@ export function IRAnalyticsDashboard({
         />
         <div
           style={{
-            background: 'linear-gradient(145deg, #0d1a2e, #091426)',
-            border: '2px dashed #1e3a5f',
+            background: 'linear-gradient(145deg, var(--ui-surface, #0d1a2e), var(--ui-inset, #091426))',
+            border: '2px dashed var(--ui-panel-border, var(--ui-border))',
             borderRadius: '20px',
             padding: '72px 24px',
             textAlign: 'center',
@@ -302,10 +302,10 @@ export function IRAnalyticsDashboard({
           }}
         >
           <div style={{ fontSize: '56px', marginBottom: '18px' }}>📊</div>
-          <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#f8fafc', marginBottom: '10px' }}>
+          <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', marginBottom: '10px' }}>
             No Published Reports Available
           </h3>
-          <p style={{ fontSize: '13px', color: '#64748b', maxWidth: '480px', margin: '0 auto 24px', lineHeight: 1.8 }}>
+          <p style={{ fontSize: '13px', color: 'var(--ui-muted, #64748b)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: 1.8 }}>
             This public dashboard automatically aggregates analytics from published Weekly, Monthly, and Aging reports.
             Publish a report in the administrator workspace to populate live incident analytics here.
           </p>
@@ -352,7 +352,7 @@ export function IRAnalyticsDashboard({
       {/* ── Active Filter Chips ── */}
       {!showFilters && activeFilterCount > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Active Filters:</span>
+          <span style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', fontWeight: 600 }}>Active Filters:</span>
           {filters.status && (
             <FilterChip label={`Status: ${filters.status}`} onRemove={() => setFilters((f) => ({ ...f, status: '' }))} />
           )}
@@ -373,9 +373,9 @@ export function IRAnalyticsDashboard({
             onClick={() => setFilters(DEFAULT_FILTERS)}
             style={{
               fontSize: '11px',
-              color: '#94a3b8',
+              color: 'var(--ui-secondary, #94a3b8)',
               background: 'transparent',
-              border: '1px solid #243650',
+              border: '1px solid var(--ui-border, #243650)',
               borderRadius: '6px',
               padding: '3px 8px',
               cursor: 'pointer',
@@ -404,7 +404,6 @@ export function IRAnalyticsDashboard({
         <LineChart
           data={irTrend}
           title="Incident Creation Trend (Monthly)"
-          color="#3b82f6"
           height={210}
           onPointClick={handleChartClick}
         />
@@ -435,7 +434,7 @@ export function IRAnalyticsDashboard({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
           gap: '14px',
           marginBottom: '10px',
         }}
@@ -521,11 +520,11 @@ function DashboardHeader({
         marginBottom: '20px',
         flexWrap: 'wrap',
         gap: '12px',
-        background: 'linear-gradient(145deg, #111c30 0%, #0d1a2e 100%)',
-        border: '1px solid #1e293b',
+        background: 'linear-gradient(145deg, var(--ui-surface, #111c30) 0%, var(--ui-surface, #0d1a2e) 100%)',
+        border: '1px solid var(--ui-panel-border, var(--ui-border))',
         borderRadius: '16px',
         padding: '16px 22px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
       }}
     >
       {/* Left: Brand Title & Metadata */}
@@ -547,8 +546,8 @@ function DashboardHeader({
             src="/images/DASH.png"
             alt="Dashboard"
             style={{
-              width: '24px',
-              height: '24px',
+              width: '50px',
+              height: '40px',
               objectFit: 'contain',
             }}
             onError={(e) => {
@@ -557,7 +556,7 @@ function DashboardHeader({
           />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '-0.01em' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, letterSpacing: '-0.01em' }}>
             IR Analytics Dashboard
           </h2>
           <span
@@ -568,7 +567,7 @@ function DashboardHeader({
               borderRadius: '999px',
               background: 'rgba(37,99,235,0.15)',
               border: '1px solid rgba(37,99,235,0.3)',
-              color: '#93c5fd',
+              color: 'var(--ui-link, #93c5fd)',
             }}
           >
             {canonicalCount} Total Incidents
@@ -584,15 +583,14 @@ function DashboardHeader({
             value={selectedSourceId}
             onChange={(e) => onSourceChange(e.target.value)}
             style={{
-              background: '#091426',
-              border: '1px solid #1e3a5f',
+              background: 'var(--ui-inset, #091426)',
+              border: '1px solid var(--ui-control-border)',
               borderRadius: '8px',
-              color: '#e2e8f0',
+              color: 'var(--ui-text, #e2e8f0)',
               padding: '7px 12px',
               fontSize: '12px',
               fontWeight: 600,
               cursor: 'pointer',
-              outline: 'none',
               maxWidth: '260px',
             }}
           >
@@ -610,9 +608,9 @@ function DashboardHeader({
 }
 
 const iconBtnStyle: React.CSSProperties = {
-  background: '#101f36',
-  border: '1px solid #243650',
-  color: '#94a3b8',
+  background: 'var(--ui-inset, #101f36)',
+  border: '1px solid var(--ui-border, #243650)',
+  color: 'var(--ui-secondary, #94a3b8)',
   borderRadius: '8px',
   padding: '6px 10px',
   fontSize: '14px',
@@ -627,7 +625,7 @@ function SectionDivider({ label }: { label: string }) {
         style={{
           fontSize: '11px',
           fontWeight: 800,
-          color: '#64748b',
+          color: 'var(--ui-muted, #64748b)',
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
           whiteSpace: 'nowrap',
@@ -649,7 +647,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         gap: '6px',
         background: 'rgba(37,99,235,0.14)',
         border: '1px solid rgba(37,99,235,0.3)',
-        color: '#93c5fd',
+        color: 'var(--ui-link, #93c5fd)',
         fontSize: '11px',
         fontWeight: 600,
         borderRadius: '999px',
@@ -663,7 +661,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         style={{
           background: 'none',
           border: 'none',
-          color: '#94a3b8',
+          color: 'var(--ui-secondary, #94a3b8)',
           cursor: 'pointer',
           padding: 0,
           fontSize: '12px',
@@ -708,27 +706,16 @@ function TopTechniciansCard({
     avgResolution: 'Avg Days',
   };
 
-  const techGradients = [
-    'linear-gradient(90deg, #2563eb, #60a5fa)',
-    'linear-gradient(90deg, #7c3aed, #a78bfa)',
-    'linear-gradient(90deg, #059669, #34d399)',
-    'linear-gradient(90deg, #d97706, #fbbf24)',
-    'linear-gradient(90deg, #dc2626, #f87171)',
-    'linear-gradient(90deg, #0891b2, #38bdf8)',
-    'linear-gradient(90deg, #c026d3, #e879f9)',
-    'linear-gradient(90deg, #475569, #94a3b8)',
-  ];
-
   return (
     <div
       style={{
-        background: '#111c30',
-        border: '1px solid #1e293b',
+        background: 'var(--ui-surface, #111c30)',
+        border: '1px solid var(--ui-panel-border, var(--ui-border))',
         borderRadius: '16px',
         padding: '20px 22px',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
       }}
     >
       {/* Header: Title + Inline Mode Pills */}
@@ -745,17 +732,17 @@ function TopTechniciansCard({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '15px' }}>👥</span>
-            <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Top Technicians
             </h3>
           </div>
-          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+          <p style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', margin: '2px 0 0' }}>
             Ranked by {modeLabels[rankMode]}
           </p>
         </div>
 
         {/* Integrated Filter Pills */}
-        <div style={{ display: 'flex', gap: '4px', background: '#091426', padding: '3px', borderRadius: '8px', border: '1px solid #1e3a5f' }}>
+        <div style={{ display: 'flex', gap: '4px', background: 'var(--ui-inset, #091426)', padding: '3px', borderRadius: '8px', border: '1px solid var(--ui-border, #1e3a5f)' }}>
           {([
             { key: 'resolved' as TechRankMode, label: 'Resolved' },
             { key: 'assigned' as TechRankMode, label: 'Assigned' },
@@ -770,7 +757,7 @@ function TopTechniciansCard({
                 onClick={() => onRankModeChange(key)}
                 style={{
                   background: isSelected ? '#2563eb' : 'transparent',
-                  color: isSelected ? '#ffffff' : '#94a3b8',
+                  color: isSelected ? '#ffffff' : 'var(--ui-secondary, #94a3b8)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '4px 10px',
@@ -798,7 +785,7 @@ function TopTechniciansCard({
 
           const pctWidth = maxVal > 0 && val > 0 ? Math.max(3, (val / maxVal) * 100) : 0;
           const isSelected = activeTech?.toLowerCase() === r.technician.toLowerCase();
-          const grad = techGradients[i % techGradients.length];
+          const barColor = analyticsChartColor(CHART_COLORS[i % CHART_COLORS.length]);
           const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
 
           return (
@@ -814,7 +801,7 @@ function TopTechniciansCard({
                 transition: 'all 0.12s ease',
               }}
               onMouseEnter={(e) => {
-                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)';
+                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'var(--ui-wash, rgba(255,255,255,0.03))';
               }}
               onMouseLeave={(e) => {
                 if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
@@ -822,31 +809,31 @@ function TopTechniciansCard({
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, paddingRight: '8px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', width: '20px', flexShrink: 0, textAlign: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--ui-secondary, #94a3b8)', width: '20px', flexShrink: 0, textAlign: 'center' }}>
                     {medal}
                   </span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#60a5fa' : '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? 'var(--ui-link, #60a5fa)' : 'var(--ui-text, #f8fafc)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {r.technician}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: val > 0 ? '#f8fafc' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: val > 0 ? 'var(--ui-text, #f8fafc)' : 'var(--ui-muted, #64748b)', fontVariantNumeric: 'tabular-nums' }}>
                     {val}
                     {rankMode === 'resolutionRate' ? '%' : ''}
                   </span>
-                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', fontWeight: 500 }}>
                     {rankMode === 'resolved' ? 'res.' : rankMode === 'assigned' ? 'assign.' : rankMode === 'aging' ? 'stagn.' : ''}
                   </span>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div style={{ width: '100%', height: '6px', background: '#091426', borderRadius: '999px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '6px', background: 'var(--ui-inset, #091426)', borderRadius: '999px', overflow: 'hidden' }}>
                 <div
                   style={{
                     width: `${pctWidth}%`,
                     height: '100%',
-                    background: val > 0 ? grad : 'transparent',
+                    background: val > 0 ? barColor : 'transparent',
                     borderRadius: '999px',
                     transition: 'width 0.4s ease',
                   }}
@@ -875,27 +862,16 @@ function DepartmentRankingCard({
   const maxVal = Math.max(...top8.map((d) => d.value), 1);
   const grandTotal = total > 0 ? total : data.reduce((s, d) => s + d.value, 0) || 1;
 
-  const deptGradients = [
-    'linear-gradient(90deg, #2563eb, #60a5fa)',
-    'linear-gradient(90deg, #7c3aed, #a78bfa)',
-    'linear-gradient(90deg, #059669, #34d399)',
-    'linear-gradient(90deg, #d97706, #fbbf24)',
-    'linear-gradient(90deg, #dc2626, #f87171)',
-    'linear-gradient(90deg, #0891b2, #38bdf8)',
-    'linear-gradient(90deg, #c026d3, #e879f9)',
-    'linear-gradient(90deg, #475569, #94a3b8)',
-  ];
-
   return (
     <div
       style={{
-        background: '#111c30',
-        border: '1px solid #1e293b',
+        background: 'var(--ui-surface, #111c30)',
+        border: '1px solid var(--ui-panel-border, var(--ui-border))',
         borderRadius: '16px',
         padding: '20px 22px',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
       }}
     >
       {/* Top Header */}
@@ -912,11 +888,11 @@ function DepartmentRankingCard({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '15px' }}>🏢</span>
-            <h3 style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Incidents by Department
             </h3>
           </div>
-          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0 0' }}>
+          <p style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', margin: '2px 0 0' }}>
             Top 8 organizational units by volume
           </p>
         </div>
@@ -926,7 +902,7 @@ function DepartmentRankingCard({
           style={{
             background: 'rgba(56,189,248,0.12)',
             border: '1px solid rgba(56,189,248,0.3)',
-            color: '#38bdf8',
+            color: 'var(--ui-link, #38bdf8)',
             fontSize: '11px',
             fontWeight: 800,
             padding: '3px 10px',
@@ -943,7 +919,7 @@ function DepartmentRankingCard({
           const pct = ((d.value / grandTotal) * 100).toFixed(1);
           const pctWidth = Math.max(3, (d.value / maxVal) * 100);
           const isSelected = activeDept?.toLowerCase() === d.label.toLowerCase();
-          const grad = deptGradients[i % deptGradients.length];
+          const barColor = analyticsChartColor(CHART_COLORS[i % CHART_COLORS.length]);
 
           return (
             <div
@@ -958,7 +934,7 @@ function DepartmentRankingCard({
                 transition: 'all 0.12s ease',
               }}
               onMouseEnter={(e) => {
-                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)';
+                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'var(--ui-wash, rgba(255,255,255,0.03))';
               }}
               onMouseLeave={(e) => {
                 if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
@@ -967,14 +943,14 @@ function DepartmentRankingCard({
               {/* Row text */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, paddingRight: '8px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', width: '20px', flexShrink: 0, textAlign: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--ui-secondary, #94a3b8)', width: '20px', flexShrink: 0, textAlign: 'center' }}>
                     {i + 1}
                   </span>
                   <span
                     style={{
                       fontSize: '13px',
                       fontWeight: 700,
-                      color: isSelected ? '#60a5fa' : '#f8fafc',
+                      color: isSelected ? 'var(--ui-link, #60a5fa)' : 'var(--ui-text, #f8fafc)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -985,22 +961,22 @@ function DepartmentRankingCard({
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', fontWeight: 500 }}>
                     {pct}%
                   </span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', fontVariantNumeric: 'tabular-nums' }}>
                     {d.value}
                   </span>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div style={{ width: '100%', height: '6px', background: '#091426', borderRadius: '999px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '6px', background: 'var(--ui-inset, #091426)', borderRadius: '999px', overflow: 'hidden' }}>
                 <div
                   style={{
                     width: `${pctWidth}%`,
                     height: '100%',
-                    background: grad,
+                    background: barColor,
                     borderRadius: '999px',
                     transition: 'width 0.4s ease',
                   }}

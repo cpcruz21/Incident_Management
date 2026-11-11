@@ -20,7 +20,7 @@ interface FilterBarProps {
 const labelStyle: React.CSSProperties = {
   fontSize: '11px',
   fontWeight: 800,
-  color: '#94a3b8',
+  color: 'var(--ui-secondary, #94a3b8)',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
   display: 'block',
@@ -28,21 +28,19 @@ const labelStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  background: '#091426',
-  border: '1px solid #1e3a5f',
+  background: 'var(--ui-inset, #091426)',
+  border: '1px solid var(--ui-control-border)',
   borderRadius: '8px',
-  color: '#f8fafc',
+  color: 'var(--ui-text, #f8fafc)',
   fontSize: '12px',
   padding: '7px 12px',
   width: '100%',
-  outline: 'none',
   fontFamily: 'inherit',
 };
 
 const selectStyle: React.CSSProperties = {
   ...inputStyle,
   cursor: 'pointer',
-  appearance: 'none' as const,
 };
 
 function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -93,17 +91,17 @@ export function IRFilterBar({
   return (
     <div
       style={{
-        background: '#111c30',
-        border: '1px solid #1e293b',
+        background: 'var(--ui-surface, #111c30)',
+        border: '1px solid var(--ui-panel-border, var(--ui-border))',
         borderRadius: '16px',
         padding: '18px 22px',
         marginBottom: '20px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>🔍 Filters</span>
+          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--ui-text, #f8fafc)' }}>🔍 Filters</span>
           {activeFilterCount > 0 && (
             <span
               style={{
@@ -125,8 +123,8 @@ export function IRFilterBar({
             onClick={reset}
             style={{
               background: 'transparent',
-              border: '1px solid #334e68',
-              color: '#94a3b8',
+              border: '1px solid var(--ui-border, #334e68)',
+              color: 'var(--ui-secondary, #94a3b8)',
               borderRadius: '6px',
               padding: '5px 12px',
               fontSize: '11px',
@@ -251,7 +249,7 @@ export function IRFilterBar({
             onChange={(e) => update('includeResolved', e.target.checked)}
             style={{ cursor: 'pointer', accentColor: '#2563eb' }}
           />
-          <label htmlFor="includeResolved" style={{ ...labelStyle, marginBottom: 0, cursor: 'pointer', color: '#94a3b8' }}>
+          <label htmlFor="includeResolved" style={{ ...labelStyle, marginBottom: 0, cursor: 'pointer', color: 'var(--ui-secondary, #94a3b8)' }}>
             Include Resolved in Aging / Inactivity Views
           </label>
         </div>
@@ -259,7 +257,7 @@ export function IRFilterBar({
 
       {/* Active filter chips */}
       {activeFilterCount > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #1e3a5f' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--ui-border, #1e3a5f)' }}>
           {filters.search && <FilterChip label={`Search: "${filters.search}"`} onRemove={() => update('search', '')} />}
           {filters.technician && <FilterChip label={`Tech: ${filters.technician}`} onRemove={() => update('technician', '')} />}
           {filters.status && <FilterChip label={`Status: ${filters.status}`} onRemove={() => update('status', '')} />}
@@ -287,7 +285,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         gap: '6px',
         background: 'rgba(37,99,235,0.15)',
         border: '1px solid rgba(37,99,235,0.35)',
-        color: '#93c5fd',
+        color: 'var(--ui-link, #93c5fd)',
         fontSize: '11px',
         fontWeight: 600,
         padding: '3px 8px',
@@ -301,7 +299,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         style={{
           background: 'none',
           border: 'none',
-          color: '#93c5fd',
+          color: 'var(--ui-link, #93c5fd)',
           cursor: 'pointer',
           fontSize: '12px',
           lineHeight: 1,

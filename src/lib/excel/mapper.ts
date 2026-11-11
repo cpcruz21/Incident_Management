@@ -1,6 +1,7 @@
 
 import type { RawIncidentRow, ColumnMapping, Incident } from '@/types/incident';
 import { toValidDate } from '@/lib/aging/calculator';
+import { isStatusOverdue } from '@/lib/sla/status';
 
 
 export function autoDetectMapping(columns: string[]): Partial<ColumnMapping> {
@@ -15,7 +16,7 @@ export function autoDetectMapping(columns: string[]): Partial<ColumnMapping> {
     { field: 'respondedDate', patterns: [/responded\s*date/i, /response\s*date/i, /first\s*respond/i] },
     { field: 'firstResponseOverdueStatus', patterns: [/first\s*response\s*overdue/i, /fr\s*overdue/i, /first\s*response\s*sla/i] },
     { field: 'completedTime', patterns: [/completed\s*time/i, /completed\s*date/i, /resolved\s*time/i, /closed\s*time/i, /resolved\s*date/i] },
-    { field: 'overdueStatus', patterns: [/^overdue\s*status$/i, /resolution\s*overdue/i, /overdue$/i] },
+    { field: 'overdueStatus', patterns: [/^overdue\s*status$/i, /resolution\s*(?:time\s*)?(overdue|sla|status)/i, /^overdue$/i] },
     { field: 'category', patterns: [/^category$/i, /incident\s*category/i, /^type$/i] },
     { field: 'subCategory', patterns: [/sub\s*category/i, /^subcategory$/i, /sub-category/i, /sub_category/i] },
     { field: 'item', patterns: [/^item$/i, /^items$/i, /item\s*name/i, /asset\s*item/i, /^item\s*description$/i] },
@@ -50,7 +51,7 @@ function parseDate(value: string | number | Date | undefined): Date | undefined 
 function isOverdue(value: string | number | undefined): boolean {
   if (value === undefined || value === null) return false;
   const str = String(value).toLowerCase().trim();
-  return str === 'overdue' || str === 'yes' || str === 'true' || str === '1' || str === 'failed' || str === 'breached';
+  return isStatusOverdue(str) ?? false;
 }
 
 export function mapRowToIncident(
@@ -105,6 +106,9 @@ export function mapRowToIncident(
 
   const rawFirstResponseStatus = row[mapping.firstResponseOverdueStatus];
   const rawResolutionStatus = row[mapping.overdueStatus];
+
+  if (isStatusOverdue(rawFirstResponseStatus) === null) warnings.push('Missing or invalid First Response Overdue Status; SLA will be calculated from timestamps.');
+  if (isStatusOverdue(rawResolutionStatus) === null) warnings.push('Missing or invalid Resolution Overdue Status; SLA will be calculated from timestamps.');
 
   const firstResponseOverdue = isOverdue(row[mapping.firstResponseOverdueStatus]);
   const resolutionOverdue = isOverdue(row[mapping.overdueStatus]);

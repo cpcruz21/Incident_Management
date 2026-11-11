@@ -17,7 +17,9 @@ import type {
   MonthlyTechnicianSLA,
   RootCauseRow,
 } from '@/types/monthly';
+import { generateMonthlyRemarks } from './remarks';
 import { calculateSLAReport } from '@/lib/sla/calculator';
+import { getImportedSLAStatus } from '@/lib/sla/status';
 import { isCreatedOutsideOfficeHours, isISSTeam } from '@/lib/aging/calculator';
 
 export const MONTHLY_DEFAULT_TECHNICIANS = [
@@ -48,23 +50,13 @@ export function getTechnician(inc: Incident): string {
 
 /** Check whether the incident's raw First Response Overdue Status was TRUE (lapsed in SDP) */
 export function isRawFirstResponseOverdue(inc: Incident): boolean {
-  if (inc.rawData) {
-    for (const [k, v] of Object.entries(inc.rawData)) {
-      if (/first\s*response\s*overdue/i.test(k)) {
-        const s = String(v ?? '').trim().toUpperCase();
-        if (s === 'TRUE') return true;
-        if (s === 'FALSE') return false;
-      }
-    }
-  }
-  const raw = String(inc.rawFirstResponseStatus ?? '').trim().toUpperCase();
-  if (raw === 'TRUE') return true;
-  if (raw === 'FALSE') return false;
-  return Boolean(inc.firstResponseOverdue);
+  return getImportedSLAStatus(inc, 'firstResponse') ?? Boolean(inc.firstResponseOverdue);
 }
 
 /** Check if First Response failed from raw data column or calculation */
 export function isFirstResponseFailed(inc: Incident): boolean {
+  if (inc.acceptableFirstResponseApproval) return false;
+
   // If non-ISS and created outside office hours / weekend -> excused (acceptable / NOT failed)
   if (!isISS24x7(inc) && isCreatedOutsideOfficeHours(inc)) {
     return false;
@@ -75,38 +67,22 @@ export function isFirstResponseFailed(inc: Incident): boolean {
 
 /** Check if Resolution failed from raw data column or calculation */
 export function isResolutionFailed(inc: Incident): boolean {
-  if (inc.rawData) {
-    for (const [k, v] of Object.entries(inc.rawData)) {
-      if (/^overdue\s*status/i.test(k.trim())) {
-        const s = String(v ?? '').trim().toUpperCase();
-        if (s === 'TRUE') return true;
-        if (s === 'FALSE') return false;
-      }
-    }
-  }
-  return inc.resolutionOverdue;
+  return getImportedSLAStatus(inc, 'resolution') ?? inc.resolutionOverdue;
 }
 
 
 export function filterClosedTickets(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
-
-    if (inc.rawData) {
+    let status = (inc.requestStatus || '').toLowerCase().trim();
+    if (!status && inc.rawData) {
       for (const [k, v] of Object.entries(inc.rawData)) {
-        if (/request\s*status/i.test(k)) {
-          const s = String(v ?? '').toLowerCase().trim();
-          if (s === 'closed' || s === 'resolved' || s === 'completed') return true;
+        if (/^(request\s*status|ticket\s*status|status)$/i.test(k.trim())) {
+          status = String(v ?? '').toLowerCase().trim();
+          break;
         }
       }
     }
-    const status = (inc.requestStatus || '').toLowerCase().trim();
-    return (
-      status === 'closed' ||
-      status === 'resolved' ||
-      status === 'completed' ||
-      status.includes('close') ||
-      status.includes('resolve')
-    );
+    return /^(closed?|resolved?|completed?)\b/.test(status);
   });
 }
 
@@ -151,12 +127,15 @@ export { isCreatedOutsideOfficeHours };
  * In the monthly SLA report, "Acceptable First Response" lists ONLY the incidents
  * that LAPSED (raw First Response Overdue Status = TRUE), BUT were excused and accepted
  * because they were filed beyond office hours (before 8:30 AM / after 5:30 PM, or on weekends)
- * for all departments EXCEPT ISS Binondo and ISS Makati (which operate 24/7).
+ * for all departments EXCEPT ISS Binondo and ISS Makati (which operate 24/7),
+ * or were explicitly verified and accepted by an administrator.
  */
 export function filterAcceptableFirstResponse(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
     // 1. Must be a ticket that lapsed/overdue in raw data
     if (!isRawFirstResponseOverdue(inc)) return false;
+
+    if (inc.acceptableFirstResponseApproval) return true;
 
     // 2. ISS 24/7 teams (ISS Binondo, ISS Makati) get NO exception
     if (isISS24x7(inc)) return false;
@@ -164,6 +143,35 @@ export function filterAcceptableFirstResponse(incidents: Incident[]): Incident[]
     // 3. For all other departments: only accepted if created outside office hours / weekend
     return isCreatedOutsideOfficeHours(inc);
   });
+}
+
+/** Resolve an existing, failed FR ticket before an admin confirms an exception. */
+export function findAcceptableFRCandidate(incidents: Incident[], requestId: string): Incident {
+  const id = requestId.trim().toLowerCase();
+  if (!id) throw new Error('Enter a Request ID.');
+  const incident = incidents.find((inc) => inc.requestId.trim().toLowerCase() === id);
+  if (!incident) throw new Error('Request ID was not found in this report.');
+  if (filterAcceptableFirstResponse([incident]).length > 0) {
+    throw new Error('This Request ID is already in Acceptable First Response.');
+  }
+  if (!isRawFirstResponseOverdue(incident)) {
+    throw new Error('This ticket already passed First Response and does not need an exception.');
+  }
+  return incident;
+}
+
+export function approveAcceptableFR(
+  incidents: Incident[],
+  requestId: string,
+  approvedBy: string
+): Incident[] {
+  const candidate = findAcceptableFRCandidate(incidents, requestId);
+  const approval = { approvedBy, approvedAt: new Date().toISOString() };
+  return incidents.map((inc) =>
+    inc.requestId.trim().toLowerCase() === candidate.requestId.trim().toLowerCase()
+      ? { ...inc, acceptableFirstResponseApproval: approval }
+      : inc
+  );
 }
 
 /** Group incidents directly by their Technician */
@@ -319,111 +327,6 @@ function buildRootCauses(incidents: Incident[]): RootCauseRow[] {
     .sort((a, b) => b.count - a.count);
 }
 
-/** Auto-generate remarks text from the monthly results */
-function generateRemarks(
-  kpis: MonthlyKPI[],
-  rows: MonthlyTechnicianSLA[],
-  totals: MonthlyTechnicianSLA
-): string {
-  const lines: string[] = [];
-
-  const frKPI = kpis.find((k) => k.label.includes('Response'));
-  const rtKPI = kpis.find((k) => k.label.includes('Resolution'));
-
-  if (!frKPI || !rtKPI) return '';
-
-  const frMet = frKPI.percentageResult >= KPI_TARGET;
-  const rtMet = rtKPI.percentageResult >= KPI_TARGET;
-
-  // ── Summary sentence ──────────────────────────────────────
-  if (frMet && rtMet) {
-    lines.push('The team performed well in both resolving tickets on time and meeting the first-response target.');
-  } else if (rtMet && !frMet) {
-    lines.push('The team performed exceptionally well in resolving tickets, and moved much closer to meeting the first-response target.');
-  } else if (frMet && !rtMet) {
-    lines.push('The team responded quickly to new tickets, but struggled to close all resolutions within the target window.');
-  } else {
-    lines.push('The team needs improvement in both first response and resolution time metrics this period.');
-  }
-
-  lines.push('');
-
-  // ── KPI Lines ─────────────────────────────────────────────
-  const rtLabel = rtMet ? 'Met' : 'Failed';
-  lines.push(
-    `Target Resolution Time: ${rtLabel} (${rtKPI.percentageResult.toFixed(2)}%) - ${
-      rtMet
-        ? `The team well exceeded the ${KPI_TARGET}% target, showing that active tickets are solved quickly.`
-        : `The team missed the ${KPI_TARGET}% target due to ${totals.rtFailed} late resolutions out of ${totals.rtTotal} total tickets.`
-    }`
-  );
-
-  const frLabel = frMet ? 'Met' : 'Failed';
-  lines.push(
-    `Target Response Time: ${frLabel} (${frKPI.percentageResult.toFixed(2)}%) - ${
-      frMet
-        ? `The team met the ${KPI_TARGET}% target for first response.`
-        : `The team narrowly missed the ${KPI_TARGET}% target due to ${totals.frFailed} late first responses out of ${totals.frTotal} total tickets.`
-    }`
-  );
-
-  lines.push('');
-
-  // ── Observation 1: Top team by ticket volume ──────────────
-  const sorted = [...rows].filter((r) => r.frTotal > 0).sort((a, b) => b.frTotal - a.frTotal);
-  if (sorted.length > 0) {
-    const top = sorted[0];
-    const frRate = top.frPassRate !== null ? top.frPassRate.toFixed(2) : 'N/A';
-    const rtRate = top.rtPassRate !== null ? top.rtPassRate.toFixed(2) : 'N/A';
-    lines.push(
-      `${top.technician} handled most of the tickets (${top.frTotal}) with strong results (${frRate}% response and ${rtRate}% resolution).`
-    );
-  }
-
-  // ── Observation 2: Teams dragging down FR rate ────────────
-  const lowFR = rows.filter(
-    (r) => r.frTotal > 0 && r.frPassRate !== null && r.frPassRate < KPI_TARGET
-  );
-  if (lowFR.length > 0) {
-    const names = lowFR
-      .map((r) => `${r.technician} (${r.frPassRate!.toFixed(2)}%${r.frFailed > 1 ? ` with ${r.frFailed} late responses` : ''})`)
-      .join(', ');
-    lines.push(
-      `The response target was missed mainly due to lower pass rates in ${names}.`
-    );
-  }
-
-  // ── Observation 3: Perfect resolution teams ───────────────
-  const perfectRT = rows.filter((r) => r.rtTotal > 0 && r.rtPassRate === 100);
-  if (perfectRT.length > 0) {
-    const names = perfectRT.map((r) => r.technician).join(', ');
-    lines.push(
-      `Once work started, execution was excellent. ${names} all achieved a 100.00% resolution pass rate. This confirms the issue is strictly with acknowledging new tickets, not solving them.`
-    );
-  }
-
-  lines.push('');
-
-  // ── Recommendation ────────────────────────────────────────
-  const gapPct = Math.abs(frKPI.percentageResult - KPI_TARGET).toFixed(2);
-  if (!frMet && lowFR.length > 0) {
-    const teamNames = lowFR.map((r) => r.technician).join(', ');
-    lines.push(
-      `Provide closer monitoring and alerts for ${teamNames} during ticket intake to close the small ${gapPct}% gap and pass the response KPI.`
-    );
-  } else if (!rtMet) {
-    lines.push(
-      `Focus on faster ticket closure for teams with pending resolutions to close the ${gapPct}% gap and meet the resolution KPI.`
-    );
-  } else {
-    lines.push(
-      `Maintain current performance levels and continue tracking both KPIs to sustain compliance across all teams.`
-    );
-  }
-
-  return lines.join('\n');
-}
-
 // ─── Main Calculator ────────────────────────────────────────
 
 export function calculateMonthlyReport(
@@ -441,7 +344,7 @@ export function calculateMonthlyReport(
   const { rows, totals } = buildTechnicianSLA(incidents, closedTickets, technicians);
   const kpis = buildKPIs(totals);
   const rootCauses = buildRootCauses(closedTickets);
-  const remarks = generateRemarks(kpis, rows, totals);
+  const remarks = generateMonthlyRemarks(kpis, rows, totals);
 
   return {
     reportTitle: 'Monthly Overall Ticket Report',

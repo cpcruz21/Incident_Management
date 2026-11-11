@@ -1,0 +1,41 @@
+purpose:
+  stands_in_for: ServiceDesk Plus Cloud Requests API and Zoho OAuth token refresh
+  unblocks: Verification of report Request ID redirects without live credentials
+assumptions:
+  - id: lookup-by-display-id
+    status: supported
+    claim: The Equicom itdesk portal accepted an exact display_id search and returned the internal request ID as a string for the two verified requests.
+    reason: The live API returned the expected internal ID for IR-53184, and the route returned the expected redirect for that request and a second request from the portal list.
+    verification: On 2026-11-09 the live GET for display_id 53184 returned 200 with one exact match. The application route returned 303 for two requests against the live Equicom portal under the local-sdp-client-credentials fingerprint. On 2026-11-07 the real resolver and route also passed against contract-derived stand-ins with the encoded criteria and required headers.
+    source: https://www.manageengine.com/products/service-desk/sdpod-v3-api/requests/request.html; https://www.manageengine.com/products/service-desk/sdpod-v3-api/getting-started/search-criteria.html; scripts/verify-sdp-links.cjs
+    updated_at: "2026-11-09"
+  - id: ui-url-internal-id
+    status: supported
+    claim: The supplied IR-53184 example uses internal ID 129915000037909050 in the itdesk UI URL.
+    reason: The user supplied both the visible Request ID and the opened ticket URL; the redirect preserves that ID as a string.
+    verification: On 2026-11-07 the simulated response produced the exact supplied UI URL, excluding the optional woFrom tracking query. The live browser destination requires an SDP login and remains unverified.
+    source: User-provided ticket URL in this chat; scripts/verify-sdp-links.cjs
+    updated_at: "2026-11-07"
+  - id: oauth-and-error-handling
+    status: supported
+    claim: Under the exercised stand-in responses, the caller shares token refresh, retries once on 401, caches successful mappings, and avoids redirecting on invalid, missing, ambiguous, or malformed results.
+    reason: The actual route and resolver ran through the simulation proxy, with no replaced HTTP client. Assertions checked redirect destinations, status codes, cache and refresh counts, and omission of synthetic secrets from error pages.
+    verification: On 2026-11-07 all route checks passed with 15 mocked requests and zero passed-through requests. On 2026-11-09 the same assertions passed for both grants under the local-sdp-client-credentials fingerprint. Each run recorded 15 mocked requests and zero passed-through requests. This establishes caller behavior under the modeled responses. An owner mock search was skipped because Postman is signed out. Orbit was unavailable due to DNS resolution.
+    source: scripts/verify-sdp-links.cjs; postman/mocks/sdp/default.js; docs/sdp-request-links.md
+    updated_at: "2026-11-09"
+  - id: read-only-client-credentials
+    status: supported
+    claim: The configured Equicom Zoho client can obtain an access token via the client credentials grant for SDPOnDemand.requests.READ.
+    reason: Zoho issued an access token for that scope and the itdesk Requests list accepted it.
+    verification: On 2026-11-09 the live Zoho token endpoint issued an access token and Equicom returned HTTP 200 for the read-only Requests API. The simulated OAuth handler separately verified the scope and the absence of a refresh token under the local-sdp-client-credentials fingerprint.
+    source: https://www.zoho.com/developer/oauth/self-client/client-credentials-flow.html; src/lib/server/sdp.ts; postman/mocks/sdp/default.js
+    updated_at: "2026-11-09"
+fingerprints:
+  - id: local-sdp-links
+    date: "2026-11-07"
+    commit: null
+    cli: Postman 1.86.0; Node 24.22.1 for environment proxy support
+  - id: local-sdp-client-credentials
+    date: "2026-11-09"
+    commit: 2f82dd8
+    cli: Postman 1.86.0; Node 24.22.1 for proxy tests; dirty working tree

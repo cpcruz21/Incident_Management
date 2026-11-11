@@ -2,12 +2,45 @@ import * as XLSX from 'xlsx';
 import { toPng } from 'html-to-image';
 import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
-import type { AgingReportData } from '@/types/aging';
+import type { AgingRemarksRow, AgingReportData } from '@/types/aging';
 import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
 import type { MonthlyReportData } from '@/types/monthly';
 import { ALL_TICKETS_COLUMNS, CLOSED_TICKETS_COLUMNS, FIRST_RESPONSE_COLUMNS, getIncidentMonthlyValue } from '@/types/monthly';
+import { generateMonthlyRemarks } from '@/lib/monthly/remarks';
 import { filterAcceptableFirstResponse } from '@/lib/monthly/calculator';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
+
+function agingIncidentRowValues(row: AgingRemarksRow) {
+  return [
+    row.requestId,
+    row.department,
+    row.category,
+    row.subCategory,
+    row.description,
+    row.agingDays,
+  ];
+}
+
+export function exportAgingRemarksToXlsx(rows: readonly AgingRemarksRow[], period: string) {
+  const columns = [
+    { label: 'Request ID', wch: 16 },
+    { label: 'Department', wch: 22 },
+    { label: 'Category', wch: 22 },
+    { label: 'Sub Category', wch: 24 },
+    { label: 'Description', wch: 64 },
+    { label: 'Aging Days', wch: 13 },
+    { label: 'Responsible Team', wch: 24 },
+  ];
+  const values = rows.map(row => [...agingIncidentRowValues(row), row.responsibleOrDependency]);
+  const sheet = XLSX.utils.aoa_to_sheet([columns.map(column => column.label), ...values]);
+  sheet['!cols'] = columns.map(({ wch }) => ({ wch }));
+  sheet['!autofilter'] = { ref: XLSX.utils.encode_range({ r: 0, c: 0 }, { r: rows.length, c: columns.length - 1 }) };
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Aging Incidents');
+
+  const periodLabel = period.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+  XLSX.writeFile(workbook, `Aging_Incidents${periodLabel ? `_${periodLabel}` : ''}.xlsx`, { compression: true });
+}
 
 /**
  * Checks whether an incident was re-assigned/routed away from its initial technician/team.
@@ -136,7 +169,7 @@ function appendMonthlySheets(
     ],
     [],
     ['Remarks for overall result'],
-    ...reportData.remarks.split('\n').map((line) => [line]),
+    ...generateMonthlyRemarks(reportData.kpis, reportData.technicianSLA, reportData.technicianTotals).split('\n').map((line) => [line]),
   ];
   const wsSLA = XLSX.utils.aoa_to_sheet(slaAOA);
   XLSX.utils.book_append_sheet(wb, wsSLA, 'SLA');
@@ -213,17 +246,19 @@ function appendAgingSheets(wb: XLSX.WorkBook, reportData: AgingReportData, incid
 
   // 2. SLA Compliance Sheet
   const slaRows: (string | number)[][] = [
-    ['First Response & Resolution SLA', reportData.reportPeriod || ''],
+    ['First Response & Resolution SLA', reportData.reportPeriod || '', 'Aging as of', new Date(reportData.asOf || reportData.generatedAt).toLocaleString('en-US')],
     [],
     [
       'Final Team',
       'Total # of IRs',
       'FR Failed',
       'FR Passed',
-      'FR Pass Rate',
+      'FR Pass Rate This Week',
+      'FR Pass Rate Last Week',
       'RT Failed',
       'RT Passed',
-      'RT Pass Rate',
+      'RT Pass Rate This Week',
+      'RT Pass Rate Last Week',
     ],
     ...reportData.slaRows.map((r) => [
       r.teamName,
@@ -231,9 +266,11 @@ function appendAgingSheets(wb: XLSX.WorkBook, reportData: AgingReportData, incid
       r.firstResponse.failed,
       r.firstResponse.passed,
       r.firstResponse.slaPassRate !== null ? `${r.firstResponse.slaPassRate.toFixed(2)}%` : 'N/A',
+      reportData.previousWeek.sla?.firstResponse[r.teamName] != null ? `${reportData.previousWeek.sla.firstResponse[r.teamName]!.toFixed(2)}%` : 'N/A',
       r.resolutionTime.failed,
       r.resolutionTime.passed,
       r.resolutionTime.slaPassRate !== null ? `${r.resolutionTime.slaPassRate.toFixed(2)}%` : 'N/A',
+      reportData.previousWeek.sla?.resolutionTime[r.teamName] != null ? `${reportData.previousWeek.sla.resolutionTime[r.teamName]!.toFixed(2)}%` : 'N/A',
     ]),
     [
       'Total',
@@ -241,9 +278,11 @@ function appendAgingSheets(wb: XLSX.WorkBook, reportData: AgingReportData, incid
       reportData.slaTotals.firstResponse.failed,
       reportData.slaTotals.firstResponse.passed,
       reportData.slaTotals.firstResponse.slaPassRate !== null ? `${reportData.slaTotals.firstResponse.slaPassRate.toFixed(2)}%` : 'N/A',
+      reportData.previousWeek.sla?.firstResponseTotal != null ? `${reportData.previousWeek.sla.firstResponseTotal.toFixed(2)}%` : 'N/A',
       reportData.slaTotals.resolutionTime.failed,
       reportData.slaTotals.resolutionTime.passed,
       reportData.slaTotals.resolutionTime.slaPassRate !== null ? `${reportData.slaTotals.resolutionTime.slaPassRate.toFixed(2)}%` : 'N/A',
+      reportData.previousWeek.sla?.resolutionTimeTotal != null ? `${reportData.previousWeek.sla.resolutionTimeTotal.toFixed(2)}%` : 'N/A',
     ],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(slaRows), 'SLA Compliance');
@@ -266,16 +305,7 @@ function appendAgingSheets(wb: XLSX.WorkBook, reportData: AgingReportData, incid
         'Recent Update',
         'Responsible or Dependency',
       ],
-      ...rt.rows.map((r) => [
-        r.requestId,
-        r.department,
-        r.category,
-        r.subCategory,
-        r.description,
-        r.agingDays,
-        r.recentUpdate,
-        r.responsibleOrDependency,
-      ]),
+      ...rt.rows.map(row => [...agingIncidentRowValues(row), row.recentUpdate, row.responsibleOrDependency]),
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(remarksSheetRows), 'Remarks Table');
   }
@@ -550,7 +580,7 @@ export function exportToHTML(
 
       <h3 style="color: #1f4e79; margin-bottom: 8px;">Remarks for overall result</h3>
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; line-height: 1.6;">
-        ${md.remarks.split('\n').map((line) => line ? `<p style="margin: 4px 0;">${line}</p>` : '<br/>').join('')}
+        ${generateMonthlyRemarks(md.kpis, md.technicianSLA, md.technicianTotals).split('\n').map((line) => line ? `<p style="margin: 4px 0;">${line}</p>` : '<br/>').join('')}
       </div>
     </div>
     `;

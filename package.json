@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup:admin": "node scripts/setup-admin.mjs"
   },
   "dependencies": {
     "html-to-image": "^1.11.11",

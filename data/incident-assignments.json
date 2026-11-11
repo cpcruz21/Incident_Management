@@ -3,16 +3,16 @@
     "requestId": "IR-53184",
     "department": "ECS ISS",
     "responsibleOrDependency": "ECS HRAD",
-    "recentUpdate": "10/27- Same Update.\n\n10/13 -As per Sir Jay, the matter is currently on hold due to two factors,\nA comprehensive plan for upgrading all UPS units is currently being developed and is pending finalization.",
-    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "recentUpdate": "11/03 - Same Update. \n\n10/13 -As per Sir Jay, the matter is currently on hold due to two factors, A comprehensive plan for upgrading all UPS units is currently being developed and is pending finalization.",
+    "updatedAt": "2026-11-03T08:57:59.550Z",
     "updatedBy": "SMAC"
   },
   "IR-54781": {
     "requestId": "IR-54781",
     "department": "ECS ISS",
     "responsibleOrDependency": "ISS MT",
-    "recentUpdate": "10/27 - No Update.\n\n9/24- As per Sir Jun, pending approval in Algo for the EI proposal.",
-    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "recentUpdate": "11/03 - No Update. \n\n9/24-As per Sir Jun, pending approval in Algo for the EI proposal.",
+    "updatedAt": "2026-11-03T08:57:59.550Z",
     "updatedBy": "SMAC"
   },
   "IR-55020": {
@@ -35,16 +35,16 @@
     "requestId": "IR-55897",
     "department": "ECS Field Servicing",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "As per Vina, Deployment is on hold due to environment unavailability and the prioritization of QA testing.",
-    "updatedAt": "2026-10-27T09:11:27.138Z",
+    "recentUpdate": "As per Vina, UAT is still ongoing, and the target setup date is scheduled between November 4 and 5.",
+    "updatedAt": "2026-11-04T01:10:45.306Z",
     "updatedBy": "SMAC"
   },
   "IR-56064": {
     "requestId": "IR-56064",
     "department": "ECS POS Repair",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "As per Mar, production deployment was delayed due to Dev’s pending Vulnerability Scan request in SDP. The fix is now endorsed for UAT, and coordination with the team is ongoing to confirm the updated deployment schedule.",
-    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "recentUpdate": "As per Mar, the exact target deployment date has not yet been provided, as the planned activity was postponed last Friday, October 30.",
+    "updatedAt": "2026-11-04T01:11:26.230Z",
     "updatedBy": "SMAC"
   },
   "IR-56149": {
@@ -75,8 +75,8 @@
     "requestId": "IR-56501",
     "department": "ECS SDS",
     "responsibleOrDependency": "ISS Binondo",
-    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
-    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "recentUpdate": "11/03 - Same update.\n\n10/28 - As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-11-04T01:17:43.420Z",
     "updatedBy": "SMAC"
   },
   "IR-57243": {
@@ -123,8 +123,8 @@
     "requestId": "IR-56706",
     "department": "ECS POS Repair",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "",
-    "updatedAt": "2026-10-27T09:02:59.146Z",
+    "recentUpdate": "As per Rhea, UAT is still ongoing, and the target date for production deployment is either November 4 or next week.",
+    "updatedAt": "2026-11-03T08:56:55.152Z",
     "updatedBy": "SMAC"
   },
   "IR-56687": {
@@ -139,16 +139,16 @@
     "requestId": "IR-56482",
     "department": "ECS SDS",
     "responsibleOrDependency": "ISS Binondo",
-    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
-    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "recentUpdate": "11/03 - Same update.\n\n10/28 - As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-11-04T01:17:43.420Z",
     "updatedBy": "SMAC"
   },
   "IR-56500": {
     "requestId": "IR-56500",
     "department": "ECS SDS",
     "responsibleOrDependency": "ISS Binondo",
-    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
-    "updatedAt": "2026-10-28T05:15:05.727Z",
+    "recentUpdate": "11/03 - Same update.\n\n10/28 - As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-11-04T01:17:43.420Z",
     "updatedBy": "SMAC"
   },
   "IR-56581": {
@@ -163,8 +163,24 @@
     "requestId": "IR-56620",
     "department": "ECS Field Servicing",
     "responsibleOrDependency": "ISMS Support",
-    "recentUpdate": "",
-    "updatedAt": "2026-10-28T08:45:28.900Z",
+    "recentUpdate": "As per Henry, the fix for ECS/BDO Pearl is now undergoing UAT.",
+    "updatedAt": "2026-11-03T08:56:55.152Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-56580": {
+    "requestId": "IR-56580",
+    "department": "ECS Field Servicing",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "As per Sir Glen, the issue remains unresolved following the last discussion with IE. Currently, there is no confirmed timeline for the replacement or resolution.",
+    "updatedAt": "2026-11-03T08:56:55.152Z",
+    "updatedBy": "SMAC"
+  },
+  "IR-57127": {
+    "requestId": "IR-57127",
+    "department": "ECS FS Helpdesk",
+    "responsibleOrDependency": "ISMS Support",
+    "recentUpdate": "As per Vina, the target deployment is November 4.",
+    "updatedAt": "2026-11-04T01:07:41.646Z",
     "updatedBy": "SMAC"
   }
 }

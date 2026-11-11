@@ -1,0 +1,43 @@
+.users-management { gap: 22px; }
+.users-management .users-page-header { align-items: center; }
+.users-management .users-page-header h1 { margin: 0; font-size: 28px; font-weight: 650; }
+.users-account-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 24px; align-items: start; }
+.users-panel { min-width: 0; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 6px; }
+.users-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--ui-border); }
+.users-panel-header h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.users-account-total { color: var(--ui-secondary); font-size: 12px; }
+.users-management .users-create-form, .users-management .users-created { padding: 20px; }
+.users-management .users-create-form fieldset { gap: 8px; }
+.users-management .users-create-form label { justify-content: flex-start; margin-top: 12px; }
+.users-management .users-create-form label:first-of-type { margin-top: 0; }
+.users-management .users-create-form input { min-height: 40px; border-radius: 4px; font-size: 13px; }
+.users-form-note { color: var(--ui-secondary); font-size: 12px; line-height: 1.65; margin: 12px 0 0; }
+.users-management .users-form-actions { border: 0; margin-top: 8px; padding-top: 8px; }
+.users-management .users-form-actions .admin-primary { width: auto; min-height: 38px; border-radius: 4px; font-size: 13px; }
+.users-management .users-search { margin: 16px 20px; min-height: 38px; border-radius: 4px; background: var(--ui-surface); }
+.users-management .users-search input { min-height: 36px; }
+.users-management .users-directory-caption { margin: 0 20px 12px; font-size: 12px; }
+.users-table-scroll { overflow-x: auto; border-top: 1px solid var(--ui-border); border-radius: 0 0 6px 6px; }
+.users-table { width: 100%; min-width: 520px; border-collapse: collapse; text-align: left; font-size: 13px; }
+.users-table th { padding: 11px 18px; background: var(--ui-inset); color: var(--ui-secondary); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.users-table td { padding: 15px 18px; border-top: 1px solid var(--ui-border); vertical-align: middle; line-height: 1.5; overflow-wrap: anywhere; }
+.users-table td:first-child { font-weight: 550; }
+.users-table td:nth-child(3) { white-space: nowrap; color: var(--ui-secondary); }
+.users-current, .users-no-action { color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.users-table-actions { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 4px; }
+.users-table-actions .admin-text-button { padding: 2px 0; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.users-table-actions .users-delete-action { color: var(--ui-danger); }
+.users-management .users-empty { min-height: 120px; }
+.users-management .users-created h3 { font-size: 17px; font-weight: 600; }
+.users-management .users-created-actions .admin-primary, .users-management .users-created-actions .admin-secondary { border-radius: 4px; font-size: 12px; }
+.users-management .users-own-account { border-radius: 6px; }
+.users-management .users-own-content { border-top: 0; padding: 24px; }
+.users-profile-details { margin: 0; display: grid; align-content: start; gap: 20px; }
+.users-profile-details dt { color: var(--ui-secondary); font-size: 12px; margin-bottom: 5px; }
+.users-profile-details dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+@media (max-width: 1200px) { .users-account-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .users-management { gap: 16px; }
+  .users-panel-header, .users-management .users-create-form, .users-management .users-created, .users-management .users-own-content { padding: 16px; }
+  .users-management .users-search { margin: 14px 16px; }
+}

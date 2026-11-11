@@ -1,7 +1,7 @@
 
 import type { Incident, ValidationSummary, ColumnMapping } from '@/types/incident';
 import type { RoutingConfig, RoutingSummary } from '@/types/routing';
-import type { SLAReport, PreviousWeekSLA, WeeklyReportData } from '@/types/sla';
+import type { PreviousWeekSLA, WeeklyReportData } from '@/types/sla';
 import { DEFAULT_COLUMN_MAPPING } from '@/types/incident';
 import { DEFAULT_ROUTING_CONFIG, REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
@@ -26,9 +26,6 @@ export interface AppState {
   routingConfig: RoutingConfig;
   routedIncidents: Incident[];
   routingSummary: RoutingSummary | null;
-
-  // SLA
-  slaReport: SLAReport | null;
 
   // Previous Week (manual input)
   previousWeekSLA: PreviousWeekSLA;
@@ -57,7 +54,6 @@ export type AppAction =
   | { type: 'SET_VALIDATION'; incidents: Incident[]; summary: ValidationSummary }
   | { type: 'SET_ROUTING_CONFIG'; config: RoutingConfig }
   | { type: 'SET_ROUTING_RESULT'; incidents: Incident[]; summary: RoutingSummary }
-  | { type: 'SET_SLA_REPORT'; report: SLAReport }
   | { type: 'SET_PREVIOUS_WEEK'; previousWeek: PreviousWeekSLA }
   | { type: 'SET_REPORT_DATA'; data: WeeklyReportData }
   | { type: 'SET_REPORT_PERIOD'; period: string }
@@ -98,7 +94,6 @@ export const initialState: AppState = {
   routingConfig: DEFAULT_ROUTING_CONFIG,
   routedIncidents: [],
   routingSummary: null,
-  slaReport: null,
   previousWeekSLA: createEmptyPreviousWeekSLA(),
   reportData: null,
   reportPeriod: '',
@@ -123,6 +118,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         fileName: action.fileName,
         rawData: action.rawData,
         detectedColumns: action.columns,
+        incidents: [],
+        validationSummary: null,
+        routedIncidents: [],
+        routingSummary: null,
+        reportData: null,
+        detailModal: initialState.detailModal,
         error: null,
       };
 
@@ -144,10 +145,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         routedIncidents: action.incidents,
         routingSummary: action.summary,
+        reportData: null,
       };
-
-    case 'SET_SLA_REPORT':
-      return { ...state, slaReport: action.report };
 
     case 'SET_PREVIOUS_WEEK':
       return { ...state, previousWeekSLA: action.previousWeek };
@@ -182,9 +181,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'LOAD_STORED_REPORT':
       return {
-        ...state,
+        ...initialState,
         currentStep: 'report',
         reportData: action.reportData,
+        reportPeriod: action.reportData.reportPeriod,
+        previousWeekSLA: action.reportData.previousWeek,
         routedIncidents: action.routedIncidents,
         incidents: action.routedIncidents,
         error: null,

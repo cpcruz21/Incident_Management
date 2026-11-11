@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { PreviousWeekSLA } from '@/types/sla';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import {
@@ -11,15 +11,17 @@ import {
 
 interface PreviousWeekInputProps {
   initialValues: PreviousWeekSLA;
+  autoFill?: boolean;
   onSave: (values: PreviousWeekSLA) => void;
   onBack: () => void;
   onProceed: () => void;
 }
 
-export function PreviousWeekInput({ initialValues, onSave, onBack, onProceed }: PreviousWeekInputProps) {
+export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBack, onProceed }: PreviousWeekInputProps) {
   const [values, setValues] = useState<PreviousWeekSLA>(initialValues);
   const [storedReports, setStoredReports] = useState<StoredReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const didAutoFill = useRef(false);
 
   const calculateTotal = (teamValues: Record<string, number | null>): number | null => {
     const validValues = Object.values(teamValues).filter(
@@ -31,15 +33,20 @@ export function PreviousWeekInput({ initialValues, onSave, onBack, onProceed }: 
   };
 
   useEffect(() => {
-    const weeklyReports = getStoredReports().filter(
-      (r) => r.type === 'weekly' || (!r.type && 'currentWeek' in (r.reportData || {}))
-    );
-    setStoredReports(weeklyReports);
+    let active = true;
+    getStoredReports()
+      .then((reports) => { if (active) setStoredReports(reports.filter((report) => report.type === 'weekly')); })
+      .catch((error) => console.warn('Could not load weekly archive:', error));
+    return () => { active = false; };
+  }, []);
 
+  useEffect(() => {
     // If initial values have no inputs, auto-fill from the latest stored report if available
-    const hasExisting = Object.values(initialValues.firstResponse).some((v) => v !== null);
-    if (!hasExisting && weeklyReports.length > 0) {
-      const latest = weeklyReports[0];
+    const hasExisting = [...Object.values(initialValues.firstResponse), ...Object.values(initialValues.resolutionTime)]
+      .some((value) => value != null);
+    if (autoFill && !didAutoFill.current && !hasExisting && storedReports.length > 0) {
+      didAutoFill.current = true;
+      const latest = storedReports[0];
       const extracted = extractWeeklySLAFromStored(latest);
       setValues(extracted);
       onSave(extracted);
@@ -53,7 +60,7 @@ export function PreviousWeekInput({ initialValues, onSave, onBack, onProceed }: 
         resolutionTimeTotal: rtTotal,
       });
     }
-  }, [initialValues]);
+  }, [initialValues, autoFill, storedReports]);
 
   const handleSelectStoredReport = (reportId: string) => {
     if (!reportId) {

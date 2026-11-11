@@ -1,36 +1,52 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { PreviousWeekAging } from '@/types/aging';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import {
   getStoredReports,
   extractAgingFromStored,
+  getPriorAgingReports,
   type StoredReport,
 } from '@/lib/storage/report-storage';
 
 interface AgingPreviousWeekInputProps {
   initialValues: PreviousWeekAging;
+  autoFill?: boolean;
+  beforeGeneratedAt?: Date | string;
+  busy?: boolean;
   onSave: (values: PreviousWeekAging) => void;
   onBack: () => void;
   onProceed: () => void;
 }
 
-export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProceed }: AgingPreviousWeekInputProps) {
+export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeGeneratedAt, busy = false, onSave, onBack, onProceed }: AgingPreviousWeekInputProps) {
   const [values, setValues] = useState<PreviousWeekAging>(initialValues);
   const [storedReports, setStoredReports] = useState<StoredReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const didAutoFill = useRef(false);
 
   useEffect(() => {
-    const agingReports = getStoredReports().filter(
-      (r) => r.type === 'aging' || (!r.type && 'agingRows' in (r.reportData || {}))
-    );
-    setStoredReports(agingReports);
+    let active = true;
+    getStoredReports()
+      .then((reports) => {
+        if (active) setStoredReports(getPriorAgingReports(reports, beforeGeneratedAt));
+      })
+      .catch(() => { if (active) setLoadError('Could not load the latest saved Aging extract. Go back and reopen this step to retry.'); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
+  }, [beforeGeneratedAt]);
 
+  useEffect(() => {
     // If initial values have no inputs, auto-fill from latest stored report if available
-    const hasExisting = Object.values(initialValues.teamTotals).some((v) => v !== null);
-    if (!hasExisting && agingReports.length > 0) {
-      const latest = agingReports[0];
+    const hasExisting = Object.values(initialValues.teamTotals).some((v) => v != null) ||
+      [...Object.values(initialValues.sla?.firstResponse || {}), ...Object.values(initialValues.sla?.resolutionTime || {}),
+        initialValues.sla?.firstResponseTotal, initialValues.sla?.resolutionTimeTotal].some((v) => v != null);
+    if (autoFill && !didAutoFill.current && (!hasExisting || !initialValues.sla) && storedReports.length > 0) {
+      didAutoFill.current = true;
+      const latest = storedReports[0];
       const extracted = extractAgingFromStored(latest);
       setValues(extracted);
       onSave(extracted);
@@ -38,7 +54,7 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
     } else {
       setValues(initialValues);
     }
-  }, [initialValues]);
+  }, [initialValues, autoFill, storedReports]);
 
   const handleSelectStoredReport = (reportId: string) => {
     if (!reportId) {
@@ -66,6 +82,20 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
     };
     setValues(empty);
     onSave(empty);
+  };
+
+  const handleSLAChange = (section: 'firstResponse' | 'resolutionTime' | 'firstResponseTotal' | 'resolutionTimeTotal', team: string | null, rawValue: string) => {
+    const value = rawValue.trim() === '' ? null : Number(rawValue);
+    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 100)) return;
+    const sla = values.sla || { firstResponse: {}, resolutionTime: {}, firstResponseTotal: null, resolutionTimeTotal: null };
+    const newValues = {
+      ...values,
+      sla: team !== null && (section === 'firstResponse' || section === 'resolutionTime')
+        ? { ...sla, [section]: { ...sla[section], [team]: value } }
+        : { ...sla, [section]: value },
+    };
+    setValues(newValues);
+    onSave(newValues);
   };
 
   const handleTeamChange = (team: string, rawValue: string) => {
@@ -122,12 +152,18 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
   return (
     <div className="prevweek-container">
       <div className="prevweek-header">
-        <h2>Previous Week Aging Totals</h2>
+        <h2>Previous Week Aging &amp; SLA</h2>
         <p className="prevweek-description">
-          The total aging IR counts are automatically calculated based on the available ticket data.
-          Review the values below to ensure they accurately reflect the previous week’s report.
+          Last week’s records load automatically from the most recent saved Aging extract.
+          Its team SLA rates and overall totals are used for comparison. You can select a different saved extract below.
         </p>
       </div>
+
+      {isLoading && <p role="status">Loading the last Aging extract…</p>}
+      {loadError && <p className="admin-error" role="alert">{loadError}</p>}
+      {!isLoading && !loadError && storedReports.length === 0 && (
+        <p role="status">No previous Aging extract is saved yet. Missing comparison values will be shown as —.</p>
+      )}
 
       {storedReports.length > 0 && (
         <div className="prevweek-autofill-banner">
@@ -135,20 +171,20 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
             <span className="prevweek-autofill-icon">💡</span>
             <div>
               <div className="prevweek-autofill-title">
-                {selectedReportId ? 'Retrieve Last Week’s SLA Rates' : 'Retrieve Last Week’s SLA Rates'}
+                Retrieve Last Week’s Aging &amp; SLA
               </div>
               <div className="prevweek-autofill-sub">
                 {selectedReportId ? (
                   <>
-                    'You have successfully retrieved last week’s SLA rates from:'
+                    Loaded last week’s aging counts and SLA rates from{' '}
                     <strong>
                       {storedReports.find((r) => r.id === selectedReportId)?.period ||
                         storedReports.find((r) => r.id === selectedReportId)?.title}
                     </strong>
-                    '. You can freely adjust any values below.'
+                    . You can adjust any values below.
                   </>
                 ) : (
-                  'Select a previous aging report from Stored Reports Archive to automatically pull last week’s aging IRs.'
+                  'Select the report for the week you want to compare. Its aging counts and SLA pass rates will be loaded together.'
                 )}
               </div>
             </div>
@@ -183,16 +219,18 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
       <div className="prevweek-info-banner">
         <span className="info-icon">✨</span>
         <p>
-          Fill in or review the values for each team. Leave them blank or type "-" if you do not have data for a specific team.
+          Leave missing values blank. SLA rates must be between 0 and 100. Overall SLA rates are based on all tickets, so they are not averaged from team percentages.
         </p>
       </div>
 
-      <div className="prevweek-table-wrapper">
+      <div className="prevweek-table-wrapper aging-previous-week-table-wrapper">
         <table className="prevweek-table">
           <thead>
             <tr>
               <th className="col-team">Technician Name</th>
               <th className="col-sla">Total Aging IRs (Last Week)</th>
+              <th className="col-sla">First Response SLA (%) — Last Week</th>
+              <th className="col-sla">Resolution SLA (%) — Last Week</th>
             </tr>
           </thead>
           <tbody>
@@ -205,9 +243,18 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
                     className="sla-input"
                     placeholder="-"
                     value={formatValue(values.teamTotals[team])}
+                    aria-label={`${team} last week aging IRs`}
                     onChange={(e) => handleTeamChange(team, e.target.value)}
                   />
                 </td>
+                {(['firstResponse', 'resolutionTime'] as const).map((section) => (
+                  <td key={section}>
+                    <input type="number" min="0" max="100" step="any" className="sla-input" placeholder="N/A"
+                      aria-label={`${team} last week ${section === 'firstResponse' ? 'First Response' : 'Resolution'} SLA`}
+                      value={values.sla?.[section][team] ?? ''}
+                      onChange={(e) => handleSLAChange(section, team, e.target.value)} />
+                  </td>
+                ))}
               </tr>
             ))}
             <tr className="row-total">
@@ -221,6 +268,14 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
                   onChange={(e) => handleGrandTotalChange(e.target.value)}
                 />
               </td>
+              {(['firstResponseTotal', 'resolutionTimeTotal'] as const).map((section) => (
+                <td key={section}>
+                  <input type="number" min="0" max="100" step="any" className="sla-input sla-input-total" placeholder="N/A"
+                    aria-label={`Overall last week ${section === 'firstResponseTotal' ? 'First Response' : 'Resolution'} SLA`}
+                    value={values.sla?.[section] ?? ''}
+                    onChange={(e) => handleSLAChange(section, null, e.target.value)} />
+                </td>
+              ))}
             </tr>
           </tbody>
         </table>
@@ -230,8 +285,8 @@ export function AgingPreviousWeekInput({ initialValues, onSave, onBack, onProcee
         <button className="btn btn-secondary" onClick={onBack}>
           ← Back
         </button>
-        <button className="btn btn-primary" onClick={onProceed}>
-          Generate Report →
+        <button className="btn btn-primary" onClick={onProceed} disabled={busy || isLoading || !!loadError}>
+          {busy ? 'Loading saved SLA…' : 'Generate Report →'}
         </button>
       </div>
     </div>
