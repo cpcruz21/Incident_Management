@@ -16,6 +16,7 @@ import { AcceptableFRInput } from '@/components/monthly/AcceptableFRInput';
 import { DeleteIR } from '@/components/monthly/DeleteIR';
 import { RequestIdLink } from '@/components/report/RequestIdLink';
 import { SLAMetricHeading } from '@/components/report/SLATableLabels';
+import { ReportImageExport } from '@/components/report/ReportImageExport';
 
 interface MonthlyReportTableProps {
   data: MonthlyReportData;
@@ -92,16 +93,70 @@ function EditableRevisedCell({ value, requestId, field, currentType, isAdmin, on
 }
 
 function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; onCellClick?: Drilldown }) {
+  const kpiPanelRef = useRef<HTMLDivElement>(null);
+  const technicianSlaPanelRef = useRef<HTMLDivElement>(null);
+  const slaAndKpiPanelRef = useRef<HTMLDivElement>(null);
+
   const fr = data.kpis.find(k => k.label.toLowerCase().includes('response'));
   const rt = data.kpis.find(k => k.label.toLowerCase().includes('resolution'));
   const frTarget = fr?.targetPercent ?? 85;
   const rtTarget = rt?.targetPercent ?? 85;
   const totals = data.technicianTotals;
   const remarks = useMemo(() => generateMonthlyRemarks(data.kpis, data.technicianSLA, totals), [data.kpis, data.technicianSLA, totals]);
+  const filenamePeriod = (data.reportPeriod || 'monthly').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
   return (
     <div className="monthly-sla-content">
-      <div className="monthly-report-scroll monthly-summary-scroll" role="region" aria-label="Monthly KPI results table" tabIndex={0}>
+      {/* Top Action Bar with Save Images Export */}
+      <div
+        className="monthly-sla-toolbar no-export"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginBottom: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff' }}>
+            Performance Metrics
+          </span>
+          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
+            ({data.reportPeriod || 'Monthly Review'})
+          </span>
+        </div>
+        <ReportImageExport
+          sources={[
+            {
+              panel: slaAndKpiPanelRef,
+              title: 'SLA & KPI Summary',
+              filename: `monthly-sla-and-kpi-${filenamePeriod}.png`,
+            },
+            {
+              panel: kpiPanelRef,
+              title: 'Monthly KPI Results',
+              filename: `monthly-kpi-results-${filenamePeriod}.png`,
+            },
+            {
+              panel: technicianSlaPanelRef,
+              title: 'Technician SLA Performance',
+              filename: `monthly-technician-sla-${filenamePeriod}.png`,
+            },
+          ]}
+          dialogTitle="Save Monthly SLA & KPI Images"
+          period={data.reportPeriod || ''}
+        />
+      </div>
+
+      {/* SLA & KPI Tables Capture Zone (strictly excludes Remarks) */}
+      <div
+        ref={slaAndKpiPanelRef}
+        className="monthly-sla-kpi-capture-zone"
+        style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+      >
+        <div ref={kpiPanelRef} className="monthly-report-scroll monthly-summary-scroll" role="region" aria-label="Monthly KPI results table" tabIndex={0}>
           <table className="monthly-summary-table monthly-paper-table">
             <caption className="monthly-sr-only">Monthly KPI targets, passing tickets, and results</caption>
             <colgroup><col className="monthly-kpi-label-col" /><col className="monthly-kpi-target-col" /></colgroup>
@@ -127,9 +182,9 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
               );
             })}</tbody>
           </table>
-      </div>
+        </div>
 
-      <div className="monthly-report-scroll monthly-technician-scroll" role="region" aria-label="Technician SLA performance table" tabIndex={0}>
+        <div ref={technicianSlaPanelRef} className="monthly-report-scroll monthly-technician-scroll" role="region" aria-label="Technician SLA performance table" tabIndex={0}>
           <table className="monthly-technician-table monthly-paper-table">
             <caption className="monthly-sr-only">First-response and resolution totals and pass rates by technician</caption>
             <colgroup><col className="monthly-technician-col" /></colgroup>
@@ -182,7 +237,10 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
               <td><RateBadge rate={totals.rtPassRate} target={rtTarget} /></td>
             </tr></tfoot>
           </table>
+        </div>
       </div>
+
+      {/* Remarks for overall result is strictly outside the capture zone */}
       <ExecutiveRemarksCard remarks={remarks} />
     </div>
   );
