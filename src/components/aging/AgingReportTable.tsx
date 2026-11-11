@@ -1356,7 +1356,7 @@ export function AgingReportTable({
             />
           )}
 
-          {/* High Impact Incidents Table (Enhanced Modern SaaS View) */}
+          {/* High Impact Incidents Table */}
           {highImpactIncidents.length === 0 ? (
             <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', padding: '32px 0', textAlign: 'center' }}>
               No high impact incidents designated for this period.
@@ -1366,61 +1366,11 @@ export function AgingReportTable({
               style={{
                 background: 'var(--ui-surface, #111c30)',
                 border: '1px solid var(--ui-panel-border, var(--ui-border, #1e293b))',
-                borderRadius: '16px',
+                borderRadius: '12px',
                 overflow: 'hidden',
-                boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.2))',
+                boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.15))',
               }}
             >
-              {/* Table Top Header Bar */}
-              <div
-                style={{
-                  padding: '14px 20px',
-                  background: 'linear-gradient(180deg, rgba(239, 68, 68, 0.08) 0%, transparent 100%)',
-                  borderBottom: '1px solid var(--ui-border, #1e293b)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '8px',
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    color: '#ef4444',
-                  }}
-                >
-                  <Flame size={16} aria-hidden="true" />
-                </div>
-                <div>
-                  <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--ui-text, #f8fafc)' }}>
-                    High Impact Incidents
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', marginLeft: '8px' }}>
-                    Priority Aging Incidents
-                  </span>
-                </div>
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    color: '#ef4444',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    borderRadius: '20px',
-                    padding: '3px 12px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                  }}
-                >
-                  {highImpactIncidents.length} {highImpactIncidents.length === 1 ? 'Record' : 'Records'}
-                </span>
-              </div>
-
-              {/* Table with Modern Clean Styling (No Excel sheet gridlines) */}
               <div style={{ overflowX: 'auto' }}>
                 <table
                   role="table"
@@ -1451,12 +1401,12 @@ export function AgingReportTable({
                           border: 'none',
                         }}
                       >
-                        IR Number
+                        RequestID
                       </th>
                       <th
                         scope="col"
                         style={{
-                          width: '13%',
+                          width: '12%',
                           padding: '12px 14px',
                           textAlign: 'left',
                           color: 'var(--ui-muted, #64748b)',
@@ -1472,7 +1422,7 @@ export function AgingReportTable({
                       <th
                         scope="col"
                         style={{
-                          width: '13%',
+                          width: '12%',
                           padding: '12px 14px',
                           textAlign: 'left',
                           color: 'var(--ui-muted, #64748b)',
@@ -1488,7 +1438,7 @@ export function AgingReportTable({
                       <th
                         scope="col"
                         style={{
-                          width: '31%',
+                          width: '26%',
                           padding: '12px 16px',
                           textAlign: 'left',
                           color: 'var(--ui-muted, #64748b)',
@@ -1520,7 +1470,7 @@ export function AgingReportTable({
                       <th
                         scope="col"
                         style={{
-                          width: '15%',
+                          width: '22%',
                           padding: '12px 16px',
                           textAlign: 'left',
                           color: 'var(--ui-muted, #64748b)',
@@ -1531,7 +1481,7 @@ export function AgingReportTable({
                           border: 'none',
                         }}
                       >
-                        Update as of {updateAsOfDate}
+                        Recent Update
                       </th>
                       <th
                         scope="col"
@@ -1554,6 +1504,11 @@ export function AgingReportTable({
                   <tbody>
                     {highImpactIncidents.map((item) => {
                       const isEditing = editingHighImpactId === item.requestId;
+                      const severityColor = item.agingDays > 30 ? 'var(--ui-danger, #ef4444)'
+                        : item.agingDays >= 15 ? 'var(--ui-orange, #f97316)'
+                        : item.agingDays >= 8 ? 'var(--ui-warning, #f59e0b)'
+                        : 'var(--ui-success, #10b981)';
+
                       return (
                         <tr
                           key={item.requestId}
@@ -1568,20 +1523,9 @@ export function AgingReportTable({
                             ((e.currentTarget as HTMLTableRowElement).style.background = 'transparent')
                           }
                         >
-                          {/* 1. IR Number (Modern pill link) */}
+                          {/* 1. RequestID (Highlighted badge matching Remarks table) */}
                           <td style={{ padding: '14px 12px', textAlign: 'center', verticalAlign: 'middle', border: 'none' }}>
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                background: 'rgba(37, 99, 235, 0.08)',
-                                border: '1px solid rgba(37, 99, 235, 0.22)',
-                              }}
-                            >
-                              <RequestIdLink requestId={item.requestId} plain={true} />
-                            </span>
+                            <RequestIdLink requestId={item.requestId} />
                           </td>
 
                           {/* 2. Category */}
@@ -1598,48 +1542,52 @@ export function AgingReportTable({
                             </span>
                           </td>
 
-                          {/* 4. Description (Structured Card box) */}
-                          <td style={{ padding: '14px 16px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
-                            <div
-                              style={{
-                                background: 'var(--ui-inset, #091426)',
-                                border: '1px solid var(--ui-control-border, #1e293b)',
-                                borderRadius: '8px',
-                                padding: '10px 14px',
-                                fontSize: '12px',
-                                lineHeight: 1.6,
-                                color: 'var(--ui-text, #f1f5f9)',
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word',
-                              }}
-                            >
-                              {item.description || '—'}
-                            </div>
+                          {/* 4. Description */}
+                          <td
+                            style={{
+                              padding: '14px 16px',
+                              textAlign: 'left',
+                              verticalAlign: 'middle',
+                              border: 'none',
+                              fontSize: '12.5px',
+                              lineHeight: 1.6,
+                              color: 'var(--ui-text, #f1f5f9)',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {item.description || '—'}
                           </td>
 
-                          {/* 5. Aging Days (Modern pill badge) */}
-                          <td style={{ padding: '14px 12px', textAlign: 'center', verticalAlign: 'middle', border: 'none' }}>
+                          {/* 5. Aging Days (Color-coded Pill Badge matching Remarks table) */}
+                          <td
+                            style={{
+                              padding: '14px 12px',
+                              textAlign: 'center',
+                              verticalAlign: 'middle',
+                              border: 'none',
+                            }}
+                          >
                             <span
                               style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid rgba(239, 68, 68, 0.3)',
-                                color: '#ef4444',
-                                padding: '3px 10px',
-                                borderRadius: '20px',
+                                display: 'inline-block',
+                                background: `color-mix(in srgb, ${severityColor} 9%, var(--ui-surface, #111c30))`,
+                                border: `1px solid ${severityColor}`,
+                                color: severityColor,
+                                fontSize: '11px',
                                 fontWeight: 800,
-                                fontSize: '12px',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                minWidth: '40px',
+                                textAlign: 'center',
                               }}
                             >
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} />
                               {item.agingDays}d
                             </span>
                           </td>
 
-                          {/* 6. Update as of {date} (Accent card with inline edit) */}
-                          <td style={{ padding: '14px 16px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
+                          {/* 6. Recent Update (Aging Update Card matching Remarks table) */}
+                          <td style={{ padding: '10px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
                             {isEditing ? (
                               <div
                                 style={{
@@ -1744,18 +1692,28 @@ export function AgingReportTable({
                             ) : (
                               <div
                                 style={{
-                                  borderLeft: '3px solid #38bdf8',
-                                  background: 'rgba(56, 189, 248, 0.04)',
-                                  borderRadius: '0 8px 8px 0',
-                                  padding: '8px 12px',
                                   display: 'flex',
                                   alignItems: 'flex-start',
                                   justifyContent: 'space-between',
                                   gap: '8px',
                                 }}
                               >
-                                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: '12px', color: 'var(--ui-text, #f8fafc)', flex: 1 }}>
-                                  {item.recentUpdate ? renderSingleColorUpdateText(item.recentUpdate) : <span style={{ color: 'var(--ui-muted, #64748b)' }}>—</span>}
+                                <div style={{ flex: 1 }}>
+                                  {item.recentUpdate && item.recentUpdate.trim() ? (
+                                    <div className="aging-update-card">
+                                      <div className="aging-update-copy">
+                                        {renderSingleColorUpdateText(item.recentUpdate)}
+                                      </div>
+                                      {item.addedAt && (
+                                        <div className="aging-update-meta">
+                                          <span>{new Date(item.addedAt).toLocaleDateString()}</span>
+                                          {item.addedBy && <span>by {item.addedBy}</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', display: 'inline-block', padding: '4px 6px' }}>—</span>
+                                  )}
                                 </div>
                                 {!isPublicView && (
                                   <button
@@ -1773,6 +1731,7 @@ export function AgingReportTable({
                                       padding: '2px',
                                       borderRadius: '4px',
                                       flexShrink: 0,
+                                      marginTop: '2px',
                                     }}
                                     onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#38bdf8')}
                                     onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ui-muted, #64748b)')}
@@ -1784,20 +1743,14 @@ export function AgingReportTable({
                             )}
                           </td>
 
-                          {/* 7. Responsible */}
+                          {/* 7. Responsible (Plain text, no button/pill highlight) */}
                           <td style={{ padding: '14px 12px', textAlign: 'center', verticalAlign: 'middle', border: 'none' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                               <span
                                 style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  padding: '4px 10px',
-                                  borderRadius: '6px',
-                                  background: 'var(--ui-inset, #091426)',
-                                  border: '1px solid var(--ui-control-border, #1e293b)',
-                                  color: 'var(--ui-link, #93c5fd)',
-                                  fontWeight: 700,
-                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  color: 'var(--ui-text, #f8fafc)',
+                                  fontSize: '12px',
                                 }}
                               >
                                 {item.responsibleOrDependency || '—'}
