@@ -1042,28 +1042,28 @@ export function AgingReportTable({
               <table className={isPublicView ? 'aging-public-remarks-table' : undefined} role="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
                 <thead role="rowgroup">
                   <tr role="row" style={{ background: 'var(--ui-inset, #091426)', borderBottom: '1px solid var(--ui-border, #1e293b)' }}>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '110px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '110px' }}>
                       RequestID
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '130px' }}>
                       Department
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '8%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '8%' : '130px' }}>
                       Category
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '130px' }}>
                       Sub Category
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : undefined, minWidth: isPublicView ? undefined : '220px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : undefined, minWidth: isPublicView ? undefined : '220px' }}>
                       Description
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '100px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '100px' }}>
                       Aging Days
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : undefined, minWidth: isPublicView ? undefined : '320px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : undefined, minWidth: isPublicView ? undefined : '320px' }}>
                       Recent Update
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: 'var(--ui-muted, #64748b)', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '10%' : '150px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '10%' : '150px' }}>
                       Responsible Team
                     </th>
                   </tr>
@@ -1108,9 +1108,9 @@ export function AgingReportTable({
                           </td>
 
                           {/* 2. Department */}
-                          <td role="cell" data-label="Department" style={{ padding: '12px 14px', color: 'var(--ui-link, #93c5fd)', fontWeight: 600 }}>
+                          <td role="cell" data-label="Department" style={{ padding: '12px 14px', color: '#93c5fd', fontWeight: 600 }}>
                             {isPublicView ? (
-                              <span style={{ color: 'var(--ui-text, #e2e8f0)', fontSize: '12px', fontWeight: 500 }}>
+                              <span style={{ color: '#ffffff', fontSize: '12.5px', fontWeight: 600 }}>
                                 {row.department || 'Not Assigned'}
                               </span>
                             ) : (
@@ -1118,7 +1118,7 @@ export function AgingReportTable({
                                 value={row.department || 'Not Assigned'}
                                 disabled={isSavingRemarks}
                                 onChange={(e) => handleDepartmentChange(row, e.target.value)}
-                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-link, #93c5fd)', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
+                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: '#93c5fd', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
                               >
                                 <option value="Not Assigned">Not Assigned</option>
                                 {availableDepartments.filter((d) => d !== 'Not Assigned').map((d) => (
@@ -1129,17 +1129,17 @@ export function AgingReportTable({
                           </td>
 
                           {/* 3. Category */}
-                          <td role="cell" data-label="Category" style={{ padding: '12px 14px', color: 'var(--ui-secondary, #cbd5e1)' }} title={row.category}>
+                          <td role="cell" data-label="Category" style={{ padding: '12px 14px', color: '#ffffff', fontWeight: 600 }} title={row.category}>
                             {row.category || '—'}
                           </td>
 
                           {/* 4. Sub Category */}
-                          <td role="cell" data-label="Sub Category" style={{ padding: '12px 14px', color: 'var(--ui-secondary, #94a3b8)' }} title={row.subCategory}>
+                          <td role="cell" data-label="Sub Category" style={{ padding: '12px 14px', color: '#e2e8f0', fontSize: '12px' }} title={row.subCategory}>
                             {row.subCategory || '—'}
                           </td>
 
                           {/* 5. Description */}
-                          <td role="cell" data-label="Description" style={{ padding: '12px 16px', color: 'var(--ui-text, #f8fafc)', lineHeight: 1.5 }} title={row.description}>
+                          <td role="cell" data-label="Description" style={{ padding: '12px 16px', color: '#ffffff', lineHeight: 1.6, fontSize: '12.5px' }} title={row.description}>
                             <div style={isPublicView ? { whiteSpace: 'pre-wrap' } : { maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                               {row.description || '—'}
                             </div>
@@ -1393,8 +1393,8 @@ export function AgingReportTable({
                           width: '11%',
                           padding: '12px 14px',
                           textAlign: 'center',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1409,8 +1409,8 @@ export function AgingReportTable({
                           width: '12%',
                           padding: '12px 14px',
                           textAlign: 'left',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1425,8 +1425,8 @@ export function AgingReportTable({
                           width: '12%',
                           padding: '12px 14px',
                           textAlign: 'left',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1441,8 +1441,8 @@ export function AgingReportTable({
                           width: '26%',
                           padding: '12px 16px',
                           textAlign: 'left',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1457,8 +1457,8 @@ export function AgingReportTable({
                           width: '9%',
                           padding: '12px 14px',
                           textAlign: 'center',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1473,8 +1473,8 @@ export function AgingReportTable({
                           width: '22%',
                           padding: '12px 16px',
                           textAlign: 'left',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1489,8 +1489,8 @@ export function AgingReportTable({
                           width: '8%',
                           padding: '12px 14px',
                           textAlign: 'center',
-                          color: 'var(--ui-muted, #64748b)',
-                          fontSize: '10px',
+                          color: '#f8fafc',
+                          fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
                           letterSpacing: '0.06em',
@@ -1530,14 +1530,14 @@ export function AgingReportTable({
 
                           {/* 2. Category */}
                           <td style={{ padding: '14px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--ui-text, #f8fafc)', fontSize: '13px' }}>
+                            <span style={{ fontWeight: 700, color: '#ffffff', fontSize: '13px' }}>
                               {item.category || '—'}
                             </span>
                           </td>
 
                           {/* 3. Sub Category */}
                           <td style={{ padding: '14px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
-                            <span style={{ color: 'var(--ui-secondary, #94a3b8)', fontSize: '12px' }}>
+                            <span style={{ color: '#e2e8f0', fontSize: '12.5px', fontWeight: 500 }}>
                               {item.subCategory || '—'}
                             </span>
                           </td>
@@ -1549,9 +1549,9 @@ export function AgingReportTable({
                               textAlign: 'left',
                               verticalAlign: 'middle',
                               border: 'none',
-                              fontSize: '12.5px',
+                              fontSize: '13px',
                               lineHeight: 1.6,
-                              color: 'var(--ui-text, #f1f5f9)',
+                              color: '#ffffff',
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-word',
                             }}
@@ -1748,9 +1748,9 @@ export function AgingReportTable({
                             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                               <span
                                 style={{
-                                  fontWeight: 600,
-                                  color: 'var(--ui-text, #f8fafc)',
-                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  color: '#ffffff',
+                                  fontSize: '12.5px',
                                 }}
                               >
                                 {item.responsibleOrDependency || '—'}

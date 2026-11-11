@@ -211,13 +211,13 @@ button.report-progress-step:hover { background: var(--bg-card-hover); }
   flex-direction: column;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--ui-panel-border, rgba(56, 189, 248, .22));
-  border-left: 2px solid #38bdf8;
+  border: 1px solid var(--ui-panel-border, rgba(56, 189, 248, .3));
+  border-left: 3px solid #38bdf8;
   border-radius: 6px;
-  background: rgba(56, 189, 248, .04);
+  background: rgba(56, 189, 248, .06);
 }
 .aging-update-copy {
-  color: var(--ui-text, #f1f5f9);
+  color: #ffffff !important;
   font-size: 13px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -227,21 +227,22 @@ button.report-progress-step:hover { background: var(--bg-card-hover); }
   display: inline-block;
   margin-right: 4px;
   padding: 0 4px;
-  border: 1px solid rgba(56, 189, 248, .3);
+  border: 1px solid rgba(56, 189, 248, .35);
   border-radius: 3px;
-  background: rgba(56, 189, 248, .12);
+  background: rgba(56, 189, 248, .16);
   color: var(--ui-link, #7dd3fc);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.5;
   white-space: nowrap;
 }
 .aging-update-meta {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
-  color: var(--ui-secondary, #cbd5e1);
+  gap: 8px;
   font-size: 11px;
+  color: #cbd5e1;
   line-height: 1.5;
 }
 
