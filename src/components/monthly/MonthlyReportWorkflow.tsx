@@ -8,9 +8,11 @@ import type { MonthlyReportData } from '@/types/monthly';
 
 import { parseFile } from '@/lib/excel/parser';
 import { autoDetectMapping, mapAllRows } from '@/lib/excel/mapper';
-import { calculateMonthlyReport } from '@/lib/monthly/calculator';
+import { approveAcceptableFR, calculateMonthlyReport } from '@/lib/monthly/calculator';
 
 import { FileUpload } from '@/components/upload/FileUpload';
+import { Stepper } from '@/components/ui/Stepper';
+import { ReportWorkflowHeader } from '@/components/report/ReportWorkflowHeader';
 import { ValidationSummaryView } from '@/components/validation/ValidationSummary';
 import { MonthlyReportTable } from '@/components/monthly/MonthlyReportTable';
 import { ExportDropdown } from '@/components/report/ExportDropdown';
@@ -46,6 +48,8 @@ type MonthlyAction =
   | { type: 'SET_MAPPING'; mapping: ColumnMapping }
   | { type: 'SET_VALIDATION'; incidents: Incident[]; summary: import('@/types/incident').ValidationSummary }
   | { type: 'SET_REPORT'; data: MonthlyReportData }
+  | { type: 'SET_ACCEPTABLE_FR'; incidents: Incident[]; data: MonthlyReportData }
+  | { type: 'DELETE_INCIDENT'; incidents: Incident[]; data: MonthlyReportData }
   | { type: 'SET_PERIOD'; period: string }
   | { type: 'SET_STORAGE_DESTINATION'; destination: 'both' | 'local' | 'server' }
   | { type: 'SET_PROCESSING'; val: boolean }
@@ -83,6 +87,8 @@ function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
     case 'SET_MAPPING': return { ...state, columnMapping: action.mapping };
     case 'SET_VALIDATION': return { ...state, incidents: action.incidents, validationSummary: action.summary };
     case 'SET_REPORT': return { ...state, reportData: action.data };
+    case 'SET_ACCEPTABLE_FR': return { ...state, incidents: action.incidents, reportData: action.data };
+    case 'DELETE_INCIDENT': return { ...state, incidents: action.incidents, reportData: action.data };
     case 'SET_PERIOD': return { ...state, reportPeriod: action.period };
     case 'SET_STORAGE_DESTINATION': return { ...state, storageDestination: action.destination };
     case 'SET_PROCESSING': return { ...state, isProcessing: action.val };
@@ -129,10 +135,10 @@ function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
 
 // ─── Steps config ───────────────────────────────────────────
 
-const STEPS: { id: MonthlyStep; label: string; icon: string }[] = [
-  { id: 'upload', label: 'Upload', icon: '📁' },
-  { id: 'validation', label: 'Validation', icon: '✅' },
-  { id: 'report', label: 'Report', icon: '📊' },
+const STEPS: readonly { id: MonthlyStep; label: string }[] = [
+  { id: 'upload', label: 'Upload' },
+  { id: 'validation', label: 'Validation' },
+  { id: 'report', label: 'Report' },
 ];
 
 // ─── Component ──────────────────────────────────────────────
@@ -257,6 +263,46 @@ export function MonthlyReportWorkflow({
     []
   );
 
+  // Confirm an admin FR exception and refresh all dependent monthly metrics.
+  const handleAddAcceptableFR = useCallback((requestId: string) => {
+    if (!isAdmin(account) || !state.reportData) throw new Error('Admin access is required.');
+    const incidents = approveAcceptableFR(
+      state.incidents.length > 0 ? state.incidents : state.reportData.allTickets,
+      requestId,
+      account.name
+    );
+    const calculated = calculateMonthlyReport(incidents, state.reportData.reportPeriod, state.reportData.teamOrder);
+    dispatch({
+      type: 'SET_ACCEPTABLE_FR',
+      incidents,
+      data: { ...state.reportData, ...calculated, reportTitle: state.reportData.reportTitle },
+    });
+    setSaveStatus('idle');
+  }, [account, state.incidents, state.reportData]);
+
+  // Delete an incident record from this monthly report and refresh all dependent monthly metrics.
+  const handleDeleteIncident = useCallback((requestId: string) => {
+    if (!isAdmin(account) || !state.reportData) throw new Error('Admin access is required.');
+    const currentIncidents = state.incidents.length > 0 ? state.incidents : state.reportData.allTickets;
+    const remainingIncidents = currentIncidents.filter(
+      (inc) => inc.requestId && inc.requestId.trim().toLowerCase() !== requestId.trim().toLowerCase()
+    );
+    if (remainingIncidents.length === currentIncidents.length) {
+      throw new Error(`Incident with Request ID "${requestId}" not found.`);
+    }
+    const calculated = calculateMonthlyReport(
+      remainingIncidents,
+      state.reportData.reportPeriod,
+      state.reportData.teamOrder
+    );
+    dispatch({
+      type: 'DELETE_INCIDENT',
+      incidents: remainingIncidents,
+      data: { ...state.reportData, ...calculated, reportTitle: state.reportData.reportTitle },
+    });
+    setSaveStatus('idle');
+  }, [account, state.incidents, state.reportData]);
+
   // Save and Publish to Live Dashboard
   const handleSaveAndPublish = useCallback(async () => {
     if (!state.reportData) return;
@@ -266,9 +312,8 @@ export function MonthlyReportWorkflow({
       const title = state.reportData.reportTitle || `Monthly Overall Ticket Report - ${period}`;
       const id = `monthly-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
 
-      // 1. Save to local storage (if 'both' or 'local')
       if (state.storageDestination !== 'server') {
-        saveReport({
+        await saveReport({
           id,
           type: 'monthly',
           title,
@@ -279,9 +324,8 @@ export function MonthlyReportWorkflow({
         });
       }
 
-      // 2. Persist to server backend (if 'both' or 'server')
       if (state.storageDestination !== 'local') {
-        await persistServerMonthlyReport({
+        const published = await persistServerMonthlyReport({
           id,
           title,
           period,
@@ -290,6 +334,9 @@ export function MonthlyReportWorkflow({
           reportData: state.reportData,
           routedIncidents: state.incidents,
         });
+        if (!published) throw new Error(state.storageDestination === 'both'
+          ? 'Archived, but publication failed. Try saving again.'
+          : 'Could not publish the monthly report.');
       }
 
       // 3. Notify real-time broadcast channel
@@ -305,82 +352,33 @@ export function MonthlyReportWorkflow({
       setTimeout(() => setSaveStatus('idle'), 3500);
     } catch (err) {
       console.error('Error saving monthly report:', err);
-      dispatch({ type: 'SET_ERROR', error: 'Failed to publish monthly report to server.' });
+      dispatch({ type: 'SET_ERROR', error: err instanceof Error ? err.message : 'Could not save the monthly report.' });
       setSaveStatus('idle');
     }
   }, [state.reportData, state.reportPeriod, state.storageDestination, state.incidents, account.name]);
 
-  const stepIndex = STEPS.findIndex((s) => s.id === state.step);
-
   return (
-    <main className="app-main">
-      {/* Header */}
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-brand">
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={onBack}
-              style={{ marginRight: '0.5rem' }}
-              title="Back to dashboard"
-            >
-              ←
-            </button>
-            <span className="brand-icon">📊</span>
-            <div>
-              <h1 className="brand-title">Monthly Overall Ticket Report</h1>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {state.fileName && (
-              <div className="header-file-info">
-                <span className="file-badge">📄 {state.fileName}</span>
-                <button className="btn btn-ghost btn-sm" onClick={() => dispatch({ type: 'RESET' })}>Reset</button>
-              </div>
-            )}
-            <button className="header-user-badge" title="Logged in user">
-              👤 {account.name}
-              {isAdmin(account) && <span className="badge-role">Admin</span>}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Stepper (Unified design: Upload -> Validation -> Report) */}
-      <div className="stepper-container">
-        <div className="stepper">
-          {STEPS.map((s, index) => {
-            const isActive = s.id === state.step;
-            const isCompleted = index < stepIndex;
-            const isClickable = isCompleted || index <= stepIndex;
-
-            return (
-              <React.Fragment key={s.id}>
-                {index > 0 && (
-                  <div className={`stepper-connector ${isCompleted ? 'completed' : ''}`} />
-                )}
-                <button
-                  className={`stepper-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''} ${isClickable ? 'clickable' : ''}`}
-                  onClick={() => isClickable && handleStepClick(s.id)}
-                  disabled={!isClickable}
-                  type="button"
-                >
-                  <span className="stepper-icon">
-                    {isCompleted && !isActive ? '✓' : s.icon}
-                  </span>
-                  <span className="stepper-label">{s.label}</span>
-                </button>
-              </React.Fragment>
-            );
-          })}
-        </div>
-      </div>
+    <main className="app-main monthly-report-workflow">
+      <ReportWorkflowHeader
+        title="Monthly Overall Ticket Report"
+        fileName={state.fileName}
+        busy={state.isProcessing}
+        onBack={onBack}
+        onReset={() => dispatch({ type: 'RESET' })}
+      />
+      <Stepper
+        steps={STEPS}
+        currentStep={state.step}
+        onStepClick={handleStepClick}
+        busy={state.isProcessing}
+        availableSteps={state.validationSummary ? ['upload', 'validation'] : ['upload']}
+      />
 
       {/* Error */}
       {state.error && (
-        <div className="error-banner">
-          <span>⚠️ {state.error}</span>
-          <button onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
+        <div className="error-banner report-workflow-error" role="alert">
+          <span>{state.error}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
         </div>
       )}
 
@@ -388,58 +386,53 @@ export function MonthlyReportWorkflow({
       <div className="app-content">
         {/* STEP 1: Upload */}
         {state.step === 'upload' && (
-          <div className="step-content">
-            <div className="step-intro">
-              <h2>Upload Monthly Incident Data</h2>
-            </div>
-            <FileUpload
-              onFileSelected={handleFileSelected}
-              isProcessing={state.isProcessing}
-            />
-            <div className="period-input-section">
-              <label htmlFor="monthly-period" className="period-label">
-                Storage Month
-              </label>
-              <select
-                id="monthly-period"
-                className="period-input"
-                value={state.reportPeriod}
-                onChange={(e) => dispatch({ type: 'SET_PERIOD', period: e.target.value })}
-              >
-                <option value="">-- Select Month --</option>
-                {(() => {
-                  const opts: React.ReactNode[] = [];
-                  const now = new Date();
-                  for (let i = 0; i < 24; i++) {
-                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    opts.push(<option key={label} value={label}>{label}</option>);
+          <section className="report-setup" aria-labelledby="report-setup-title">
+            <h2 id="report-setup-title">Report setup</h2>
+            <div className="report-setup-fields">
+              <div className="report-setup-field">
+                <label htmlFor="monthly-period">
+                  Report month
+                </label>
+                <select
+                  id="monthly-period"
+                  value={state.reportPeriod}
+                  onChange={(e) => dispatch({ type: 'SET_PERIOD', period: e.target.value })}
+                >
+                  <option value="">Select month</option>
+                  {(() => {
+                    const opts: React.ReactNode[] = [];
+                    const now = new Date();
+                    for (let i = 0; i < 24; i++) {
+                      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      opts.push(<option key={label} value={label}>{label}</option>);
+                    }
+                    return opts;
+                  })()}
+                </select>
+              </div>
+              <div className="report-setup-field">
+                <label htmlFor="storage-destination">
+                  Save report to
+                </label>
+                <select
+                  id="storage-destination"
+                  value={state.storageDestination}
+                  onChange={(e) =>
+                    dispatch({
+                      type: 'SET_STORAGE_DESTINATION',
+                      destination: e.target.value as 'both' | 'local' | 'server',
+                    })
                   }
-                  return opts;
-                })()}
-              </select>
+                >
+                  <option value="both">Archive and publish</option>
+                  <option value="server">Publish to public dashboard</option>
+                  <option value="local">Private archive only</option>
+                </select>
+              </div>
             </div>
-            <div className="period-input-section">
-              <label htmlFor="storage-destination" className="period-label">
-                Save Report To
-              </label>
-              <select
-                id="storage-destination"
-                className="period-input"
-                value={state.storageDestination}
-                onChange={(e) =>
-                  dispatch({
-                    type: 'SET_STORAGE_DESTINATION',
-                    destination: e.target.value as 'both' | 'local' | 'server',
-                  })
-                }
-              >
-                <option value="both">Server &amp; Local Storage</option>
-                <option value="server">Server Only - Publish to Dashboard</option>
-                <option value="local">Local Storage Only - Draft</option>
-              </select>
-            </div>
-          </div>
+            <FileUpload onFileSelected={handleFileSelected} isProcessing={state.isProcessing} />
+          </section>
         )}
 
         {/* STEP 2: Validation */}
@@ -495,6 +488,8 @@ export function MonthlyReportWorkflow({
               routedIncidents={state.incidents}
               isAdmin={isAdmin(account)}
               onUpdateIncident={handleUpdateIncident}
+              onAddAcceptableFR={handleAddAcceptableFR}
+              onDeleteIncident={handleDeleteIncident}
               onArchiveReport={handleSaveAndPublish}
               onSaveReport={handleSaveAndPublish}
               isArchived={saveStatus === 'saved'}
