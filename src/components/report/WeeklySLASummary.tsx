@@ -21,12 +21,13 @@ export function WeeklySLACount({ count, title, ids, onOpen, failed = false }: {
   );
 }
 
-function SLACard({ title, result, previous, resolution = false, onCellClick }: {
+function SLACard({ title, result, previous, resolution = false, onCellClick, cardRef }: {
   title: string;
   result: TeamSLAResult;
   previous: number | null;
   resolution?: boolean;
   onCellClick?: Drilldown;
+  cardRef?: Ref<HTMLElement>;
 }) {
   const rate = result.slaPassRate;
   const difference = rate != null && previous != null ? Number((rate - previous).toFixed(2)) : null;
@@ -36,7 +37,7 @@ function SLACard({ title, result, previous, resolution = false, onCellClick }: {
   const metric = resolution ? 'RT' : 'FR';
 
   return (
-    <article className="weekly-sla-summary-card" aria-label={`${title} weekly summary`}>
+    <article ref={cardRef} className="weekly-sla-summary-card" aria-label={`${title} weekly summary`}>
       <div className="weekly-sla-summary-heading">
         <h3><span className={`weekly-sla-summary-icon${resolution ? ' is-resolution' : ''}`}><Icon size={18} aria-hidden="true" /></span>{title}</h3>
         <span className={`weekly-sla-trend is-${trend}`} title="Change in SLA pass rate in percentage points compared with last week">
@@ -61,11 +62,17 @@ function SLACard({ title, result, previous, resolution = false, onCellClick }: {
   );
 }
 
-export function WeeklySLASummary({ data, summaryRef, onCellClick }: { data: WeeklyReportData; summaryRef?: Ref<HTMLElement>; onCellClick?: Drilldown }) {
+export function WeeklySLASummary({ data, summaryRef, responseRef, resolutionRef, onCellClick }: {
+  data: WeeklyReportData;
+  summaryRef?: Ref<HTMLElement>;
+  responseRef?: Ref<HTMLElement>;
+  resolutionRef?: Ref<HTMLElement>;
+  onCellClick?: Drilldown;
+}) {
   return (
     <section ref={summaryRef} className="weekly-sla-summary" aria-label="Weekly SLA summary">
-      <SLACard title="First Response" result={data.currentWeek.firstResponseTotal} previous={data.previousWeek.firstResponseTotal} onCellClick={onCellClick} />
-      <SLACard title="Resolution Time" result={data.currentWeek.resolutionTimeTotal} previous={data.previousWeek.resolutionTimeTotal} onCellClick={onCellClick} resolution />
+      <SLACard cardRef={responseRef} title="First Response" result={data.currentWeek.firstResponseTotal} previous={data.previousWeek.firstResponseTotal} onCellClick={onCellClick} />
+      <SLACard cardRef={resolutionRef} title="Resolution Time" result={data.currentWeek.resolutionTimeTotal} previous={data.previousWeek.resolutionTimeTotal} onCellClick={onCellClick} resolution />
     </section>
   );
 }

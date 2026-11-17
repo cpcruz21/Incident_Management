@@ -4,7 +4,7 @@ import { useEffect, useId, useState, type RefObject } from 'react';
 import { Download, X } from 'lucide-react';
 
 type SavedImage = { title: string; filename: string; url: string };
-type ImageSource = Omit<SavedImage, 'url'> & { panel: RefObject<HTMLElement> };
+type ImageSource = Omit<SavedImage, 'url'> & { panel: RefObject<HTMLElement>; heading?: string };
 type ExportState = 'idle' | 'loading' | 'ready' | 'error';
 
 /**
@@ -27,25 +27,25 @@ function shouldIncludeNode(node: HTMLElement): boolean {
 /**
  * Capture an HTMLElement to PNG data URL using html-to-image with multi-tiered fallback.
  */
-async function capturePanel(panel: HTMLElement): Promise<string> {
-  const { toPng } = await import('html-to-image');
+async function capturePanel(panel: HTMLElement, heading?: string): Promise<string> {
+  const { renderFullHdPng } = await import('@/lib/report/full-hd-image');
 
   // Tier 1: Attempt capture using an unrolled desktop-width clone container
   try {
-    return await captureWithClone(panel, toPng);
+    return await captureWithClone(panel, renderFullHdPng, heading);
   } catch (cloneErr) {
     console.warn('Cloned image capture failed, attempting direct capture:', cloneErr);
   }
 
   // Tier 2: Fall back to capturing the live visible DOM element directly
   try {
-    return await captureDirect(panel, toPng, 2);
+    return await captureDirect(panel, renderFullHdPng, 2, heading);
   } catch (directErr) {
     console.warn('Direct 2x image capture failed, attempting 1x fallback:', directErr);
   }
 
   // Tier 3: 1x direct capture fallback for low-memory environments
-  return await captureDirect(panel, toPng, 1);
+  return await captureDirect(panel, renderFullHdPng, 1, heading);
 }
 
 /**
@@ -53,29 +53,13 @@ async function capturePanel(panel: HTMLElement): Promise<string> {
  */
 async function captureWithClone(
   panel: HTMLElement,
-  toPng: typeof import('html-to-image').toPng
+  renderFullHdPng: typeof import('@/lib/report/full-hd-image').renderFullHdPng,
+  heading?: string,
 ): Promise<string> {
   const host = document.createElement('div');
   host.className = 'report-image-capture-host no-export';
   host.setAttribute('aria-hidden', 'true');
   // NOTE: Never set host.inert = true. Inert subtrees break SVG foreignObject rasterization in Blink.
-
-  const weeklyModule = panel.closest<HTMLElement>('.weekly-report-module');
-  if (weeklyModule) {
-    host.classList.add('weekly-report-module');
-    host.dataset.publicView = weeklyModule.dataset.publicView;
-  }
-
-  const monthlyModule = panel.closest<HTMLElement>('.monthly-report-module');
-  if (monthlyModule) {
-    host.classList.add('monthly-report-module');
-    host.dataset.publicView = monthlyModule.dataset.publicView;
-  }
-
-  const agingReport = panel.closest<HTMLElement>('.aging-report, .aging-module');
-  if (agingReport) {
-    host.classList.add('aging-report');
-  }
 
   const scene = document.createElement('div');
   scene.className = 'report-image-capture';
@@ -84,7 +68,8 @@ async function captureWithClone(
   scene.append(copy);
   host.append(scene);
 
-  document.body.append(host);
+  const report = panel.closest('.weekly-report-module, .monthly-report-module, .aging-report');
+  (report ?? document.body).append(host);
   try {
     if (document.fonts?.ready) {
       await document.fonts.ready;
@@ -93,18 +78,15 @@ async function captureWithClone(
     const { width, height } = scene.getBoundingClientRect();
     const tableElements = Array.from(copy.querySelectorAll('table'));
     const maxTableScroll = tableElements.reduce((acc, t) => Math.max(acc, t.scrollWidth), 0);
-    const effectiveWidth = Math.max(Math.ceil(width), maxTableScroll, 1260);
-    const effectiveHeight = Math.max(Math.ceil(height), 220);
+    const effectiveWidth = Math.max(Math.ceil(width), maxTableScroll, scene.scrollWidth);
+    const effectiveHeight = Math.max(Math.ceil(height), scene.scrollHeight);
 
-    return await toPng(scene, {
+    return await renderFullHdPng(scene, {
       width: effectiveWidth,
       height: effectiveHeight,
-      pixelRatio: 2,
       skipFonts: true,
-      skipAutoScale: true,
-      backgroundColor: '#ffffff',
       filter: shouldIncludeNode,
-    });
+    }, heading);
   } finally {
     host.remove();
   }
@@ -115,8 +97,9 @@ async function captureWithClone(
  */
 async function captureDirect(
   panel: HTMLElement,
-  toPng: typeof import('html-to-image').toPng,
-  pixelRatio: number
+  renderFullHdPng: typeof import('@/lib/report/full-hd-image').renderFullHdPng,
+  pixelRatio: number,
+  heading?: string,
 ): Promise<string> {
   if (document.fonts?.ready) {
     await document.fonts.ready;
@@ -126,17 +109,13 @@ async function captureDirect(
   const maxTableScroll = tableElements.reduce((acc, t) => Math.max(acc, t.scrollWidth), 0);
   const targetWidth = Math.max(panel.scrollWidth, maxTableScroll, 1260);
 
-  return await toPng(panel, {
+  return await renderFullHdPng(panel, {
     width: targetWidth,
     height: Math.max(panel.scrollHeight, 220),
     pixelRatio,
     skipFonts: true,
-    skipAutoScale: true,
-    backgroundColor: '#ffffff',
     filter: shouldIncludeNode,
     style: {
-      background: '#ffffff',
-      backgroundColor: '#ffffff',
       margin: '0',
       width: `${targetWidth}px`,
       minWidth: `${targetWidth}px`,
@@ -144,7 +123,7 @@ async function captureDirect(
       overflowX: 'visible',
       overflowY: 'visible',
     },
-  });
+  }, heading);
 }
 
 export function ReportImageExport({
@@ -177,12 +156,12 @@ export function ReportImageExport({
     setImages([]);
     try {
       const previews: SavedImage[] = [];
-      for (const { panel, title, filename } of sources) {
+      for (const { panel, title, filename, heading } of sources) {
         if (!panel.current) {
           console.warn(`Panel ref for "${title}" is not available in DOM`);
           continue;
         }
-        const url = await capturePanel(panel.current);
+        const url = await capturePanel(panel.current, heading);
         previews.push({ title, filename, url });
       }
 
@@ -263,7 +242,7 @@ export function ReportImageExport({
             {status === 'ready' && (
               <>
                 <p>
-                  {singleImage ? 'The image is' : 'Each image is'} rendered in crisp high-resolution PNG.
+                  {singleImage ? 'The image is' : 'Each image is'} a 1920 × 1080 PNG.
                 </p>
                 <div className="report-image-previews">
                   {images.map(image => (

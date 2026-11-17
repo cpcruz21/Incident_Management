@@ -31,6 +31,8 @@ export const SLAReportTable = memo(function SLAReportTable({
 }: SLAReportTableProps) {
   const reportCardRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
+  const responseSummaryRef = useRef<HTMLElement>(null);
+  const resolutionSummaryRef = useRef<HTMLElement>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -133,13 +135,21 @@ export const SLAReportTable = memo(function SLAReportTable({
         <ReportImageExport
           sources={[
             { panel: summaryRef, title: 'First Response & Resolution Time', filename: 'weekly-sla-summary.png' },
+            { panel: responseSummaryRef, title: 'First Response', filename: 'weekly-first-response.png' },
+            { panel: resolutionSummaryRef, title: 'Resolution Time', filename: 'weekly-resolution-time.png' },
             { panel: reportCardRef, title: 'Weekly SLA by Team', filename: 'weekly-sla-by-team.png' },
           ]}
           dialogTitle="Save Weekly SLA images"
           period={data.reportPeriod}
         />
       </ReportDetailsStrip>
-      <WeeklySLASummary data={data} summaryRef={summaryRef} onCellClick={onCellClick} />
+      <WeeklySLASummary
+        data={data}
+        summaryRef={summaryRef}
+        responseRef={responseSummaryRef}
+        resolutionRef={resolutionSummaryRef}
+        onCellClick={onCellClick}
+      />
 
       <div
         className="weekly-report-scroll"

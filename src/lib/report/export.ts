@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { toPng } from 'html-to-image';
+import { renderFullHdPng } from './full-hd-image';
 import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingRemarksRow, AgingReportData } from '@/types/aging';
@@ -7,7 +7,7 @@ import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
 import type { MonthlyReportData } from '@/types/monthly';
 import { ALL_TICKETS_COLUMNS, CLOSED_TICKETS_COLUMNS, FIRST_RESPONSE_COLUMNS, getIncidentMonthlyValue } from '@/types/monthly';
 import { generateMonthlyRemarks } from '@/lib/monthly/remarks';
-import { filterAcceptableFirstResponse } from '@/lib/monthly/calculator';
+import { filterAcceptableFirstResponse, filterClosedTickets } from '@/lib/monthly/calculator';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
 function agingIncidentRowValues(row: AgingRemarksRow) {
@@ -175,18 +175,13 @@ function appendMonthlySheets(
   XLSX.utils.book_append_sheet(wb, wsSLA, 'SLA');
 
   const makeSheet = (incidents: Incident[], columns: readonly string[]) => {
-    const rows = incidents.map((inc) => {
-      const obj: Record<string, string> = {};
-      for (const col of columns) {
-        obj[col.replace(/\n/g, ' ')] = getIncidentMonthlyValue(inc, col);
-      }
-      return obj;
-    });
-    return XLSX.utils.json_to_sheet(rows);
+    const headers = columns.map(col => col.replace(/\n/g, ' '));
+    const rows = incidents.map(inc => columns.map(col => getIncidentMonthlyValue(inc, col)));
+    return XLSX.utils.aoa_to_sheet([headers, ...rows]);
   };
 
-  const allInc = reportData.allTickets || fallbackIncidents;
-  const closedInc = reportData.closedTickets || allInc.filter((i) => (i.requestStatus || '').toLowerCase().includes('clos'));
+  const allInc = reportData.allTickets ?? fallbackIncidents;
+  const closedInc = reportData.closedTickets ?? filterClosedTickets(allInc);
   const acceptableFR = filterAcceptableFirstResponse(allInc);
 
   // 2. All Tickets sheet
@@ -420,7 +415,9 @@ export function exportToXLSX(
 
   // If Monthly Report Data
   if (reportData && 'technicianSLA' in reportData) {
-    appendMonthlySheets(wb, reportData as MonthlyReportData, incidents);
+    appendMonthlySheets(wb, reportData, incidents);
+    const rawRows = buildExtractedIncidentRows(reportData.allTickets ?? incidents);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rawRows), 'Raw Data');
     XLSX.writeFile(wb, filename);
     return;
   }
@@ -722,7 +719,7 @@ export function exportToPDF(): void {
 }
 
 /**
- * Export table as high-resolution PNG on pure white background
+ * Export a report as a Full HD PNG using the active theme.
  */
 export async function exportAsPng(elementId: string, filename: string = 'sla-report.png'): Promise<void> {
   const element = document.getElementById(elementId);
@@ -731,10 +728,9 @@ export async function exportAsPng(elementId: string, filename: string = 'sla-rep
   }
 
   try {
-    const dataUrl = await toPng(element, {
-      quality: 1.0,
-      pixelRatio: 2.5,
-      backgroundColor: '#ffffff',
+    const dataUrl = await renderFullHdPng(element, {
+      width: Math.max(element.offsetWidth, element.scrollWidth, 1),
+      height: Math.max(element.offsetHeight, element.scrollHeight, 1),
       filter: (node: HTMLElement) => {
         if (node.classList && (
           node.classList.contains('btn-save-report') ||
@@ -746,8 +742,6 @@ export async function exportAsPng(elementId: string, filename: string = 'sla-rep
         return true;
       },
       style: {
-        background: '#ffffff',
-        backgroundColor: '#ffffff',
         transform: 'scale(1)',
         transformOrigin: 'top left',
         margin: '0',

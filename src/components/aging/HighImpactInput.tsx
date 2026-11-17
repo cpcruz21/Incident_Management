@@ -88,8 +88,8 @@ export function HighImpactInput({
         department: inc.department || String(inc.rawData?.['Department'] || 'Not Specified'),
         category: inc.category || String(inc.rawData?.['Category'] || 'General'),
         subCategory: inc.subCategory || String(inc.rawData?.['Sub Category'] || ''),
-        description: inc.description || inc.subject || '',
-        agingDays: typeof inc.agingDays === 'number' ? inc.agingDays : 0,
+        description: inc.description || ('subject' in inc && typeof inc.subject === 'string' ? inc.subject : ''),
+        agingDays: 'agingDays' in inc && typeof inc.agingDays === 'number' ? inc.agingDays : 0,
         recentUpdate: inc.recentUpdate || '',
         responsibleOrDependency: inc.assignedTeam || inc.sourceTeam || 'Unassigned',
       };

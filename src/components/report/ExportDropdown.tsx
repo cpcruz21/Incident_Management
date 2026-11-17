@@ -53,7 +53,10 @@ export function ExportDropdown({
 
     switch (type) {
       case 'xlsx':
-        exportReassignedToXLSX(incidents, `${filename}xlsx`);
+        exportToXLSX(incidents, reportData, `${filename}.xlsx`);
+        break;
+      case 'reassigned-xlsx':
+        exportReassignedToXLSX(incidents, `${filename}_Reassigned_Technicians.xlsx`);
         break;
       case 'png':
         if (onExportPng) {

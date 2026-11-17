@@ -773,7 +773,7 @@ export function AgingReportTable({
           <Flame size={16} aria-hidden="true" />
           <span>High Impact</span>
           {highImpactIncidents.length > 0 && (
-            <span className="aging-report-tab-count" style={{ background: '#dc2626' }}>{highImpactIncidents.length}</span>
+            <span className="aging-report-tab-count is-high-impact">{highImpactIncidents.length}</span>
           )}
         </button>
       </div>
@@ -1039,31 +1039,31 @@ export function AgingReportTable({
             }}
           >
             <div style={{ overflowX: isPublicView ? undefined : 'auto', flex: 1 }}>
-              <table className={isPublicView ? 'aging-public-remarks-table' : undefined} role="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
+              <table className={isPublicView ? 'aging-detail-table aging-public-remarks-table' : 'aging-detail-table'} role="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
                 <thead role="rowgroup">
                   <tr role="row" style={{ background: 'var(--ui-inset, #091426)', borderBottom: '1px solid var(--ui-border, #1e293b)' }}>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '110px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '110px' }}>
                       RequestID
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '130px' }}>
                       Department
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '8%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '8%' : '130px' }}>
                       Category
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '130px' }}>
                       Sub Category
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : undefined, minWidth: isPublicView ? undefined : '220px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : undefined, minWidth: isPublicView ? undefined : '220px' }}>
                       Description
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '100px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '100px' }}>
                       Aging Days
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : undefined, minWidth: isPublicView ? undefined : '320px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : undefined, minWidth: isPublicView ? undefined : '320px' }}>
                       Recent Update
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', color: '#f8fafc', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '10%' : '150px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '10%' : '150px' }}>
                       Responsible Team
                     </th>
                   </tr>
@@ -1108,9 +1108,9 @@ export function AgingReportTable({
                           </td>
 
                           {/* 2. Department */}
-                          <td role="cell" data-label="Department" style={{ padding: '12px 14px', color: '#93c5fd', fontWeight: 600 }}>
+                          <td role="cell" data-label="Department" style={{ padding: '12px 14px', fontWeight: 600 }}>
                             {isPublicView ? (
-                              <span style={{ color: '#ffffff', fontSize: '12.5px', fontWeight: 600 }}>
+                              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>
                                 {row.department || 'Not Assigned'}
                               </span>
                             ) : (
@@ -1118,7 +1118,7 @@ export function AgingReportTable({
                                 value={row.department || 'Not Assigned'}
                                 disabled={isSavingRemarks}
                                 onChange={(e) => handleDepartmentChange(row, e.target.value)}
-                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: '#93c5fd', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
+                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-text)', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
                               >
                                 <option value="Not Assigned">Not Assigned</option>
                                 {availableDepartments.filter((d) => d !== 'Not Assigned').map((d) => (
@@ -1129,17 +1129,17 @@ export function AgingReportTable({
                           </td>
 
                           {/* 3. Category */}
-                          <td role="cell" data-label="Category" style={{ padding: '12px 14px', color: '#ffffff', fontWeight: 600 }} title={row.category}>
+                          <td role="cell" data-label="Category" style={{ padding: '12px 14px', fontWeight: 600 }} title={row.category}>
                             {row.category || '—'}
                           </td>
 
                           {/* 4. Sub Category */}
-                          <td role="cell" data-label="Sub Category" style={{ padding: '12px 14px', color: '#e2e8f0', fontSize: '12px' }} title={row.subCategory}>
+                          <td role="cell" data-label="Sub Category" style={{ padding: '12px 14px', color: 'var(--ui-secondary)', fontSize: '12px' }} title={row.subCategory}>
                             {row.subCategory || '—'}
                           </td>
 
                           {/* 5. Description */}
-                          <td role="cell" data-label="Description" style={{ padding: '12px 16px', color: '#ffffff', lineHeight: 1.6, fontSize: '12.5px' }} title={row.description}>
+                          <td role="cell" data-label="Description" style={{ padding: '12px 16px', lineHeight: 1.6, fontSize: '12.5px' }} title={row.description}>
                             <div style={isPublicView ? { whiteSpace: 'pre-wrap' } : { maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                               {row.description || '—'}
                             </div>
@@ -1373,6 +1373,7 @@ export function AgingReportTable({
             >
               <div style={{ overflowX: 'auto' }}>
                 <table
+                  className="aging-detail-table"
                   role="table"
                   style={{
                     width: '100%',
@@ -1393,7 +1394,6 @@ export function AgingReportTable({
                           width: '11%',
                           padding: '12px 14px',
                           textAlign: 'center',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1409,7 +1409,6 @@ export function AgingReportTable({
                           width: '12%',
                           padding: '12px 14px',
                           textAlign: 'left',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1425,7 +1424,6 @@ export function AgingReportTable({
                           width: '12%',
                           padding: '12px 14px',
                           textAlign: 'left',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1441,7 +1439,6 @@ export function AgingReportTable({
                           width: '26%',
                           padding: '12px 16px',
                           textAlign: 'left',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1457,7 +1454,6 @@ export function AgingReportTable({
                           width: '9%',
                           padding: '12px 14px',
                           textAlign: 'center',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1473,7 +1469,6 @@ export function AgingReportTable({
                           width: '22%',
                           padding: '12px 16px',
                           textAlign: 'left',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1489,7 +1484,6 @@ export function AgingReportTable({
                           width: '8%',
                           padding: '12px 14px',
                           textAlign: 'center',
-                          color: '#f8fafc',
                           fontSize: '11px',
                           fontWeight: 800,
                           textTransform: 'uppercase',
@@ -1530,14 +1524,14 @@ export function AgingReportTable({
 
                           {/* 2. Category */}
                           <td style={{ padding: '14px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
-                            <span style={{ fontWeight: 700, color: '#ffffff', fontSize: '13px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '13px' }}>
                               {item.category || '—'}
                             </span>
                           </td>
 
                           {/* 3. Sub Category */}
                           <td style={{ padding: '14px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
-                            <span style={{ color: '#e2e8f0', fontSize: '12.5px', fontWeight: 500 }}>
+                            <span style={{ color: 'var(--ui-secondary)', fontSize: '12.5px', fontWeight: 500 }}>
                               {item.subCategory || '—'}
                             </span>
                           </td>
@@ -1551,7 +1545,6 @@ export function AgingReportTable({
                               border: 'none',
                               fontSize: '13px',
                               lineHeight: 1.6,
-                              color: '#ffffff',
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-word',
                             }}
@@ -1749,7 +1742,6 @@ export function AgingReportTable({
                               <span
                                 style={{
                                   fontWeight: 700,
-                                  color: '#ffffff',
                                   fontSize: '12.5px',
                                 }}
                               >

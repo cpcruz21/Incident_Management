@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useId, useMemo, useRef, useState, useCallback } from 'react';
-import { BarChart3, Check, ClipboardList, Clock3, FileCheck2, Search, X, ArrowDown, ArrowUp } from 'lucide-react';
+import React, { useEffect, useId, useMemo, useRef, useState, useCallback } from 'react';
+import { BarChart3, Check, ClipboardList, Clock3, FileCheck2, Maximize, Minimize, Search, X, ArrowDown, ArrowUp } from 'lucide-react';
 import type { Incident } from '@/types/incident';
 import type { MonthlyReportData } from '@/types/monthly';
 import {
@@ -95,7 +95,6 @@ function EditableRevisedCell({ value, requestId, field, currentType, isAdmin, on
 function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; onCellClick?: Drilldown }) {
   const kpiPanelRef = useRef<HTMLDivElement>(null);
   const technicianSlaPanelRef = useRef<HTMLDivElement>(null);
-  const slaAndKpiPanelRef = useRef<HTMLDivElement>(null);
 
   const fr = data.kpis.find(k => k.label.toLowerCase().includes('response'));
   const rt = data.kpis.find(k => k.label.toLowerCase().includes('resolution'));
@@ -107,41 +106,26 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
 
   return (
     <div className="monthly-sla-content">
-      {/* Top Action Bar with Save Images Export */}
       <div
         className="monthly-sla-toolbar no-export"
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
+          justifyContent: 'flex-end',
           marginBottom: '16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff' }}>
-            Performance Metrics
-          </span>
-          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
-            ({data.reportPeriod || 'Monthly Review'})
-          </span>
-        </div>
         <ReportImageExport
           sources={[
             {
-              panel: slaAndKpiPanelRef,
-              title: 'SLA & KPI Summary',
-              filename: `monthly-sla-and-kpi-${filenamePeriod}.png`,
-            },
-            {
               panel: kpiPanelRef,
               title: 'Monthly KPI Results',
+              heading: 'Monthly KPI',
               filename: `monthly-kpi-results-${filenamePeriod}.png`,
             },
             {
               panel: technicianSlaPanelRef,
-              title: 'Technician SLA Performance',
+              title: 'Monthly SLA by Technician',
+              heading: 'Monthly SLA',
               filename: `monthly-technician-sla-${filenamePeriod}.png`,
             },
           ]}
@@ -150,10 +134,7 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
         />
       </div>
 
-      {/* SLA & KPI Tables Capture Zone (strictly excludes Remarks) */}
       <div
-        ref={slaAndKpiPanelRef}
-        className="monthly-sla-kpi-capture-zone"
         style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
       >
         <div ref={kpiPanelRef} className="monthly-report-scroll monthly-summary-scroll" role="region" aria-label="Monthly KPI results table" tabIndex={0}>
@@ -253,7 +234,6 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
         </div>
       </div>
 
-      {/* Remarks for overall result is strictly outside the capture zone */}
       <ExecutiveRemarksCard remarks={remarks} />
     </div>
   );
@@ -354,6 +334,67 @@ function EnhancedTicketGrid({ incidents, columns, title, emptyMessage, isAdmin =
   );
 }
 
+function PowerBIReport() {
+  const panel = useRef<HTMLElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isViewportExpanded, setIsViewportExpanded] = useState(false);
+  const isExpanded = isFullscreen || isViewportExpanded;
+
+  useEffect(() => {
+    function syncFullscreen() {
+      setIsFullscreen(document.fullscreenElement === panel.current);
+    }
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (!isViewportExpanded) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setIsViewportExpanded(false);
+    }
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isViewportExpanded]);
+
+  async function toggleFullscreen() {
+    const report = panel.current;
+    if (!report) return;
+    if (isViewportExpanded) {
+      setIsViewportExpanded(false);
+      return;
+    }
+    if (document.fullscreenElement === report) {
+      await document.exitFullscreen();
+      return;
+    }
+    try {
+      await report.requestFullscreen();
+    } catch {
+      setIsViewportExpanded(true);
+    }
+  }
+
+  return (
+    <section ref={panel} className="monthly-panel monthly-powerbi" data-viewport-expanded={isViewportExpanded}>
+      <div className="monthly-panel-heading">
+        <h3>Power BI SLA report</h3>
+        <button type="button" className="monthly-secondary-button monthly-powerbi-fullscreen" onClick={toggleFullscreen}>
+          {isExpanded ? <Minimize size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}
+          {isExpanded ? 'Exit full screen' : 'Full screen'}
+        </button>
+      </div>
+      <div className="monthly-powerbi-frame">
+        <iframe
+          title="Monthly Incident Report"
+          src="https://app.powerbi.com/view?r=eyJrIjoiMGMwZjQ2MzItODg0NS00YzhhLThjZTAtYTk1OGI1Y2MzMDRiIiwidCI6IjA0MjUwYzE0LTBiNzAtNGY5Zi04Yzg3LWU5OGZiOTM0NjI4ZiIsImMiOjEwfQ%3D%3D"
+          allowFullScreen
+        />
+      </div>
+    </section>
+  );
+}
+
 export function MonthlyReportTable({ data, onCellClick, routedIncidents, isAdmin = false, isPublicView = false, onUpdateIncident, onArchiveReport, onAddAcceptableFR, onDeleteIncident, onSaveReport, isArchived = false }: MonthlyReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabId>('sla-dashboard');
   const [internalSaved, setInternalSaved] = useState(false);
@@ -390,7 +431,7 @@ export function MonthlyReportTable({ data, onCellClick, routedIncidents, isAdmin
   ];
 
   return (
-    <div className="monthly-report-module" id="monthly-report-canvas" data-public-view={isPublicView}>
+    <div className="monthly-report-module" id="monthly-report-canvas" data-public-view={isPublicView} data-active-tab={activeTab}>
       <header className="monthly-module-header">
         <div className="monthly-module-heading"><span className="monthly-module-icon" aria-hidden="true">📊</span><div className="monthly-module-title"><h2>Monthly SLA Report</h2><span className="monthly-period">{data.reportPeriod || 'Monthly review'}</span></div></div>
         {!isPublicView && <button type="button" className={`monthly-save-button${savedState ? ' is-saved' : ''}`} onClick={handleSaveReport} disabled={saving} aria-busy={saving}>{savedState && <Check size={16} aria-hidden="true" />}{saving ? 'Saving…' : savedState ? 'Archived' : 'Archive report'}</button>}
@@ -424,7 +465,7 @@ export function MonthlyReportTable({ data, onCellClick, routedIncidents, isAdmin
             {isAdmin && !isPublicView && onAddAcceptableFR && <AcceptableFRInput incidents={allIncidents} onAdd={onAddAcceptableFR} />}
             <EnhancedTicketGrid incidents={acceptableFR} columns={FIRST_RESPONSE_COLUMNS} title="Acceptable first response" emptyMessage="No accepted first-response exceptions for this period." isAdmin={isAdmin && !isPublicView} onUpdateIncident={onUpdateIncident} acceptable />
           </>}
-          {tab.id === 'powerbi' && <section className="monthly-panel monthly-powerbi"><div className="monthly-panel-heading"><h3>Power BI SLA report</h3></div><div className="monthly-powerbi-frame"><iframe title="Monthly Incident Report" src="https://app.powerbi.com/view?r=eyJrIjoiMGMwZjQ2MzItODg0NS00YzhhLThjZTAtYTk1OGI1Y2MzMDRiIiwidCI6IjA0MjUwYzE0LTBiNzAtNGY5Zi04Yzg3LWU5OGZiOTM0NjI4ZiIsImMiOjEwfQ%3D%3D" allowFullScreen /></div></section>}
+          {tab.id === 'powerbi' && <PowerBIReport />}
         </>}
       </div>)}
     </div>

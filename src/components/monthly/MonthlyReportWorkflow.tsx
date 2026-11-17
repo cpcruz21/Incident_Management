@@ -472,14 +472,14 @@ export function MonthlyReportWorkflow({
                   + New Report
                 </button>
               </div>
-              <div>
+              {isAdmin(account) && (
                 <ExportDropdown
                   incidents={state.incidents}
-                  reportData={state.reportData as any}
+                  reportData={state.reportData}
                   baseFilename="SMAC_Monthly_Incident_Report"
                   targetElementId="monthly-report-canvas"
                 />
-              </div>
+              )}
             </div>
 
             <MonthlyReportTable

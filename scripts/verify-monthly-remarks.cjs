@@ -7,6 +7,7 @@ const { calculateMonthlyReport } = require('../src/lib/monthly/calculator.ts');
 const { generateMonthlyRemarks } = require('../src/lib/monthly/remarks.ts');
 const { MonthlyReportTable } = require('../src/components/monthly/MonthlyReportTable.tsx');
 const { ExecutiveRemarksCard } = require('../src/components/monthly/ExecutiveRemarksCard.tsx');
+const { ExportDropdown } = require('../src/components/report/ExportDropdown.tsx');
 const { exportToXLSX, exportToHTML } = require('../src/lib/report/export.ts');
 
 function team(name, total, lateFR, closed, lateRT) {
@@ -110,6 +111,44 @@ try { exportToXLSX([], restored); } finally { XLSX.writeFile = writeFile; }
 const excel = XLSX.utils.sheet_to_json(workbook.Sheets.SLA, { header: 1 }).flat().join('\n');
 assert.ok(excel.includes(report.remarks.split('\n').find(line => line.startsWith('Next steps:'))));
 assert.doesNotMatch(excel, /Old cached remarks/);
+
+// Exercise the actual dropdown actions and read the generated XLSX workbook back.
+const exportTickets = restored.allTickets.map((ticket, index) => index === 0
+  ? { ...ticket, wasReassigned: true, rawData: { ...ticket.rawData, 'Custom Import Field': 'Original value' } }
+  : ticket);
+const { useRef, useEffect } = React;
+let exportFilename;
+React.useState = () => [true, () => {}];
+React.useRef = () => ({ current: null });
+React.useEffect = () => {};
+XLSX.writeFile = (value, filename) => {
+  workbook = XLSX.read(XLSX.write(value, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  exportFilename = filename;
+};
+try {
+  const dropdown = ExportDropdown({
+    incidents: exportTickets,
+    reportData: { ...restored, allTickets: exportTickets },
+  });
+  const menu = React.Children.toArray(dropdown.props.children).find(child => child.props.role === 'menu');
+  const items = React.Children.toArray(menu.props.children);
+  items.find(item => item.props.children === 'XLSX file (All Sheets)').props.onClick();
+  assert.match(exportFilename, /\.xlsx$/);
+  assert.deepEqual(workbook.SheetNames, ['SLA', 'All Tickets', 'Closed Tickets', 'Acceptable First Response', 'Re-assigned Technicians', 'Raw Data']);
+  const ticketRows = XLSX.utils.sheet_to_json(workbook.Sheets['All Tickets']);
+  assert.deepEqual(ticketRows.map(row => row.RequestID), exportTickets.map(ticket => ticket.requestId));
+  assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Closed Tickets']).length, restored.closedTickets.length);
+  assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Acceptable First Response'], { header: 1 })[0][0], 'Request ID');
+  const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets['Raw Data']);
+  assert.equal(rawRows.length, exportTickets.length);
+  assert.equal(rawRows[0]['Custom Import Field'], 'Original value');
+  items.find(item => item.props.children === '↳ Re-assigned Technician (XLSX)').props.onClick();
+  assert.match(exportFilename, /_Reassigned_Technicians\.xlsx$/);
+  assert.deepEqual(workbook.SheetNames, ['Re-assigned Technicians']);
+} finally {
+  Object.assign(React, { useState, useRef, useEffect });
+  XLSX.writeFile = writeFile;
+}
 
 let downloaded;
 const createURL = URL.createObjectURL;
