@@ -1,12 +1,5 @@
-'use client';
+﻿'use client';
 
-/**
- * Executive Ticket Monitoring & Stagnant Tickets Table
- * 
- * Clean, modern, uncluttered presentation designed for executive review.
- * Features quick status tabs, instant search, streamlined high-value columns,
- * and a comprehensive detail inspection modal.
- */
 
 import React, { useState, useMemo } from 'react';
 import type { NormalizedTicket } from '@/types/ir-analytics';
@@ -66,7 +59,6 @@ export function StagnantTicketTable({
     setPage(0);
   }
 
-  // Pre-filter by quick tab
   const tabFiltered = useMemo(() => {
     switch (viewFilter) {
       case 'active':
@@ -83,7 +75,6 @@ export function StagnantTicketTable({
     }
   }, [tickets, viewFilter]);
 
-  // Filter by search query
   const searchFiltered = useMemo(() => {
     if (!search.trim()) return tabFiltered;
     const q = search.toLowerCase();
@@ -99,7 +90,6 @@ export function StagnantTicketTable({
     );
   }, [tabFiltered, search]);
 
-  // Sort records
   const sorted = useMemo(() => {
     return [...searchFiltered].sort((a, b) => {
       let av: string | number | null = null;
@@ -128,7 +118,6 @@ export function StagnantTicketTable({
   const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
 
-  // Tab counts
   const activeCount = useMemo(() => tickets.filter((t) => isActiveTicket(t)).length, [tickets]);
   const stagnantCount = useMemo(() => tickets.filter((t) => isActiveTicket(t) && (t.daysSinceMovement ?? 0) >= 7).length, [tickets]);
   const criticalCount = useMemo(() => tickets.filter((t) => isActiveTicket(t) && (t.daysSinceMovement ?? 0) >= 30).length, [tickets]);
@@ -161,7 +150,6 @@ export function StagnantTicketTable({
 
   return (
     <div style={{ background: 'var(--ui-surface, #0d1a2e)', border: '1px solid var(--ui-panel-border, var(--ui-border))', borderRadius: '14px', overflow: 'hidden' }}>
-      {/* ── Table Top Control Bar ── */}
       <div
         style={{
           padding: '16px 20px',
@@ -182,8 +170,6 @@ export function StagnantTicketTable({
             {sorted.length} {sorted.length === 1 ? 'ticket' : 'tickets'} matching criteria · Click any row to inspect complete history
           </p>
         </div>
-
-        {/* Search */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: '10px', top: '7px', fontSize: '12px', color: 'var(--ui-muted, #64748b)' }}>🔍</span>
@@ -220,8 +206,6 @@ export function StagnantTicketTable({
           )}
         </div>
       </div>
-
-      {/* ── Quick Filter Tabs ── */}
       <div
         style={{
           display: 'flex',
@@ -278,8 +262,6 @@ export function StagnantTicketTable({
           );
         })}
       </div>
-
-      {/* ── Table Content ── */}
       {sorted.length === 0 ? (
         <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--ui-muted, #64748b)' }}>
           <div style={{ fontSize: '36px', marginBottom: '8px' }}>✨</div>
@@ -352,7 +334,6 @@ export function StagnantTicketTable({
                       onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'rgba(37,99,235,0.1)')}
                       onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : 'var(--ui-wash, rgba(16,31,54,0.3))')}
                     >
-                      {/* Ticket & IR ID */}
                       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
                         <div style={{ color: 'var(--ui-link, #60a5fa)', fontWeight: 800, fontSize: '13px' }}>
                           {t.ticketId ? <RequestIdLink requestId={t.ticketId} /> : '(No ID)'}
@@ -363,13 +344,9 @@ export function StagnantTicketTable({
                           </div>
                         )}
                       </td>
-
-                      {/* Status */}
                       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
                         <StatusBadge status={t.statusCategory} rawStatus={t.rawStatus} />
                       </td>
-
-                      {/* Technician */}
                       <td style={{ padding: '12px 14px', color: 'var(--ui-text, #f8fafc)', whiteSpace: 'nowrap' }}>
                         {t.technician === 'Unassigned' || !t.technician ? (
                           <span style={{ color: 'var(--ui-muted, #64748b)', fontStyle: 'italic' }}>Unassigned</span>
@@ -377,13 +354,9 @@ export function StagnantTicketTable({
                           <span style={{ fontWeight: 600 }}>{t.technician}</span>
                         )}
                       </td>
-
-                      {/* Department */}
                       <td style={{ padding: '12px 14px', color: 'var(--ui-secondary, #cbd5e1)', whiteSpace: 'nowrap' }}>
                         {t.department || <span style={{ color: '#475569' }}>—</span>}
                       </td>
-
-                      {/* Movement & Aging Badge */}
                       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
                         <span
                           style={{
@@ -400,8 +373,6 @@ export function StagnantTicketTable({
                           {alert.label}
                         </span>
                       </td>
-
-                      {/* Remarks / Delay Reason */}
                       <td
                         style={{
                           padding: '12px 14px',
@@ -416,8 +387,6 @@ export function StagnantTicketTable({
                       >
                         {t.remarks || 'No delay reason recorded'}
                       </td>
-
-                      {/* Action */}
                       <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span
                           style={{
@@ -438,8 +407,6 @@ export function StagnantTicketTable({
               </tbody>
             </table>
           </div>
-
-          {/* Pagination */}
           {totalPages > 1 && (
             <div
               style={{
@@ -539,7 +506,6 @@ function StatusBadge({ status, rawStatus }: { status: string; rawStatus: string 
   );
 }
 
-// ── Ticket Detail Inspection Modal ──────────────────────────────────────────
 
 interface TicketDetailModalProps {
   ticket: NormalizedTicket | null;
@@ -576,7 +542,6 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
           boxShadow: '0 20px 40px var(--ui-shadow, rgba(0,0,0,0.6))',
         }}
       >
-        {/* Header */}
         <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--ui-border, #243650)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-link, #60a5fa)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -611,10 +576,7 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
             ×
           </button>
         </div>
-
-        {/* Body */}
         <div style={{ padding: '24px' }}>
-          {/* Stagnant Alert banner */}
           {ticket.daysSinceMovement !== null && ticket.daysSinceMovement >= 7 && (
             <div
               style={{
@@ -632,8 +594,6 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
               Requires administrator follow-up or technician update.
             </div>
           )}
-
-          {/* Details grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>
             <DetailField label="Status" value={ticket.rawStatus} highlight={ticket.statusCategory === 'open' || ticket.statusCategory === 'pending'} />
             <DetailField label="Assigned Technician" value={ticket.technician} />
@@ -642,8 +602,6 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
             <DetailField label="Priority" value={ticket.priority || '—'} />
             <DetailField label="Requester" value={ticket.requester || '—'} />
           </div>
-
-          {/* Timeline & Inactivity */}
           <div style={{ background: 'var(--ui-inset, #101f36)', border: '1px solid var(--ui-panel-border, var(--ui-border))', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
             <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.06em' }}>
               Timeline & Inactivity Metrics
@@ -655,8 +613,6 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
               <div><span style={{ color: 'var(--ui-muted, #64748b)' }}>Aging Since Open: </span><span style={{ color: 'var(--ui-text, #f8fafc)', fontWeight: 600 }}>{ticket.agingDays ?? '—'} days</span></div>
             </div>
           </div>
-
-          {/* Delay Reason / Remarks */}
           <div style={{ marginBottom: '16px' }}>
             <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.06em' }}>
               Delay Reason / Remarks
@@ -676,8 +632,6 @@ export function TicketDetailModal({ ticket, onClose }: TicketDetailModalProps) {
               {ticket.remarks || 'No specific delay reason or progress remarks recorded for this ticket.'}
             </div>
           </div>
-
-          {/* Description */}
           {ticket.description && (
             <div style={{ marginBottom: '16px' }}>
               <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ui-muted, #64748b)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.06em' }}>

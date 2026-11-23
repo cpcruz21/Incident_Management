@@ -1,44 +1,23 @@
-'use client';
-import React, { useState } from 'react';
+﻿'use client';
+import React from 'react';
 import type { ValidationSummary as ValidationSummaryType } from '@/types/incident';
 
 interface ValidationSummaryProps {
   summary: ValidationSummaryType;
   onProceed: () => void;
   onBack: () => void;
-  reportPeriod?: string;
-  onPeriodChange?: (period: string) => void;
-  isMonthly?: boolean;
-}
-
-function generateMonthOptions(): { label: string; value: string }[] {
-  const options: { label: string; value: string }[] = [];
-  const now = new Date();
-  for (let i = 0; i < 24; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    options.push({ label, value: label });
-  }
-  return options;
 }
 
 export function ValidationSummaryView({
   summary,
   onProceed,
   onBack,
-  reportPeriod = '',
-  onPeriodChange,
-  isMonthly,
 }: ValidationSummaryProps) {
-  const isMonthlyTicket = isMonthly !== undefined ? isMonthly : Boolean(onPeriodChange);
-  const monthOptions = isMonthlyTicket ? generateMonthOptions() : [];
   return (
     <div className="validation-container">
       <div className="validation-header">
         <h2>Data Validation Results</h2>
       </div>
-
-      {/* Stats Cards */}
       <div className="validation-stats">
         <div className="stat-card stat-total">
           <span className="stat-value">{summary.totalRecords}</span>
@@ -53,8 +32,6 @@ export function ValidationSummaryView({
           <span className="stat-label">Invalid</span>
         </div>
       </div>
-
-      {/* Detected Info */}
       <div className="validation-section">
         <h3>Detected Columns ({summary.detectedColumns.length})</h3>
         <div className="tag-list">
@@ -97,8 +74,6 @@ export function ValidationSummaryView({
           </div>
         </div>
       )}
-
-      {/* Errors */}
       {summary.errors.length > 0 && (
         <div className="validation-section">
           <h3 className="text-error">⚠️ Errors ({summary.errors.length})</h3>
@@ -115,8 +90,6 @@ export function ValidationSummaryView({
           </div>
         </div>
       )}
-
-      {/* Warnings */}
       {summary.warnings.length > 0 && (
         <div className="validation-section">
           <h3 className="text-warning">⚡ Warnings ({summary.warnings.length})</h3>
@@ -133,26 +106,6 @@ export function ValidationSummaryView({
           </div>
         </div>
       )}
-
-      {/* Storage Month Selector - Only for monthly tickets */}
-      {isMonthlyTicket && (
-        <div className="validation-section">
-          <h3>Storage Month</h3>
-          <select
-            className="period-input"
-            value={reportPeriod}
-            onChange={(e) => onPeriodChange?.(e.target.value)}
-            style={{ maxWidth: '280px' }}
-          >
-            <option value="">-- Select Month --</option>
-            {monthOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Actions */}
       <div className="validation-actions">
         <button className="btn btn-secondary" onClick={onBack}>
           ← Back
@@ -160,8 +113,7 @@ export function ValidationSummaryView({
         <button
           className="btn btn-primary"
           onClick={onProceed}
-          disabled={summary.validRecords === 0 || (isMonthlyTicket && !reportPeriod)}
-          title={isMonthlyTicket && !reportPeriod ? 'Select a storage month before proceeding' : undefined}
+          disabled={summary.validRecords === 0}
         >
           Proceed →
         </button>

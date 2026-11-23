@@ -1,6 +1,8 @@
-/* Administrator workspace and sign-in colors. */
-:is(.admin-shell, .admin-login) {
+﻿:is(.admin-shell, .admin-login) {
   --color-primary: #1d4ed8;
+}
+
+:is(.admin-shell:where(:not([data-theme="night"])), .admin-login) {
   --success-bg: #e5f3ed;
   --warning-bg: #fff4d6;
   --error-bg: #fcecee;
@@ -12,35 +14,35 @@
   -webkit-text-fill-color: currentColor;
 }
 
-.admin-shell .tag-team {
+.admin-shell:where(:not([data-theme="night"])) .tag-team {
   background: #f0e8fa;
   border-color: #bfa5dc;
   color: #64339b;
 }
-.admin-shell .tag-category {
+.admin-shell:where(:not([data-theme="night"])) .tag-category {
   background: #e5f3ed;
   border-color: #97c6ae;
   color: #066241;
 }
 .admin-shell :is(.group-pill, .footer-info, .pagination-info) { color: var(--ui-secondary); }
 .admin-shell .routing-table th { background: var(--ui-inset); color: var(--ui-secondary); }
-.admin-shell .prevweek-autofill-banner { background: #e5f3ed; border-color: #97c6ae; }
-.admin-shell .prevweek-autofill-sub { color: #245640; }
-.admin-shell .prevweek-info-banner { background: #eaf2fc; border-color: #a4bedc; }
-.admin-shell .btn-clear-autofill:hover { background: #f8dfe3; color: #8c1d30; }
+.admin-shell:where(:not([data-theme="night"])) .prevweek-autofill-banner { background: #e5f3ed; border-color: #97c6ae; }
+.admin-shell:where(:not([data-theme="night"])) .prevweek-autofill-sub { color: #245640; }
+.admin-shell:where(:not([data-theme="night"])) .prevweek-info-banner { background: #eaf2fc; border-color: #a4bedc; }
+.admin-shell:where(:not([data-theme="night"])) .btn-clear-autofill:hover { background: #f8dfe3; color: #8c1d30; }
 
 :is(.admin-shell, .admin-login) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select) {
-  background-color: #ffffff;
+  background-color: var(--admin-field-background, #ffffff);
   color: var(--ui-text);
   border-color: var(--ui-control-border);
   accent-color: #1d4ed8;
 }
 :is(.admin-shell, .admin-login) :is(input, textarea, select):focus-visible {
-  outline: 2px solid #075cab;
+  outline: 2px solid var(--theme-focus);
   outline-offset: 2px;
 }
 :is(.admin-shell, .admin-login) :is(input, textarea, select):disabled {
-  background-color: #edf2f7;
+  background-color: var(--admin-field-disabled-background, #edf2f7);
   color: var(--ui-muted);
   opacity: 1;
 }
@@ -70,26 +72,24 @@
 }
 .admin-shell .revised-value-text { color: #713f12 !important; }
 .admin-shell .revised-empty-text { color: #805000; }
-.admin-shell .cell-revised-highlight { background: #fff9e8 !important; }
-.admin-shell .cell-revised-highlight.is-editable:hover { background: #fff0c2 !important; }
-.admin-shell th.col-header-revised {
+.admin-shell:where(:not([data-theme="night"])) .cell-revised-highlight { background: #fff9e8 !important; }
+.admin-shell:where(:not([data-theme="night"])) .cell-revised-highlight.is-editable:hover { background: #fff0c2 !important; }
+.admin-shell:where(:not([data-theme="night"])) th.col-header-revised {
   background: #facc15 !important;
   color: #0f172a !important;
   border-left: 1.5px solid #ca8a04 !important;
   border-right: 1.5px solid #ca8a04 !important;
 }
-.admin-shell th.col-header-revised .monthly-sort-button {
+.admin-shell:where(:not([data-theme="night"])) th.col-header-revised .monthly-sort-button {
   color: #0f172a !important;
   font-weight: 750;
 }
-.admin-shell th.col-header-revised .monthly-sort-button:hover {
+.admin-shell:where(:not([data-theme="night"])) th.col-header-revised .monthly-sort-button:hover {
   background: #eab308 !important;
   color: #0f172a !important;
 }
 
-.admin-shell .admin-welcome::before { opacity: .9; }
-.admin-shell .admin-overview { background: #ffffff; border-radius: 8px; }
-.admin-shell .admin-navigation nav button[aria-current="page"] { border-left-color: #075cab; font-weight: 700; }
+.admin-shell .admin-navigation nav button[aria-current="page"] { border-left-color: var(--theme-focus); font-weight: 700; }
 :is(.admin-shell, .admin-login) .admin-primary { background: #075eae; border-color: #075eae; }
 :is(.admin-shell, .admin-login) .admin-primary:hover:not(:disabled) { background: #064c8c; }
 :is(.admin-shell, .admin-login) :is(.admin-primary, .admin-secondary):disabled {

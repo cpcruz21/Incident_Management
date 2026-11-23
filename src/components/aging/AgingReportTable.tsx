@@ -1,19 +1,25 @@
-'use client';
+﻿'use client';
 
 import React, { useRef, useState, useMemo, useEffect, useCallback, useId } from 'react';
-import { ChartColumn, Download, Flame, NotebookText, Trash2, Edit2, Check, X } from 'lucide-react';
+import { ChartColumn, Flame, NotebookText, Trash2, Edit2, Check, X } from 'lucide-react';
 import type { AgingReportData, AgingRemarksRow, AgingBucket, RemarksTableData, HighImpactIncident } from '@/types/aging';
 import type { Incident } from '@/types/incident';
 import { AGING_BUCKET_ORDER, AGING_BUCKET_LABELS } from '@/types/aging';
-import { buildRemarksTableData } from '@/lib/aging/calculator';
+import { buildRemarksTableData, filterOpenIncidents } from '@/lib/aging/calculator';
+import { removeAgingRemarksTicket } from '@/lib/aging/report';
 import { saveAgingSnapshot } from '@/lib/aging/snapshot';
 import { fetchDepartmentMappings } from '@/lib/api/client';
 import { DEFAULT_DEPARTMENT_MAPPINGS } from '@/lib/departments/mappings';
 import { RequestIdLink } from '@/components/report/RequestIdLink';
 import { SLAMetricHeading } from '@/components/report/SLATableLabels';
 import { ReportImageExport } from '@/components/report/ReportImageExport';
+import { SLAObjectives } from '@/components/report/SLAObjectives';
 import { ReportDetailsStrip } from '@/components/report/ReportDetailsStrip';
+import { ReportResultHeader } from '@/components/report/ReportResultHeader';
+import { ArchiveReportButton } from '@/components/report/ArchiveReportButton';
 import { HighImpactInput } from '@/components/aging/HighImpactInput';
+import { ReportTicketActions } from '@/components/report/ReportTicketActions';
+import { normalizeReportRequestId, type ReportTicketAction } from '@/lib/report/ticket-edits';
 
 interface AgingReportTableProps {
   data: AgingReportData;
@@ -31,6 +37,10 @@ interface AgingReportTableProps {
   ) => void;
   accountName?: string;
   isPublicView?: boolean;
+  periodControl?: React.ReactNode;
+  headingLevel?: 1 | 2;
+  exportAction?: React.ReactNode;
+  onEditTicket?: (action: ReportTicketAction, requestId: string) => void;
 }
 
 const DATE_SPLIT_REGEX = /(\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:[ \t]*-[ \t]*)?)/g;
@@ -38,7 +48,6 @@ const IS_DATE_PATTERN = /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?:[ \t]*-[ \t]*)?$/;
 
 function renderSingleColorUpdateText(text: string) {
   if (!text) return null;
-  // Preserve authored line breaks and separate dated notes that run together.
   const readableText = text.replace(/\r\n?/g, '\n').replace(
     /([.!?;])[ \t]+(?=\d{1,2}\/\d{1,2}(?:\/\d{2,4})?[ \t]*-)/g,
     '$1\n\n'
@@ -68,10 +77,16 @@ export function AgingReportTable({
   onUpdateRemarksRow,
   accountName = 'System User',
   isPublicView = false,
+  periodControl,
+  headingLevel,
+  exportAction,
+  onEditTicket,
 }: AgingReportTableProps) {
   const reportRef = useRef<HTMLDivElement>(null);
   const slaPanelRef = useRef<HTMLElement>(null);
   const distributionPanelRef = useRef<HTMLElement>(null);
+  const objectivesRef = useRef<HTMLDivElement>(null);
+  const assignmentDepartment = useRef<HTMLSelectElement>(null);
   const distributionHeadingId = useId();
   const [isSaved, setIsSaved] = useState(false);
   const [activeTab, setActiveTabState] = useState<'aging' | 'remarks' | 'high-impact'>(() => {
@@ -105,16 +120,17 @@ export function AgingReportTable({
 
   const [editingHighImpactId, setEditingHighImpactId] = useState<string | null>(null);
   const [editingHighImpactNote, setEditingHighImpactNote] = useState<string>('');
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (editingAssignmentId) assignmentDepartment.current?.focus();
+  }, [editingAssignmentId]);
 
-  // Dynamic Department Mappings from Server API
   const [deptMappings, setDeptMappings] = useState<Record<string, string[]>>(DEFAULT_DEPARTMENT_MAPPINGS);
   const [availableDepartments, setAvailableDepartments] = useState<string[]>(Object.keys(DEFAULT_DEPARTMENT_MAPPINGS));
 
-  // Saved notes belong to this report; pending edits never affect another extract.
   const [savedRows, setSavedRows] = useState<Record<string, AgingRemarksRow>>({});
   const committedRemarks = useRef<RemarksTableData | null>(null);
 
-  // Local unsaved row modifications
   const [unsavedEdits, setUnsavedEdits] = useState<
     Record<
       string,
@@ -126,19 +142,16 @@ export function AgingReportTable({
     >
   >({});
 
-  // Loading / saving spinners per row
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [isSavingReport, setIsSavingReport] = useState(false);
   const isSavingRemarks = isBulkSaving || isSavingReport || Object.values(savingRows).some(Boolean);
 
-  // Toast / feedback message
   const [toastMessage, setToastMessage] = useState<{
     text: string;
     type: 'success' | 'error' | 'info';
   } | null>(null);
 
-  // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('ALL');
   const [teamFilter, setTeamFilter] = useState('ALL');
@@ -147,9 +160,7 @@ export function AgingReportTable({
   const [sortBy, setSortBy] = useState<'aging-desc' | 'aging-asc' | 'id-asc' | 'dept-asc' | 'recent-update'>('aging-desc');
   const [pageSize, setPageSize] = useState<number>(25);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [isExportingRemarks, setIsExportingRemarks] = useState(false);
 
-  // Auto-dismiss toast
   useEffect(() => {
     if (!toastMessage) return;
     const timer = setTimeout(() => setToastMessage(null), 4500);
@@ -160,7 +171,6 @@ export function AgingReportTable({
     setCurrentPage(1);
   }, [searchQuery, deptFilter, teamFilter, severityFilter, onlyUnsavedFilter, sortBy, pageSize]);
 
-  // Load backend metadata
   const loadBackendData = useCallback(async () => {
     try {
       const mappingsRes = await fetchDepartmentMappings();
@@ -205,7 +215,6 @@ export function AgingReportTable({
     };
   }, [loadBackendData]);
 
-  // Normalize responsible team
   const normalizeResponsibleTeam = useCallback((resp: string | undefined, _contextStr = ''): string => {
     const raw = (resp || '').trim();
     if (!raw) return '';
@@ -229,7 +238,6 @@ export function AgingReportTable({
     return ['ISS MT', 'ISS Binondo', 'SDS', 'POS DB', 'ECS HRAD', 'ISMS Support', 'PSD', 'HR'];
   }, []);
 
-  // Compute Base Remarks Table rows
   const remarksData = useMemo(() => {
     let baseTable = data.remarksTable;
     if (!baseTable || baseTable.rows.length === 0) {
@@ -324,7 +332,6 @@ export function AgingReportTable({
     return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
   }, [remarksData.periodTo, data.asOf, data.generatedAt]);
 
-  // Handle local edits
   const handleDepartmentChange = (row: AgingRemarksRow, newDept: string) => {
     if (isPublicView) return;
     const currentResp = unsavedEdits[row.requestId]?.responsibleOrDependency ?? row.responsibleOrDependency;
@@ -421,6 +428,7 @@ export function AgingReportTable({
       const saved = snapshot.remarksTable!.rows.find(item => item.requestId === row.requestId)!;
       onUpdateRemarksRow?.(saved.requestId, saved.recentUpdate, saved.responsibleOrDependency,
         saved.department, saved.lastUpdated, saved.updatedBy, false);
+      setEditingAssignmentId((current) => current === row.requestId ? null : current);
       setToastMessage({ text: 'Saved this update to the current report.', type: 'success' });
     } catch (error) {
       setToastMessage({ text: error instanceof Error ? error.message : 'Could not save this update.', type: 'error' });
@@ -473,6 +481,23 @@ export function AgingReportTable({
     } finally { setIsSavingReport(false); }
   };
 
+  const handleTicketEdit = (action: ReportTicketAction, id: string) => {
+    if (!onEditTicket) return;
+    onEditTicket(action, id);
+    if (action === 'delete') {
+      if (committedRemarks.current) committedRemarks.current = removeAgingRemarksTicket(committedRemarks.current, id);
+      setUnsavedEdits((pending) => {
+        const remaining = { ...pending };
+        delete remaining[id];
+        return remaining;
+      });
+      if (editingHighImpactId && normalizeReportRequestId(editingHighImpactId) === normalizeReportRequestId(id)) {
+        setEditingHighImpactId(null);
+      }
+    }
+    setIsSaved(false);
+  };
+
   const renderIncidentCount = (count: number, title: string, ids?: string[]) =>
     onCellClick && ids?.length ? (
       <button
@@ -505,7 +530,6 @@ export function AgingReportTable({
     };
   }, [remarksData.rows, availableDepartments]);
 
-  // Filtered & Sorted remarks rows
   const filteredAndSortedRows = useMemo(() => {
     let result = [...remarksData.rows];
 
@@ -582,25 +606,6 @@ export function AgingReportTable({
     return filteredAndSortedRows.slice(startIndex, endIndex);
   }, [filteredAndSortedRows, isPublicView, pageSize, startIndex, endIndex]);
 
-  const handleExportXlsx = async () => {
-    if (!totalItems || isExportingRemarks) return;
-
-    setIsExportingRemarks(true);
-    try {
-      const { exportAgingRemarksToXlsx } = await import('@/lib/report/export');
-      exportAgingRemarksToXlsx(filteredAndSortedRows, data.reportPeriod || '');
-      setToastMessage({ text: `Exported ${totalItems} aging records.`, type: 'success' });
-    } catch (error) {
-      const text = error instanceof Error && error.message.includes('32767')
-        ? 'One of the exported fields exceeds Excel’s 32,767-character cell limit.'
-        : 'Could not export the Excel workbook. Try again.';
-      setToastMessage({ text, type: 'error' });
-    } finally {
-      setIsExportingRemarks(false);
-    }
-  };
-
-  // Calculate bucket totals
   const bucketTotals: Record<AgingBucket, number> = useMemo(() => {
     const res: Record<string, number> = {};
     for (const b of AGING_BUCKET_ORDER) {
@@ -626,7 +631,6 @@ export function AgingReportTable({
 
   return (
     <div ref={reportRef} className="aging-report" data-public-view={isPublicView} data-active-tab={activeTab} style={{ width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }} id="aging-report-canvas">
-      {/* Toast Notification */}
       {toastMessage && (
         <div
           style={{
@@ -658,12 +662,10 @@ export function AgingReportTable({
           </button>
         </div>
       )}
-
-      {/* ══ Modern Header Bar ══ */}
-      <div
+      {isPublicView ? <div
         className="aging-report-header"
         style={{
-          background: 'linear-gradient(145deg, var(--ui-surface, #111c30) 0%, var(--ui-surface, #0d1a2e) 100%)',
+          background: 'var(--glass-panel, linear-gradient(145deg, var(--ui-surface, #111c30) 0%, var(--ui-surface, #0d1a2e) 100%))',
           border: '1px solid var(--ui-panel-border, var(--ui-border))',
           borderRadius: '16px',
           padding: 'var(--aging-header-padding, 18px 24px)',
@@ -696,7 +698,7 @@ export function AgingReportTable({
               <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, letterSpacing: '-0.01em' }}>
                 Aging Incident Report
               </h2>
-              <span
+              {!periodControl && <span
                 style={{
                   fontSize: '11px',
                   fontWeight: 700,
@@ -708,14 +710,19 @@ export function AgingReportTable({
                 }}
               >
                 {data.reportPeriod || 'Current Period'}
-              </span>
+              </span>}
             </div>
           </div>
         </div>
 
-        {/* Right Action Controls: Admin Actions */}
-        {!isPublicView && (
-          <div style={{ display: 'flex', gap: '8px' }}>
+        {periodControl}
+      </div> : (
+        <ReportResultHeader
+          title="Aging Incident Report"
+          icon="⏳"
+          headingLevel={headingLevel}
+          periodLabel={data.reportPeriod}
+          actions={<>
             {unsavedCount > 0 && (
               <button
                 type="button"
@@ -735,27 +742,27 @@ export function AgingReportTable({
                 {isBulkSaving ? '💾 Saving…' : `💾 Save Unsaved (${unsavedCount})`}
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleSaveCompleteReport}
+            <ArchiveReportButton
+              onArchive={handleSaveCompleteReport}
+              saving={isSavingReport}
+              archived={isSaved}
               disabled={isSavingRemarks}
-              style={{
-                background: isSaved ? 'rgba(16,185,129,0.15)' : '#2563eb',
-                border: isSaved ? '1px solid #10b981' : 'none',
-                color: isSaved ? 'var(--ui-success, #ffffff)' : '#ffffff',
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: isSaved ? 'none' : '0 2px 10px rgba(37,99,235,0.3)',
-              }}
-            >
-              {isSavingReport ? 'Saving…' : isSaved ? '✓ Archived' : '💾 Archive Report'}
-            </button>
-          </div>
-        )}
-      </div>
+            />
+            {exportAction}
+          </>}
+        />
+      )}
+
+      {!isPublicView && onEditTicket && routedIncidents && (
+        <ReportTicketActions
+          incidents={filterOpenIncidents(routedIncidents)}
+          failedIds={data.slaRows.flatMap((row) => row.firstResponse.failedIds)}
+          reportName="aging report"
+          busy={isSavingRemarks}
+          onApprove={(id) => handleTicketEdit('accept-first-response', id)}
+          onDelete={(id) => handleTicketEdit('delete', id)}
+        />
+      )}
 
       <div className="aging-report-tabs" role="group" aria-label="Aging report views">
         <button type="button" aria-pressed={activeTab === 'aging'} onClick={() => setActiveTab('aging')}>
@@ -777,8 +784,6 @@ export function AgingReportTable({
           )}
         </button>
       </div>
-
-      {/* ══ TAB 1: AGING MODULE (SLA & DISTRIBUTION) ══ */}
       {activeTab === 'aging' && (
         <div className="aging-module">
           <ReportDetailsStrip
@@ -788,6 +793,9 @@ export function AgingReportTable({
           >
             <ReportImageExport
               sources={[
+                ...(isPublicView ? [{
+                  panel: objectivesRef, title: 'Aging SLA Objectives', filename: 'aging-sla-objectives.png', cropToPanel: true,
+                }] : []),
                 { panel: slaPanelRef, title: 'SLA Compliance', filename: 'aging-sla-compliance.png' },
                 { panel: distributionPanelRef, title: 'Aging Distribution', filename: 'aging-distribution.png' },
               ]}
@@ -797,7 +805,8 @@ export function AgingReportTable({
           </ReportDetailsStrip>
 
           <section ref={slaPanelRef} className="aging-matrix-panel" aria-label="SLA compliance">
-            <div className="aging-sla-table-scroll">
+            <div className="aging-sla-table-scroll" tabIndex={isPublicView ? 0 : undefined} role={isPublicView ? 'region' : undefined}
+              aria-label={isPublicView ? 'Aging SLA results table' : undefined}>
               <table className="aging-sla-comparison-table" role="table" aria-label="First response and resolution by technician">
                 <colgroup><col className="aging-matrix-team-column" /><col style={{ width: '10%' }} /></colgroup>
                 <colgroup>
@@ -834,13 +843,13 @@ export function AgingReportTable({
                       <td role="cell" data-label="Failed" className={row.firstResponse.failed > 0 ? 'sla-failed-count' : undefined}>
                         {renderIncidentCount(row.firstResponse.failed, `${row.teamName} — FR Failed`, row.firstResponse.failedIds)}
                       </td>
-                      <td role="cell" data-label="Passed">{renderIncidentCount(row.firstResponse.passed, `${row.teamName} — FR Passed`, row.firstResponse.passedIds)}</td>
+                      <td role="cell" data-label="Passed" data-sla-passed={row.firstResponse.passed > 0}>{renderIncidentCount(row.firstResponse.passed, `${row.teamName} — FR Passed`, row.firstResponse.passedIds)}</td>
                       <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(row.firstResponse.slaPassRate)}</td>
                       <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.firstResponse[row.teamName] ?? null)}</td>
                       <td role="cell" data-label="Failed" className={row.resolutionTime.failed > 0 ? 'sla-failed-count' : undefined}>
                         {renderIncidentCount(row.resolutionTime.failed, `${row.teamName} — RT Failed`, row.resolutionTime.failedIds)}
                       </td>
-                      <td role="cell" data-label="Passed">{renderIncidentCount(row.resolutionTime.passed, `${row.teamName} — RT Passed`, row.resolutionTime.passedIds)}</td>
+                      <td role="cell" data-label="Passed" data-sla-passed={row.resolutionTime.passed > 0}>{renderIncidentCount(row.resolutionTime.passed, `${row.teamName} — RT Passed`, row.resolutionTime.passedIds)}</td>
                       <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(row.resolutionTime.slaPassRate)}</td>
                       <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.resolutionTime[row.teamName] ?? null)}</td>
                     </tr>
@@ -851,11 +860,11 @@ export function AgingReportTable({
                     <th scope="row" role="rowheader">Total</th>
                     <td role="cell" data-label="Tickets">{data.slaTotals.totalIRs}</td>
                     <td role="cell" data-label="Failed" data-failed={data.slaTotals.firstResponse.failed > 0}>{data.slaTotals.firstResponse.failed}</td>
-                    <td role="cell" data-label="Passed">{data.slaTotals.firstResponse.passed}</td>
+                    <td role="cell" data-label="Passed" data-sla-passed={data.slaTotals.firstResponse.passed > 0}>{data.slaTotals.firstResponse.passed}</td>
                     <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(data.slaTotals.firstResponse.slaPassRate)}</td>
                     <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.firstResponseTotal ?? null)}</td>
                     <td role="cell" data-label="Failed" data-failed={data.slaTotals.resolutionTime.failed > 0}>{data.slaTotals.resolutionTime.failed}</td>
-                    <td role="cell" data-label="Passed">{data.slaTotals.resolutionTime.passed}</td>
+                    <td role="cell" data-label="Passed" data-sla-passed={data.slaTotals.resolutionTime.passed > 0}>{data.slaTotals.resolutionTime.passed}</td>
                     <td role="cell" className="aging-sla-rate-cell" data-period="current" data-label="This week">{formatComparisonRate(data.slaTotals.resolutionTime.slaPassRate)}</td>
                     <td role="cell" className="aging-sla-rate-cell" data-period="previous" data-label="Last week">{formatComparisonRate(data.previousWeek.sla?.resolutionTimeTotal ?? null)}</td>
                   </tr>
@@ -865,7 +874,8 @@ export function AgingReportTable({
           </section>
 
           <section ref={distributionPanelRef} className="aging-matrix-panel" aria-labelledby={distributionHeadingId}>
-            <div className="aging-sla-table-scroll">
+            <div className="aging-sla-table-scroll" tabIndex={isPublicView ? 0 : undefined} role={isPublicView ? 'region' : undefined}
+              aria-label={isPublicView ? 'Aging distribution table' : undefined}>
               <table className="aging-distribution-table" role="table" aria-labelledby={distributionHeadingId}>
                 <colgroup>
                   <col className="aging-matrix-team-column" />
@@ -894,8 +904,8 @@ export function AgingReportTable({
                       {AGING_BUCKET_ORDER.map(bucket => {
                         const count = row.buckets[bucket] || 0;
                         return (
-                          <td role="cell" key={bucket} data-label={AGING_BUCKET_LABELS[bucket]}>
-                            {count > 0 ? renderIncidentCount(count, `${row.teamName} — ${AGING_BUCKET_LABELS[bucket]}`, row.bucketIncidentIds[bucket]) : '—'}
+                          <td role="cell" key={bucket} data-label={AGING_BUCKET_LABELS[bucket]} data-aging-bucket={bucket}>
+                            {count > 0 ? <span className="aging-bucket-count">{renderIncidentCount(count, `${row.teamName} — ${AGING_BUCKET_LABELS[bucket]}`, row.bucketIncidentIds[bucket])}</span> : '—'}
                           </td>
                         );
                       })}
@@ -917,13 +927,11 @@ export function AgingReportTable({
               </table>
             </div>
           </section>
+          {isPublicView && <SLAObjectives label="Aging SLA objectives" panelRef={objectivesRef} />}
         </div>
       )}
-
-      {/* ══ TAB 2: REMARKS TABLE (ENHANCED MODERN DATA TABLE) ══ */}
       {activeTab === 'remarks' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* ── Search & Filter Toolbar ── */}
           <div
             className="aging-remarks-toolbar"
             style={{
@@ -936,8 +944,7 @@ export function AgingReportTable({
               gap: '10px',
             }}
           >
-            {/* Search Input */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '240px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 'min(240px, 100%)' }}>
               <span style={{ fontSize: '14px', color: 'var(--ui-muted, #64748b)' }}>🔍</span>
               <input
                 type="text"
@@ -964,8 +971,6 @@ export function AgingReportTable({
                 </button>
               )}
             </div>
-
-            {/* Dropdowns & Export Actions */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <select
                 value={deptFilter}
@@ -1013,20 +1018,8 @@ export function AgingReportTable({
                   Clear
                 </button>
               )}
-
-              <button
-                type="button"
-                className="aging-export-action"
-                onClick={handleExportXlsx}
-                disabled={totalItems === 0 || isExportingRemarks}
-                title="Export all matching rows in the current sort order"
-              >
-                <Download size={14} aria-hidden="true" /> {isExportingRemarks ? 'Exporting…' : 'Export XLSX'}
-              </button>
             </div>
           </div>
-
-          {/* ── THE REMARKS TABLE (ENHANCED MODERN SAAS TABLE) ── */}
           <div
             style={{
               background: 'var(--ui-surface, #111c30)',
@@ -1038,32 +1031,32 @@ export function AgingReportTable({
               flexDirection: 'column',
             }}
           >
-            <div style={{ overflowX: isPublicView ? undefined : 'auto', flex: 1 }}>
-              <table className={isPublicView ? 'aging-detail-table aging-public-remarks-table' : 'aging-detail-table'} role="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
+            <div className="aging-remarks-scroll" tabIndex={0} role="region" aria-label="Aging remarks table">
+              <table className={`aging-detail-table ${isPublicView ? 'aging-public-remarks-table' : 'aging-admin-remarks-table'}`} role="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
                 <thead role="rowgroup">
                   <tr role="row" style={{ background: 'var(--ui-inset, #091426)', borderBottom: '1px solid var(--ui-border, #1e293b)' }}>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '110px' }}>
-                      RequestID
+                    <th scope="col" role="columnheader" style={{ padding: isPublicView ? '12px 14px' : '12px 6px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '8%' }}>
+                      Request ID
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '11%' : '10%' }}>
                       Department
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '8%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '8%' }}>
                       Category
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '130px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '9%' : '8%' }}>
                       Sub Category
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : undefined, minWidth: isPublicView ? undefined : '220px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '19%' : '14%' }}>
                       Description
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '100px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '7%' : '6%' }}>
                       Aging Days
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : undefined, minWidth: isPublicView ? undefined : '320px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '27%' : '36%' }}>
                       Recent Update
                     </th>
-                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: isPublicView ? '10%' : '150px' }}>
+                    <th scope="col" role="columnheader" style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '10%' }}>
                       Responsible Team
                     </th>
                   </tr>
@@ -1080,7 +1073,7 @@ export function AgingReportTable({
                       const isRowUnsaved = Boolean(row.isUnsaved);
                       const isSaving = Boolean(savingRows[row.requestId]);
                       const currentTeam = normalizeResponsibleTeam(row.responsibleOrDependency);
-                      const allowedTeams = getAllowedTeams(row.department);
+                      const isEditingAssignment = editingAssignmentId === row.requestId;
 
                       const severityColor = row.agingDays > 30 ? 'var(--ui-danger)'
                         : row.agingDays >= 15 ? 'var(--ui-orange)'
@@ -1099,54 +1092,31 @@ export function AgingReportTable({
                           onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'rgba(37,99,235,0.06)')}
                           onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = isRowUnsaved && !isPublicView ? 'rgba(245,158,11,0.05)' : 'transparent')}
                         >
-                          {/* 1. Request ID opens the matching SDP request. */}
-                          <td role="cell" data-label="Request ID" style={{ padding: '12px 14px', textAlign: isPublicView ? undefined : 'center' }}>
-                            <RequestIdLink requestId={row.requestId} />
-                            {isRowUnsaved && !isPublicView && (
-                              <span style={{ color: 'var(--ui-warning, #f59e0b)', fontSize: '9px', marginLeft: '4px' }}>●</span>
-                            )}
+                          <td role="cell" data-label="Request ID" style={{ padding: isPublicView ? '12px 14px' : '12px 6px', textAlign: isPublicView ? undefined : 'center' }}>
+                            <span>
+                              <RequestIdLink requestId={row.requestId} />
+                              {isRowUnsaved && !isPublicView && (
+                                <span style={{ color: 'var(--ui-warning, #f59e0b)', fontSize: '9px', marginLeft: '4px' }}>●</span>
+                              )}
+                            </span>
                           </td>
-
-                          {/* 2. Department */}
                           <td role="cell" data-label="Department" style={{ padding: '12px 14px', fontWeight: 600 }}>
-                            {isPublicView ? (
-                              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>
-                                {row.department || 'Not Assigned'}
-                              </span>
-                            ) : (
-                              <select
-                                value={row.department || 'Not Assigned'}
-                                disabled={isSavingRemarks}
-                                onChange={(e) => handleDepartmentChange(row, e.target.value)}
-                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-text)', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
-                              >
-                                <option value="Not Assigned">Not Assigned</option>
-                                {availableDepartments.filter((d) => d !== 'Not Assigned').map((d) => (
-                                  <option key={d} value={d}>{d}</option>
-                                ))}
-                              </select>
-                            )}
+                            <span style={{ fontSize: '12.5px', fontWeight: 600 }}>
+                              {row.department || 'Not Assigned'}
+                            </span>
                           </td>
-
-                          {/* 3. Category */}
                           <td role="cell" data-label="Category" style={{ padding: '12px 14px', fontWeight: 600 }} title={row.category}>
                             {row.category || '—'}
                           </td>
-
-                          {/* 4. Sub Category */}
                           <td role="cell" data-label="Sub Category" style={{ padding: '12px 14px', color: 'var(--ui-secondary)', fontSize: '12px' }} title={row.subCategory}>
                             {row.subCategory || '—'}
                           </td>
-
-                          {/* 5. Description */}
                           <td role="cell" data-label="Description" style={{ padding: '12px 16px', lineHeight: 1.6, fontSize: '12.5px' }} title={row.description}>
-                            <div style={isPublicView ? { whiteSpace: 'pre-wrap' } : { maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                            <div style={{ whiteSpace: 'pre-wrap' }}>
                               {row.description || '—'}
                             </div>
                           </td>
-
-                          {/* 6. Aging Days (Color-coded Pill) */}
-                          <td role="cell" data-label="Aging Days" style={{ padding: '12px 14px', textAlign: isPublicView ? undefined : 'center' }}>
+                          <td role="cell" data-label="Aging Days" style={{ padding: isPublicView ? '12px 14px' : '12px 6px', textAlign: isPublicView ? undefined : 'center' }}>
                             <span
                               style={{
                                 display: 'inline-block',
@@ -1158,18 +1128,16 @@ export function AgingReportTable({
                                 padding: '2px 8px',
                                 borderRadius: '6px',
                                 minWidth: '40px',
+                                whiteSpace: 'nowrap',
                               }}
                             >
                               {row.agingDays}d
                             </span>
                           </td>
-
-                          {/* 7. Recent Update */}
-                          <td role="cell" data-label="Recent Update" style={{ padding: '8px 10px', verticalAlign: 'top', minWidth: isPublicView ? undefined : '340px' }}>
+                          <td role="cell" data-label="Recent Update" style={{ padding: '8px 10px', verticalAlign: 'top' }}>
                             {isPublicView ? (
                               row.recentUpdate && row.recentUpdate.trim() ? (
                                 <div className="aging-update-card">
-                                  {/* Update Content with Single-Color Date Chips */}
                                   <div className="aging-update-copy">
                                     {renderSingleColorUpdateText(row.recentUpdate)}
                                   </div>
@@ -1198,31 +1166,49 @@ export function AgingReportTable({
                                 }}
                               >
                                 <textarea
+                                  className="aging-remarks-update-input"
                                   value={row.recentUpdate || ''}
                                   disabled={isSavingRemarks}
                                   onChange={(e) => handleRemarksChange(row, e.target.value)}
                                   placeholder="Type recent update notes…"
                                   aria-label={`Recent update for ${row.requestId}`}
                                   rows={3}
-                                  style={{
-                                    width: '100%',
-                                    background: 'var(--ui-inset, #091426)',
-                                    border: '1px solid var(--ui-control-border)',
-                                    borderRadius: '6px',
-                                    padding: '6px 8px',
-                                    fontSize: '13px',
-                                    lineHeight: 1.65,
-                                    color: 'var(--ui-text, #f8fafc)',
-                                    resize: 'vertical',
-                                  }}
                                 />
 
+                                {isEditingAssignment && (
+                                  <div className="aging-assignment-fields">
+                                    <label>
+                                      Department
+                                      <select ref={assignmentDepartment} value={row.department || 'Not Assigned'} disabled={isSavingRemarks}
+                                        onChange={(e) => handleDepartmentChange(row, e.target.value)}>
+                                        <option value="Not Assigned">Not Assigned</option>
+                                        {availableDepartments.filter((department) => department !== 'Not Assigned').map((department) => (
+                                          <option key={department} value={department}>{department}</option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Responsible team
+                                      <select value={currentTeam} disabled={isSavingRemarks}
+                                        onChange={(e) => handleResponsibleChange(row, e.target.value)}>
+                                        {(!currentTeam || currentTeam === 'Not Assigned') && <option value="">-- Team --</option>}
+                                        {getAllowedTeams(row.department).map((team) => <option key={team} value={team}>{team}</option>)}
+                                      </select>
+                                    </label>
+                                  </div>
+                                )}
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                                   {row.lastUpdated && (
                                     <span style={{ fontSize: '10px', color: 'var(--ui-secondary, #94a3b8)' }}>
                                       🕒 {new Date(row.lastUpdated).toLocaleDateString()}
                                     </span>
                                   )}
+                                  <button type="button" className="aging-assignment-edit" aria-expanded={isEditingAssignment}
+                                    aria-label={`Edit assignment for ${row.requestId}`} title="Edit department and responsible team"
+                                    disabled={isSavingRemarks}
+                                    onClick={() => setEditingAssignmentId((current) => current === row.requestId ? null : row.requestId)}>
+                                    <Edit2 size={13} aria-hidden="true" />
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => handleSaveRow(row)}
@@ -1245,26 +1231,10 @@ export function AgingReportTable({
                               </div>
                             )}
                           </td>
-
-                          {/* 8. Responsible Team */}
                           <td role="cell" data-label="Responsible Team" style={{ padding: '12px 14px', textAlign: isPublicView ? undefined : 'center' }}>
-                            {isPublicView ? (
-                              <span style={{ color: 'var(--ui-text, #e2e8f0)', fontSize: '12px', fontWeight: 500 }}>
-                                {currentTeam || '—'}
-                              </span>
-                            ) : (
-                              <select
-                                value={currentTeam}
-                                disabled={isSavingRemarks}
-                                onChange={(e) => handleResponsibleChange(row, e.target.value)}
-                                style={{ background: 'var(--ui-inset, #091426)', border: '1px solid var(--ui-control-border)', color: 'var(--ui-link, #38bdf8)', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
-                              >
-                                {(!currentTeam || currentTeam === 'Not Assigned') && <option value="">-- Team --</option>}
-                                {allowedTeams.map((t) => (
-                                  <option key={t} value={t}>{t}</option>
-                                ))}
-                              </select>
-                            )}
+                            <span style={{ color: 'var(--ui-text, #e2e8f0)', fontSize: '12px', fontWeight: 500 }}>
+                              {currentTeam || '—'}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -1273,10 +1243,8 @@ export function AgingReportTable({
                 </tbody>
               </table>
             </div>
-
-            {/* Pagination Controls */}
             {!isPublicView && totalPages > 1 && (
-              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--ui-border, #1e293b)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--ui-border, #1e293b)', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)' }}>
                     Showing {startIndex + 1}–{Math.min(endIndex, totalItems)} of {totalItems} records
@@ -1337,11 +1305,8 @@ export function AgingReportTable({
           </div>
         </div>
       )}
-
-      {/* ══ TAB 3: HIGH IMPACT INCIDENTS ══ */}
       {activeTab === 'high-impact' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Admin-only: add form */}
           {!isPublicView && (
             <HighImpactInput
               remarksRows={remarksData.rows}
@@ -1355,8 +1320,6 @@ export function AgingReportTable({
               }}
             />
           )}
-
-          {/* High Impact Incidents Table */}
           {highImpactIncidents.length === 0 ? (
             <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '13px', padding: '32px 0', textAlign: 'center' }}>
               No high impact incidents designated for this period.
@@ -1517,26 +1480,19 @@ export function AgingReportTable({
                             ((e.currentTarget as HTMLTableRowElement).style.background = 'transparent')
                           }
                         >
-                          {/* 1. RequestID (Highlighted badge matching Remarks table) */}
                           <td style={{ padding: '14px 12px', textAlign: 'center', verticalAlign: 'middle', border: 'none' }}>
                             <RequestIdLink requestId={item.requestId} />
                           </td>
-
-                          {/* 2. Category */}
                           <td style={{ padding: '14px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
                             <span style={{ fontWeight: 700, fontSize: '13px' }}>
                               {item.category || '—'}
                             </span>
                           </td>
-
-                          {/* 3. Sub Category */}
                           <td style={{ padding: '14px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
                             <span style={{ color: 'var(--ui-secondary)', fontSize: '12.5px', fontWeight: 500 }}>
                               {item.subCategory || '—'}
                             </span>
                           </td>
-
-                          {/* 4. Description */}
                           <td
                             style={{
                               padding: '14px 16px',
@@ -1551,8 +1507,6 @@ export function AgingReportTable({
                           >
                             {item.description || '—'}
                           </td>
-
-                          {/* 5. Aging Days (Color-coded Pill Badge matching Remarks table) */}
                           <td
                             style={{
                               padding: '14px 12px',
@@ -1578,8 +1532,6 @@ export function AgingReportTable({
                               {item.agingDays}d
                             </span>
                           </td>
-
-                          {/* 6. Recent Update (Aging Update Card matching Remarks table) */}
                           <td style={{ padding: '10px 14px', textAlign: 'left', verticalAlign: 'middle', border: 'none' }}>
                             {isEditing ? (
                               <div
@@ -1735,8 +1687,6 @@ export function AgingReportTable({
                               </div>
                             )}
                           </td>
-
-                          {/* 7. Responsible (Plain text, no button/pill highlight) */}
                           <td style={{ padding: '14px 12px', textAlign: 'center', verticalAlign: 'middle', border: 'none' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                               <span

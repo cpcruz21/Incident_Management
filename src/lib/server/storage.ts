@@ -1,4 +1,6 @@
-import { dataFile, readCategory, writeJson } from './data-files';
+﻿import { dataFile, readCategory, writeJson } from './data-files';
+
+import { formatWeeklyReportRange } from '@/lib/report/weekly-period';
 
 const MAPPINGS_FILE = dataFile('configuration', 'department-mappings.json');
 const ASSIGNMENTS_FILE = dataFile('follow-ups', 'incident-assignments.json');
@@ -27,31 +29,19 @@ export interface StoredIncidentAssignmentsMap {
   [requestId: string]: StoredIncidentAssignment;
 }
 
-/**
- * Retrieve Department -> Responsible Teams configuration
- */
 export function getDepartmentMappings(): DepartmentMappingConfig {
   const mappings = readCategory<Partial<DepartmentMappingConfig>>('configuration', 'department-mappings.json', {});
   return { ...DEFAULT_DEPARTMENT_MAPPINGS, ...mappings } as DepartmentMappingConfig;
 }
 
-/**
- * Persist Department -> Responsible Teams configuration
- */
 export function saveDepartmentMappings(mappings: DepartmentMappingConfig): void {
   writeJson(MAPPINGS_FILE, mappings);
 }
 
-/**
- * Retrieve all persisted incident assignments
- */
 export function getStoredAssignments(): StoredIncidentAssignmentsMap {
   return readCategory('follow-ups', 'incident-assignments.json', {});
 }
 
-/**
- * Persist an assignment for an incident
- */
 export function saveAssignment(assignment: StoredIncidentAssignment): StoredIncidentAssignment {
   const existing = getStoredAssignments();
   existing[assignment.requestId] = {
@@ -63,9 +53,6 @@ export function saveAssignment(assignment: StoredIncidentAssignment): StoredInci
   return existing[assignment.requestId];
 }
 
-/**
- * Bulk persist assignments
- */
 export function saveAssignmentsBulk(
   assignments: StoredIncidentAssignment[]
 ): StoredIncidentAssignment[] {
@@ -87,17 +74,11 @@ export function saveAssignmentsBulk(
   return saved;
 }
 
-/**
- * Backend verification: Checks whether a responsible team is valid
- */
 export function isTeamAllowedForDepartment(_department: string, team: string): boolean {
   if (!team || !team.trim()) return false;
   return true;
 }
 
-/**
- * Retrieve allowed teams for a specific department
- */
 export function getAllowedTeamsForDepartment(department: string): string[] {
   const mappings = getDepartmentMappings();
   const deptNormalized = (department || '').trim();
@@ -125,18 +106,35 @@ export function getAllowedTeamsForDepartment(department: string): string[] {
   ];
 }
 
-/**
- * Get server-persisted aging reports
- */
 export function getServerStoredWeeklyReports(): Record<string, unknown>[] {
   return readCategory('weekly', 'weekly-reports.json', []);
+}
+
+function weeklyReportDate(report: Record<string, unknown>): number {
+  const end = formatWeeklyReportRange(String(report.period ?? '')).to;
+  const parts = /^(\d{2})-(\d{2})-(\d{4})/.exec(end ?? '');
+  if (parts) return Date.UTC(Number(parts[3]), Number(parts[1]) - 1, Number(parts[2]));
+  const generatedAt = (report.reportData as { generatedAt?: string } | undefined)?.generatedAt;
+  const timestamp = Date.parse(generatedAt ?? '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 export function saveServerStoredWeeklyReport(report: Record<string, unknown>): void {
   const id = String(report.id || `weekly-${Date.now()}`);
   const period = String(report.period || '');
-  const filtered = getServerStoredWeeklyReports().filter(item => String(item.id) !== id && (!period || String(item.period) !== period));
-  writeJson(WEEKLY_REPORTS_FILE, [{ ...report, id, serverSavedAt: new Date().toISOString() }, ...filtered]);
+  const existing = getServerStoredWeeklyReports();
+  const matchesPeriod = (item: Record<string, unknown>) => Boolean(period) && String(item.period) === period;
+  const previous = existing.find(matchesPeriod) ?? existing.find(item => String(item.id) === id);
+  const updated = { ...report, id: previous?.id || id, serverSavedAt: new Date().toISOString() };
+  const reports = existing.filter(item => item === previous || (!matchesPeriod(item) && String(item.id) !== id));
+  if (previous) {
+    reports[reports.indexOf(previous)] = updated;
+  } else {
+    const date = weeklyReportDate(report);
+    const index = reports.findIndex(item => weeklyReportDate(item) <= date);
+    reports.splice(index === -1 ? reports.length : index, 0, updated);
+  }
+  writeJson(WEEKLY_REPORTS_FILE, reports);
 }
 
 export function getServerStoredAgingReports(): Record<string, unknown>[] {
@@ -148,53 +146,40 @@ export function getServerStoredAgingReports(): Record<string, unknown>[] {
   }));
 }
 
-/**
- * Save server-persisted aging report
- */
 export function saveServerStoredAgingReport(report: Record<string, unknown>): void {
   const existing = getServerStoredAgingReports();
   const reportId = String(report.id || `aging-${Date.now()}`);
-  // Only an explicit save of the same report may replace its snapshot.
-  // Distinct extracts can legitimately have the same period label.
-  const filtered = existing.filter((r) => String(r.id) !== reportId);
-  const updated = [{ ...report, id: reportId, serverSavedAt: new Date().toISOString() }, ...filtered];
-  writeJson(AGING_REPORTS_FILE, updated);
+  const previous = existing.findIndex(item => String(item.id) === reportId);
+  const updated = { ...report, id: reportId, serverSavedAt: new Date().toISOString() };
+  if (previous === -1) existing.unshift(updated);
+  else existing[previous] = updated;
+  writeJson(AGING_REPORTS_FILE, existing);
 }
 
-/**
- * Get server-persisted monthly reports
- */
 export function getServerStoredMonthlyReports(): Record<string, unknown>[] {
   return readCategory('monthly', 'monthly-reports.json', []);
 }
 
-/**
- * Save server-persisted monthly report
- */
-export function saveServerStoredMonthlyReport(report: Record<string, unknown>): void {
+export function saveServerStoredMonthlyReport(report: Record<string, unknown>, existingOnly = false): boolean {
   const existing = getServerStoredMonthlyReports();
   const reportId = String(report.id || `monthly-${Date.now()}`);
   const reportPeriod = String(report.period || '');
+  const previous = existing.find(item => String(item.id) === reportId) ??
+    existing.find(item => reportPeriod !== '' && String(item.period) === reportPeriod);
+  if (existingOnly && !previous) return false;
 
-  // Remove any existing entry with the same ID or the same period
-  // (publishing the same month again replaces the old entry)
-  const filtered = existing.filter(
-    (r) => String(r.id) !== reportId && (reportPeriod === '' || String(r.period) !== reportPeriod)
-  );
-  const updated = [{ ...report, id: reportId, serverSavedAt: new Date().toISOString() }, ...filtered];
+  const updatedReport = { ...previous, ...report, id: previous?.id || reportId, serverSavedAt: new Date().toISOString() };
+  const updated = previous
+    ? existing.map(item => item === previous ? updatedReport : item)
+    : [updatedReport, ...existing];
   writeJson(MONTHLY_REPORTS_FILE, updated);
+  return true;
 }
 
-/**
- * Get server-persisted IR analytics data
- */
 export function getServerStoredIRAnalytics(): Record<string, unknown> | null {
   return readCategory('analytics', 'ir-analytics.json', null);
 }
 
-/**
- * Save server-persisted IR analytics data
- */
 export function saveServerStoredIRAnalytics(data: Record<string, unknown>): void {
   writeJson(IR_ANALYTICS_FILE, { ...data, serverSavedAt: new Date().toISOString() });
 }

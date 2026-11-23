@@ -1,35 +1,25 @@
-
-/** SLA result for a single team in one category */
-export interface TeamSLAResult {
+﻿export interface TeamSLAResult {
   teamName: string;
   total: number;
   failed: number;
   passed: number;
-  slaPassRate: number | null; // null when N/A (0 incidents)
+  slaPassRate: number | null;
 
-  /** IDs of incidents that were counted */
   incidentIds: string[];
-  /** IDs of incidents that failed */
   failedIncidentIds: string[];
-  /** IDs of incidents that passed */
   passedIncidentIds: string[];
 }
 
-/** Complete SLA results for all teams */
 export interface SLAReport {
-  /** First Response SLA results per team */
   firstResponse: TeamSLAResult[];
-  /** Resolution Time SLA results per team */
   resolutionTime: TeamSLAResult[];
 
-  /** Overall totals (calculated from sums, not averages) */
   firstResponseTotal: TeamSLAResult;
   resolutionTimeTotal: TeamSLAResult;
 }
 
-/** Previous week SLA values (manually entered) */
 export interface PreviousWeekSLA {
-  firstResponse: Record<string, number | null>; // team -> percentage or null for N/A
+  firstResponse: Record<string, number | null>;
   resolutionTime: Record<string, number | null>;
   firstResponseTotal: number | null;
   resolutionTimeTotal: number | null;
@@ -53,7 +43,6 @@ export interface WeeklyCompletion {
   };
 }
 
-/** Complete report data combining current and previous week */
 export interface WeeklyReportData {
   reportTitle: string;
   reportPeriod: string;
@@ -63,6 +52,5 @@ export interface WeeklyReportData {
   previousWeek: PreviousWeekSLA;
   weeklyCompletion: WeeklyCompletion;
 
-  /** Ordered list of teams for the report */
   teamOrder: string[];
 }

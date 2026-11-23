@@ -62,15 +62,14 @@ function SLACard({ title, result, previous, resolution = false, onCellClick, car
   );
 }
 
-export function WeeklySLASummary({ data, summaryRef, responseRef, resolutionRef, onCellClick }: {
+export function WeeklySLASummary({ data, responseRef, resolutionRef, onCellClick }: {
   data: WeeklyReportData;
-  summaryRef?: Ref<HTMLElement>;
   responseRef?: Ref<HTMLElement>;
   resolutionRef?: Ref<HTMLElement>;
   onCellClick?: Drilldown;
 }) {
   return (
-    <section ref={summaryRef} className="weekly-sla-summary" aria-label="Weekly SLA summary">
+    <section className="weekly-sla-summary" aria-label="Weekly SLA summary">
       <SLACard cardRef={responseRef} title="First Response" result={data.currentWeek.firstResponseTotal} previous={data.previousWeek.firstResponseTotal} onCellClick={onCellClick} />
       <SLACard cardRef={resolutionRef} title="Resolution Time" result={data.currentWeek.resolutionTimeTotal} previous={data.previousWeek.resolutionTimeTotal} onCellClick={onCellClick} resolution />
     </section>

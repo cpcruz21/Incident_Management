@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useId, useState } from 'react';
 import type { AgingRemarksRow, HighImpactIncident } from '@/types/aging';
@@ -58,7 +58,6 @@ export function HighImpactInput({
       return;
     }
 
-    // Try finding in remarksRows first
     const row = remarksRows.find(
       (r) => r.requestId && r.requestId.trim().toLowerCase() === q
     );
@@ -78,7 +77,6 @@ export function HighImpactInput({
       return;
     }
 
-    // Fallback: search in routedIncidents
     const inc = routedIncidents?.find(
       (i) => i.requestId && i.requestId.trim().toLowerCase() === q
     );
@@ -229,8 +227,6 @@ export function HighImpactInput({
               />
             </div>
           </div>
-
-          {/* Manually Update Recent Update */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', marginTop: '6px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <label htmlFor={`${formId}-update`} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ui-text, #f8fafc)' }}>

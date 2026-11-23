@@ -5,7 +5,7 @@ export function ReportDetailsStrip({ from, to, totalRecords, children }: {
   from?: string;
   to?: string;
   totalRecords: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <div className="report-details-strip">

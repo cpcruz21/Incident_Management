@@ -1,16 +1,5 @@
-/**
- * Monthly Report Calculator
- * 
- * Generates the monthly SLA dashboard data directly from the raw incident data
- * based on the Technician column (no routing engine applied).
- * 
- * Produces:
- * - Per-technician First Response & Resolution breakdown
- * - KPI summary (85% target)
- * - Auto-generated remarks / observations matching the monthly standard format
- */
-
-import type { Incident } from '@/types/incident';
+﻿import type { Incident } from '@/types/incident';
+import type { TeamSLAResult } from '@/types/sla';
 import type {
   MonthlyReportData,
   MonthlyKPI,
@@ -18,9 +7,14 @@ import type {
   RootCauseRow,
 } from '@/types/monthly';
 import { generateMonthlyRemarks } from './remarks';
-import { calculateSLAReport } from '@/lib/sla/calculator';
+import { evaluateFirstResponseOverdue, evaluateResolutionOverdue } from '@/lib/sla/calculator';
 import { getImportedSLAStatus } from '@/lib/sla/status';
-import { isCreatedOutsideOfficeHours, isISSTeam } from '@/lib/aging/calculator';
+import { isCreatedOutsideOfficeHours, toValidDate } from '@/lib/aging/calculator';
+import { applyReportTicketEdit, findAcceptableFRCandidate as findReportCandidate } from '@/lib/report/ticket-edits';
+import { getImportedTechnician, getTechnician } from './technician';
+import { isMonthlyClosedTicket } from './ticket-status';
+
+export { getTechnician } from './technician';
 
 export const MONTHLY_DEFAULT_TECHNICIANS = [
   'ECS HRAD',
@@ -33,57 +27,35 @@ export const MONTHLY_DEFAULT_TECHNICIANS = [
 
 const KPI_TARGET = 85; // 85% threshold
 
-// ─── Helpers ─────────────────────────────────────────────────
 
-/** Extract the actual Technician name from incident rawData or fallback */
-export function getTechnician(inc: Incident): string {
-  if (inc.rawData) {
-    for (const [k, v] of Object.entries(inc.rawData)) {
-      if (k.toLowerCase().trim() === 'technician') {
-        const val = String(v ?? '').trim();
-        if (val) return val;
-      }
-    }
-  }
-  return inc.sourceTeam || inc.assignedTeam || 'Unassigned';
-}
-
-/** Check whether the incident's raw First Response Overdue Status was TRUE (lapsed in SDP) */
 export function isRawFirstResponseOverdue(inc: Incident): boolean {
   return getImportedSLAStatus(inc, 'firstResponse') ?? Boolean(inc.firstResponseOverdue);
 }
 
-/** Check if First Response failed from raw data column or calculation */
-export function isFirstResponseFailed(inc: Incident): boolean {
+export function isFirstResponseFailed(inc: Incident, referenceDate?: Date): boolean {
   if (inc.acceptableFirstResponseApproval) return false;
 
   // If non-ISS and created outside office hours / weekend -> excused (acceptable / NOT failed)
-  if (!isISS24x7(inc) && isCreatedOutsideOfficeHours(inc)) {
+  const iss = isISS24x7(inc);
+  if (!iss && isCreatedOutsideOfficeHours(inc)) {
     return false;
   }
 
-  return isRawFirstResponseOverdue(inc);
+  return getImportedSLAStatus(inc, 'firstResponse') ?? (
+    inc.firstResponseOverdue || evaluateFirstResponseOverdue(inc, iss ? 'ECS ISS' : getTechnician(inc), referenceDate)
+  );
 }
 
-/** Check if Resolution failed from raw data column or calculation */
 export function isResolutionFailed(inc: Incident): boolean {
-  return getImportedSLAStatus(inc, 'resolution') ?? inc.resolutionOverdue;
+  const completed = toValidDate(inc.completedTime);
+  return getImportedSLAStatus(inc, 'resolution') ?? (
+    inc.resolutionOverdue || Boolean(completed && evaluateResolutionOverdue(inc, completed))
+  );
 }
 
 
 export function filterClosedTickets(incidents: Incident[]): Incident[] {
-  return incidents.filter((inc) => {
-    let status = (inc.requestStatus || '').toLowerCase().trim();
-    if (!status && inc.rawData) {
-      for (const [k, v] of Object.entries(inc.rawData)) {
-        if (/^(request\s*status|ticket\s*status|status)$/i.test(k.trim())) {
-          status = String(v ?? '').toLowerCase().trim();
-          break;
-        }
-      }
-    }
-    return /^(closed?|resolved?|completed?)\b/.test(status);
-  });
+  return incidents.filter(isMonthlyClosedTicket);
 }
 
 /**
@@ -132,12 +104,10 @@ export { isCreatedOutsideOfficeHours };
  */
 export function filterAcceptableFirstResponse(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
-    // 1. Must be a ticket that lapsed/overdue in raw data
-    if (!isRawFirstResponseOverdue(inc)) return false;
-
     if (inc.acceptableFirstResponseApproval) return true;
 
-    // 2. ISS 24/7 teams (ISS Binondo, ISS Makati) get NO exception
+    if (!isRawFirstResponseOverdue(inc)) return false;
+
     if (isISS24x7(inc)) return false;
 
     // 3. For all other departments: only accepted if created outside office hours / weekend
@@ -145,47 +115,33 @@ export function filterAcceptableFirstResponse(incidents: Incident[]): Incident[]
   });
 }
 
-/** Resolve an existing, failed FR ticket before an admin confirms an exception. */
-export function findAcceptableFRCandidate(incidents: Incident[], requestId: string): Incident {
-  const id = requestId.trim().toLowerCase();
-  if (!id) throw new Error('Enter a Request ID.');
-  const incident = incidents.find((inc) => inc.requestId.trim().toLowerCase() === id);
-  if (!incident) throw new Error('Request ID was not found in this report.');
-  if (filterAcceptableFirstResponse([incident]).length > 0) {
-    throw new Error('This Request ID is already in Acceptable First Response.');
-  }
-  if (!isRawFirstResponseOverdue(incident)) {
-    throw new Error('This ticket already passed First Response and does not need an exception.');
-  }
-  return incident;
+export function findAcceptableFRCandidate(incidents: Incident[], requestId: string, referenceDate?: Date): Incident {
+  return findReportCandidate(incidents, requestId, (incident) => isFirstResponseFailed(incident, referenceDate),
+    (incident) => filterAcceptableFirstResponse([incident]).length > 0);
 }
 
 export function approveAcceptableFR(
   incidents: Incident[],
   requestId: string,
-  approvedBy: string
+  approvedBy: string,
+  referenceDate?: Date
 ): Incident[] {
-  const candidate = findAcceptableFRCandidate(incidents, requestId);
+  const candidate = findAcceptableFRCandidate(incidents, requestId, referenceDate);
   const approval = { approvedBy, approvedAt: new Date().toISOString() };
-  return incidents.map((inc) =>
-    inc.requestId.trim().toLowerCase() === candidate.requestId.trim().toLowerCase()
-      ? { ...inc, acceptableFirstResponseApproval: approval }
-      : inc
-  );
+  return applyReportTicketEdit(incidents, { requestId: candidate.requestId, approval });
 }
 
-/** Group incidents directly by their Technician */
-function groupByTechnician(incidents: Incident[]): Record<string, Incident[]> {
-  const groups: Record<string, Incident[]> = {};
+function groupByTechnician(incidents: Incident[]): Map<string, Incident[]> {
+  const groups = new Map<string, Incident[]>();
   for (const inc of incidents) {
     const tech = getTechnician(inc);
-    if (!groups[tech]) groups[tech] = [];
-    groups[tech].push(inc);
+    const group = groups.get(tech);
+    if (group) group.push(inc);
+    else groups.set(tech, [inc]);
   }
   return groups;
 }
 
-/** Derive dynamic technician order prioritizing default list */
 function getTechnicianOrder(incidents: Incident[], preferred = MONTHLY_DEFAULT_TECHNICIANS): string[] {
   const found = new Set<string>();
   for (const inc of incidents) {
@@ -194,14 +150,12 @@ function getTechnicianOrder(incidents: Incident[], preferred = MONTHLY_DEFAULT_T
   }
 
   const result: string[] = [];
-  // Add preferred technicians that appear in the data
   for (const p of preferred) {
     if (found.has(p)) {
       result.push(p);
       found.delete(p);
     }
   }
-  // Add remaining technicians found in file
   found.forEach((r) => {
     result.push(r);
   });
@@ -209,27 +163,33 @@ function getTechnicianOrder(incidents: Incident[], preferred = MONTHLY_DEFAULT_T
   return result.length > 0 ? result : preferred;
 }
 
-/** Build per-technician SLA rows directly from Technician column */
 function buildTechnicianSLA(
   allIncidents: Incident[],
   closedIncidents: Incident[],
-  technicians: string[]
+  technicians: string[],
+  referenceDate: Date
 ): { rows: MonthlyTechnicianSLA[]; totals: MonthlyTechnicianSLA } {
-  // First Response uses ALL tickets (all IRs for the month)
   const frGroups = groupByTechnician(allIncidents);
-  // Resolution Time uses only CLOSED tickets
   const rtGroups = groupByTechnician(closedIncidents);
 
   const rows: MonthlyTechnicianSLA[] = [];
 
   for (const tech of technicians) {
-    const frInc = frGroups[tech] || [];
-    const rtInc = rtGroups[tech] || [];
+    const frInc = frGroups.get(tech) || [];
+    const rtInc = rtGroups.get(tech) || [];
 
-    const frFailedIds = frInc.filter(isFirstResponseFailed).map((i) => i.requestId);
-    const frPassedIds = frInc.filter((i) => !isFirstResponseFailed(i)).map((i) => i.requestId);
-    const rtFailedIds = rtInc.filter(isResolutionFailed).map((i) => i.requestId);
-    const rtPassedIds = rtInc.filter((i) => !isResolutionFailed(i)).map((i) => i.requestId);
+    const frFailedIds: string[] = [];
+    const frPassedIds: string[] = [];
+    const rtFailedIds: string[] = [];
+    const rtPassedIds: string[] = [];
+    for (const incident of frInc) {
+      const ids = isFirstResponseFailed(incident, referenceDate) ? frFailedIds : frPassedIds;
+      ids.push(incident.requestId);
+    }
+    for (const incident of rtInc) {
+      const ids = isResolutionFailed(incident) ? rtFailedIds : rtPassedIds;
+      ids.push(incident.requestId);
+    }
 
     rows.push({
       technician: tech,
@@ -250,7 +210,6 @@ function buildTechnicianSLA(
     });
   }
 
-  // Totals
   const totalFrTotal = rows.reduce((s, r) => s + r.frTotal, 0);
   const totalFrFailed = rows.reduce((s, r) => s + r.frFailed, 0);
   const totalFrPassed = rows.reduce((s, r) => s + r.frPassed, 0);
@@ -279,7 +238,6 @@ function buildTechnicianSLA(
   return { rows, totals };
 }
 
-/** Build KPI summary rows */
 function buildKPIs(totals: MonthlyTechnicianSLA): MonthlyKPI[] {
   return [
     {
@@ -299,7 +257,6 @@ function buildKPIs(totals: MonthlyTechnicianSLA): MonthlyKPI[] {
   ];
 }
 
-/** Extract root cause breakdown */
 function buildRootCauses(incidents: Incident[]): RootCauseRow[] {
   const map = new Map<string, string[]>();
 
@@ -327,21 +284,32 @@ function buildRootCauses(incidents: Incident[]): RootCauseRow[] {
     .sort((a, b) => b.count - a.count);
 }
 
-// ─── Main Calculator ────────────────────────────────────────
+
+function toTeamSLAResult(row: MonthlyTechnicianSLA, metric: 'fr' | 'rt'): TeamSLAResult {
+  return {
+    teamName: row.technician,
+    total: row[`${metric}Total`],
+    failed: row[`${metric}Failed`],
+    passed: row[`${metric}Passed`],
+    slaPassRate: row[`${metric}PassRate`],
+    incidentIds: row[`${metric}TotalIds`],
+    failedIncidentIds: row[`${metric}FailedIds`],
+    passedIncidentIds: row[`${metric}PassedIds`],
+  };
+}
 
 export function calculateMonthlyReport(
   incidents: Incident[],
   reportPeriod: string,
-  teamOrder?: string[]
+  teamOrder?: string[],
+  referenceDate = new Date()
 ): MonthlyReportData {
-  const technicians = teamOrder || getTechnicianOrder(incidents);
+  const technicians = teamOrder
+    ? Array.from(new Set([...teamOrder, ...getTechnicianOrder(incidents, [])]))
+    : getTechnicianOrder(incidents);
   const closedTickets = filterClosedTickets(incidents);
 
-  // Calculate SLA report for reference
-  const slaReport = calculateSLAReport(incidents, technicians);
-
-  // Build per-technician SLA directly from raw technician values
-  const { rows, totals } = buildTechnicianSLA(incidents, closedTickets, technicians);
+  const { rows, totals } = buildTechnicianSLA(incidents, closedTickets, technicians, referenceDate);
   const kpis = buildKPIs(totals);
   const rootCauses = buildRootCauses(closedTickets);
   const remarks = generateMonthlyRemarks(kpis, rows, totals);
@@ -349,15 +317,39 @@ export function calculateMonthlyReport(
   return {
     reportTitle: 'Monthly Overall Ticket Report',
     reportPeriod,
-    generatedAt: new Date(),
+    generatedAt: referenceDate,
     allTickets: incidents,
     closedTickets,
     kpis,
     technicianSLA: rows,
     technicianTotals: totals,
     rootCauses,
-    slaReport,
+    slaReport: {
+      firstResponse: rows.map((row) => toTeamSLAResult(row, 'fr')),
+      resolutionTime: rows.map((row) => toTeamSLAResult(row, 'rt')),
+      firstResponseTotal: toTeamSLAResult(totals, 'fr'),
+      resolutionTimeTotal: toTeamSLAResult(totals, 'rt'),
+    },
     remarks,
     teamOrder: technicians,
   };
+}
+
+export function refreshStoredMonthlyReport(data: MonthlyReportData, routedIncidents?: Incident[]): MonthlyReportData {
+  const incidents = data.allTickets?.length ? data.allTickets : routedIncidents ?? data.allTickets;
+  if (!Array.isArray(incidents)) return data;
+
+  const hrIds = new Set(data.technicianSLA?.find((row) => row.technician === 'ECS HR')?.frTotalIds);
+  const hasOutdatedTechnician = incidents.some((incident) =>
+    !hrIds.has(incident.requestId) && getTechnician(incident) !== getImportedTechnician(incident)
+  );
+  const { firstResponseTotal, resolutionTimeTotal } = data.slaReport || {};
+  const totals = data.technicianTotals;
+  const summariesAgree = totals && firstResponseTotal?.total === totals.frTotal &&
+    firstResponseTotal.failed === totals.frFailed && resolutionTimeTotal?.total === totals.rtTotal &&
+    resolutionTimeTotal.failed === totals.rtFailed;
+  if (!hasOutdatedTechnician && summariesAgree) return data;
+
+  const refreshed = calculateMonthlyReport(incidents, data.reportPeriod, data.teamOrder, toValidDate(data.generatedAt) ?? undefined);
+  return { ...data, ...refreshed, reportTitle: data.reportTitle, generatedAt: data.generatedAt };
 }

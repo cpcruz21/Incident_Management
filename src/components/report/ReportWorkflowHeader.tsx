@@ -1,33 +1,32 @@
 'use client';
 
-import { ArrowLeft, FileSpreadsheet, RotateCcw } from 'lucide-react';
+import { FileSpreadsheet, RotateCcw } from 'lucide-react';
+import type { ReactNode, Ref } from 'react';
 
 interface ReportWorkflowHeaderProps {
   title: string;
-  fileName: string | null;
-  onBack: () => void;
-  onReset: () => void;
+  headingRef?: Ref<HTMLHeadingElement>;
+  fileName?: string | null;
+  onReset?: () => void;
   busy?: boolean;
+  children?: ReactNode;
 }
 
-export function ReportWorkflowHeader({ title, fileName, onBack, onReset, busy }: ReportWorkflowHeaderProps) {
+export function ReportWorkflowHeader({ title, headingRef, fileName, onReset, busy, children }: ReportWorkflowHeaderProps) {
   return (
     <header className="report-workflow-header">
-      <div className="report-workflow-heading">
-        <button className="admin-secondary report-workflow-back" type="button" aria-label="Back to dashboard"
-          title="Back to dashboard" onClick={onBack}>
-          <ArrowLeft size={18} aria-hidden="true" />
-        </button>
-        <h1>{title}</h1>
-      </div>
+      <h1 className="report-workflow-heading" ref={headingRef} tabIndex={headingRef ? -1 : undefined}>{title}</h1>
       {fileName && (
         <div className="report-source-file">
           <span title={fileName}><FileSpreadsheet size={17} aria-hidden="true" /><span>{fileName}</span></span>
-          <button className="admin-secondary" type="button" onClick={onReset} disabled={busy}>
-            <RotateCcw size={15} aria-hidden="true" /> Reset
-          </button>
+          {onReset && (
+            <button className="admin-secondary" type="button" onClick={onReset} disabled={busy}>
+              <RotateCcw size={15} aria-hidden="true" /> Reset
+            </button>
+          )}
         </div>
       )}
+      {children}
     </header>
   );
 }

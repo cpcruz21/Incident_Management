@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { PreviousWeekSLA } from '@/types/sla';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
+import { SlaPercentageInput } from './SlaPercentageInput';
 import {
   getStoredReports,
   extractWeeklySLAFromStored,
@@ -41,7 +42,6 @@ export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBa
   }, []);
 
   useEffect(() => {
-    // If initial values have no inputs, auto-fill from the latest stored report if available
     const hasExisting = [...Object.values(initialValues.firstResponse), ...Object.values(initialValues.resolutionTime)]
       .some((value) => value != null);
     if (autoFill && !didAutoFill.current && !hasExisting && storedReports.length > 0) {
@@ -97,20 +97,9 @@ export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBa
   const handleChange = (
     section: 'firstResponse' | 'resolutionTime',
     team: string,
-    rawValue: string
+    value: number | null
   ) => {
-    const newSectionValues = { ...values[section] };
-    const cleaned = rawValue.trim().replace('%', '');
-
-    if (cleaned === '' || cleaned.toLowerCase() === 'n/a' || cleaned === '-') {
-      newSectionValues[team] = null;
-    } else {
-      const num = parseFloat(cleaned);
-      if (!isNaN(num) && num >= 0 && num <= 100) {
-        newSectionValues[team] = num;
-      }
-    }
-
+    const newSectionValues = { ...values[section], [team]: value };
     const totalKey = section === 'firstResponse' ? 'firstResponseTotal' : 'resolutionTimeTotal';
     const autoTotal = calculateTotal(newSectionValues);
 
@@ -126,27 +115,11 @@ export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBa
 
   const handleTotalChange = (
     section: 'firstResponseTotal' | 'resolutionTimeTotal',
-    rawValue: string
+    value: number | null
   ) => {
-    const newValues = { ...values };
-    const cleaned = rawValue.trim().replace('%', '');
-
-    if (cleaned === '' || cleaned.toLowerCase() === 'n/a' || cleaned === '-') {
-      newValues[section] = null;
-    } else {
-      const num = parseFloat(cleaned);
-      if (!isNaN(num) && num >= 0 && num <= 100) {
-        newValues[section] = num;
-      }
-    }
-
+    const newValues = { ...values, [section]: value };
     setValues(newValues);
     onSave(newValues);
-  };
-
-  const formatValue = (val: number | null): string => {
-    if (val === null) return '';
-    return val.toFixed(2);
   };
 
   return (
@@ -213,7 +186,7 @@ export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBa
       <div className="prevweek-info-banner">
         <span className="info-icon">📊</span>
         <p>
-          Enter or review the percentage values per team. The total automatically calculates based on the team percentages.
+          Enter percentages from 0 to 100 with up to two decimal places. Leave missing values blank. The total updates when you change a team percentage.
         </p>
       </div>
 
@@ -231,21 +204,17 @@ export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBa
               <tr key={team}>
                 <td className="cell-team-name">{team}</td>
                 <td>
-                  <input
-                    type="text"
-                    className="sla-input"
-                    placeholder="N/A"
-                    value={formatValue(values.firstResponse[team])}
-                    onChange={(e) => handleChange('firstResponse', team, e.target.value)}
+                  <SlaPercentageInput
+                    label={team + ' last week First Response SLA'}
+                    value={values.firstResponse[team]}
+                    onValueChange={(value) => handleChange('firstResponse', team, value)}
                   />
                 </td>
                 <td>
-                  <input
-                    type="text"
-                    className="sla-input"
-                    placeholder="N/A"
-                    value={formatValue(values.resolutionTime[team])}
-                    onChange={(e) => handleChange('resolutionTime', team, e.target.value)}
+                  <SlaPercentageInput
+                    label={team + ' last week Resolution SLA'}
+                    value={values.resolutionTime[team]}
+                    onValueChange={(value) => handleChange('resolutionTime', team, value)}
                   />
                 </td>
               </tr>
@@ -253,21 +222,19 @@ export function PreviousWeekInput({ initialValues, autoFill = true, onSave, onBa
             <tr className="row-total">
               <td className="cell-team-name"><strong>Total</strong></td>
               <td>
-                <input
-                  type="text"
-                  className="sla-input sla-input-total"
-                  placeholder="N/A"
-                  value={formatValue(values.firstResponseTotal)}
-                  onChange={(e) => handleTotalChange('firstResponseTotal', e.target.value)}
+                <SlaPercentageInput
+                  total
+                  label="Overall last week First Response SLA"
+                  value={values.firstResponseTotal}
+                  onValueChange={(value) => handleTotalChange('firstResponseTotal', value)}
                 />
               </td>
               <td>
-                <input
-                  type="text"
-                  className="sla-input sla-input-total"
-                  placeholder="N/A"
-                  value={formatValue(values.resolutionTimeTotal)}
-                  onChange={(e) => handleTotalChange('resolutionTimeTotal', e.target.value)}
+                <SlaPercentageInput
+                  total
+                  label="Overall last week Resolution SLA"
+                  value={values.resolutionTimeTotal}
+                  onValueChange={(value) => handleTotalChange('resolutionTimeTotal', value)}
                 />
               </td>
             </tr>

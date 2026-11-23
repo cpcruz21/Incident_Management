@@ -9,6 +9,7 @@
 # next.js
 /.next/
 /.next-dev/
+/.next-dev-*/
 /out/
 
 # production
@@ -17,6 +18,8 @@
 # misc
 .DS_Store
 *.pem
+*.zip
+*.code-workspace
 
 # debug
 npm-debug.log*

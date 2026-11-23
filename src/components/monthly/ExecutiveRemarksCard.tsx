@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React from 'react';
 
@@ -6,7 +6,6 @@ interface ExecutiveRemarksCardProps {
   remarks: string;
 }
 
-/** A compact report-style narrative, with text labels as well as status colors. */
 export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
   if (!remarks?.trim()) return null;
 
@@ -40,7 +39,7 @@ export function ExecutiveRemarksCard({ remarks }: ExecutiveRemarksCardProps) {
               }
               const nextSteps = line.startsWith('Next steps: ');
               return (
-                <p key={lineIndex} style={{ margin: 0 }}>
+                <p key={lineIndex} className={nextSteps ? 'monthly-remarks-action' : undefined} style={{ margin: 0 }}>
                   {nextSteps ? <><strong>Next steps: </strong>{line.slice('Next steps: '.length)}</> : line}
                 </p>
               );

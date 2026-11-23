@@ -1,5 +1,4 @@
-
-import type { RawIncidentRow, ColumnMapping, Incident } from '@/types/incident';
+﻿import type { RawIncidentRow, ColumnMapping, Incident } from '@/types/incident';
 import { toValidDate } from '@/lib/aging/calculator';
 import { isStatusOverdue } from '@/lib/sla/status';
 
@@ -8,8 +7,8 @@ export function autoDetectMapping(columns: string[]): Partial<ColumnMapping> {
   const mapping: Partial<ColumnMapping> = {};
 
   const matchers: { field: keyof ColumnMapping; patterns: RegExp[] }[] = [
-    { field: 'requestId', patterns: [/request\s*id/i, /^id$/i, /incident\s*id/i, /ticket\s*id/i, /^sr\s*no/i] },
-    { field: 'technician', patterns: [/technician/i, /assigned\s*to/i, /tech/i, /agent/i] },
+    { field: 'requestId', patterns: [/^(?:(?:request|incident|ticket|ir)[\s_-]*)?id$/i, /^sr[\s_-]*no\.?$/i] },
+    { field: 'technician', patterns: [/technician/i, /^assigned[\s_-]*(?:to|team)$/i, /^tech(?: name)?$/i, /^agent(?: name)?$/i] },
     { field: 'priority', patterns: [/priority/i, /severity/i, /urgency/i] },
     { field: 'requestStatus', patterns: [/request\s*status/i, /^status$/i, /ticket\s*status/i] },
     { field: 'createdTime', patterns: [/created\s*time/i, /created\s*date/i, /created\s*at/i, /open\s*date/i] },
@@ -79,17 +78,14 @@ export function mapRowToIncident(
   const subCategory = mapping.subCategory ? String(row[mapping.subCategory] || '').trim() : undefined;
   const item = mapping.item ? String(row[mapping.item] || '').trim() : undefined;
 
-  // Extract department
   const department = mapping.department ? String(row[mapping.department] || '').trim() : undefined;
 
-  // Extract description (from mapped column or scan row keys)
   let description = mapping.description ? String(row[mapping.description] || '').trim() : '';
   if (!description) {
     const descKey = Object.keys(row).find((k) => /^(description|subject|summary|incident\s*description)$/i.test(k.trim()));
     if (descKey) description = String(row[descKey] || '').trim();
   }
 
-  // Extract recent update if present in raw row
   let recentUpdate = mapping.recentUpdate ? String(row[mapping.recentUpdate] || '').trim() : '';
   if (!recentUpdate) {
     const updateKey = Object.keys(row).find((k) => /^(recent\s*update|latest\s*update|remarks)$/i.test(k.trim()));

@@ -1,4 +1,4 @@
-export interface RoutingMatrixEntry {
+﻿export interface RoutingMatrixEntry {
   category: string;
   subCategory: string;
   item: string;
@@ -6,7 +6,6 @@ export interface RoutingMatrixEntry {
   autoAssignedGroup: string;
   targetReportTeam: string;
 }
-//Routing based on the Auto-assigned group 
 export const GROUP_TO_REPORT_TEAM: Record<string, string> = {
   'ECS HRAD Group': 'ECS ADMIN',
   'ECS HRAD': 'ECS ADMIN',
@@ -22,9 +21,7 @@ export const GROUP_TO_REPORT_TEAM: Record<string, string> = {
   'ECS ADMIN': 'ECS ADMIN',
 };
 
-//Routing based on the Category & Sub-Category & Item
 export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
-  //Facility & Environment Issues 
   {
     category: 'Facility & Environment Issues',
     subCategory: 'Facility Issue',
@@ -175,7 +172,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS ADMIN',
   },
 
-  //External Vendor / Third Party Issues
   {
     category: 'External Vendor / Third Party Issues',
     subCategory: 'Quality of Goods/Services',
@@ -233,7 +229,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS ADMIN',
   },
 
-  // Hardware Issues 
   {
     category: 'Hardware Issues',
     subCategory: 'Damage/Defective/Lost',
@@ -375,7 +370,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS PSD',
   },
 
-  // Operational Issues 
   {
     category: 'Operational Issues',
     subCategory: 'POS Services Operation',
@@ -455,7 +449,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS PSD',
   },
 
-  // Safety & Security Issues 
   {
     category: 'Safety & Security Issues',
     subCategory: 'Physical Hazards',
@@ -545,7 +538,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS ADMIN',
   },
 
-  // Network Issues 
   {
     category: 'Network Issues',
     subCategory: 'Slow Connection',
@@ -595,7 +587,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS ISS',
   },
 
-  //  Server Issues 
   {
     category: 'Server Issues',
     subCategory: 'TIme & Date not synchronized',
@@ -629,7 +620,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS ISS',
   },
 
-  // Software/Application Issues 
   {
     category: 'Software/Application Issues',
     subCategory: 'ISS Supported Applications',
@@ -702,7 +692,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS ISS',
   },
 
-  // SDS Supported Applications
   {
     category: 'Software/Application Issues',
     subCategory: 'SDS Supported Applications',
@@ -754,7 +743,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS SDS',
   },
 
-  // Other Software/Application Subcategories
   {
     category: 'Software/Application Issues',
     subCategory: 'Maxicare Systems/Applications',
@@ -812,7 +800,6 @@ export const ROUTING_MATRIX: RoutingMatrixEntry[] = [
     targetReportTeam: 'ECS SDS',
   },
 
-  // HRAD Supported Applications
   {
     category: 'Software/Application Issues',
     subCategory: 'HRAD (Supported Applications)',
@@ -871,7 +858,6 @@ export function lookupRoutingMatrix(
 
   if (!normCat && !normSub && !normItem) return null;
 
-  // 1) Precise Category + SubCategory + Item match
   if (normCat && normSub && !itemIsNA) {
     const directMatch = ROUTING_MATRIX.find((entry) => {
       const eCat = normalizeKey(entry.category);
@@ -888,7 +874,6 @@ export function lookupRoutingMatrix(
     if (directMatch) return directMatch;
   }
 
-  // 2) Category + SubCategory match (when item is N/A or item didn't match a specific entry)
   if (normCat && normSub) {
     const subCatMatches = ROUTING_MATRIX.filter((entry) => {
       const eCat = normalizeKey(entry.category);
@@ -899,28 +884,23 @@ export function lookupRoutingMatrix(
     });
 
     if (subCatMatches.length > 0) {
-      // If there's an entry explicitly with "Not Applicable", return that
       const naEntry = subCatMatches.find((e) => isNotApplicableItem(e.item));
       if (naEntry) return naEntry;
 
-      // If all entries in this subcategory point to the same group, return the first one
       const allSameGroup = subCatMatches.every(
         (e) => e.targetReportTeam === subCatMatches[0].targetReportTeam
       );
       if (allSameGroup) return subCatMatches[0];
 
-      // If SDS Supported Applications with unspecified item, default to ECS SDS
       if (normSub.includes('sds supported')) {
         const defaultSDS = subCatMatches.find((e) => e.targetReportTeam === 'ECS SDS');
         if (defaultSDS) return defaultSDS;
       }
 
-      // If item was N/A, return first match
       if (itemIsNA) return subCatMatches[0];
     }
   }
 
-  // 3) Match by SubCategory + Item if category wasn't provided or differed
   if (normSub && !itemIsNA) {
     const subItemMatch = ROUTING_MATRIX.find((entry) => {
       const eSub = normalizeKey(entry.category);
@@ -933,7 +913,6 @@ export function lookupRoutingMatrix(
     if (subItemMatch) return subItemMatch;
   }
 
-  // 4) Category-level fallback if the whole category consistently routes to one team
   if (normCat) {
     if (
       normCat.includes('facility') ||

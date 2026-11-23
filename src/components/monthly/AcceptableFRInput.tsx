@@ -4,9 +4,12 @@ import React, { useId, useState } from 'react';
 import type { Incident } from '@/types/incident';
 import { findAcceptableFRCandidate, getTechnician } from '@/lib/monthly/calculator';
 
-export function AcceptableFRInput({ incidents, onAdd }: {
+export function AcceptableFRInput({ incidents, onAdd, validateCandidate = findAcceptableFRCandidate,
+  saveInstruction = 'Archive or publish the report to save this change.' }: {
   incidents: Incident[];
   onAdd: (requestId: string) => void;
+  validateCandidate?: (incidents: Incident[], requestId: string) => Incident;
+  saveInstruction?: string;
 }) {
   const formId = useId();
   const [requestId, setRequestId] = useState('');
@@ -22,7 +25,7 @@ export function AcceptableFRInput({ incidents, onAdd }: {
     setCandidate(null);
     setConfirmed(false);
     try {
-      setCandidate(findAcceptableFRCandidate(incidents, requestId));
+      setCandidate(validateCandidate(incidents, requestId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not validate the Request ID.');
     }
@@ -32,7 +35,7 @@ export function AcceptableFRInput({ incidents, onAdd }: {
     if (!candidate || !confirmed) return;
     try {
       onAdd(candidate.requestId);
-      setMessage(`${candidate.requestId} was added to Acceptable FR. Archive or publish the report to save this change.`);
+      setMessage(`${candidate.requestId} was added to Acceptable FR. ${saveInstruction}`);
       setRequestId('');
       setCandidate(null);
       setConfirmed(false);

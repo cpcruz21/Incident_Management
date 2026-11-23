@@ -1,5 +1,4 @@
-/* Monthly report: retain the report layout while making controls and data legible. */
-.monthly-report-module {
+﻿.monthly-report-module {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -12,7 +11,7 @@
   --monthly-rule: var(--ui-grid, #d9e2ec);
 }
 
-.monthly-report-module :is(button, input, select) {
+.monthly-report-module :is(button, input, select):not(.report-save-button, .btn-export) {
   font: inherit;
 }
 
@@ -114,38 +113,6 @@
   font-weight: 700;
 }
 
-.monthly-report-module .monthly-save-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 8px 14px;
-  border: 1px solid #1d4ed8;
-  border-radius: 6px;
-  background: #1d4ed8;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.monthly-report-module .monthly-save-button:hover:not(:disabled) {
-  background: #1e40af;
-  border-color: #1e40af;
-}
-
-.monthly-report-module .monthly-save-button.is-saved {
-  color: var(--ui-success, #6ee7b7);
-  background: var(--ui-inset, #17243a);
-  border-color: var(--ui-border, #475569);
-}
-
-.monthly-report-module .monthly-save-button:disabled {
-  background: var(--ui-inset);
-  border-color: var(--ui-control-border);
-  color: var(--ui-muted);
-}
-
 .monthly-error {
   margin: 0;
   padding: 12px 16px;
@@ -167,15 +134,15 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 12px;
+  gap: 6px;
+  min-height: 36px;
+  padding: 5px 9px;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 5px 5px 0 0;
   background: transparent;
   color: var(--ui-secondary, #cbd5e1);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -197,13 +164,13 @@
 }
 
 .monthly-module-tabs .monthly-tab-count {
-  min-width: 24px;
-  padding: 1px 6px;
+  min-width: 20px;
+  padding: 1px 4px;
   border: 1px solid var(--ui-border, #475569);
   border-radius: 4px;
   background: var(--ui-surface, #111c30);
   color: var(--ui-text, #e2e8f0);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -214,6 +181,8 @@
   gap: 16px;
   min-width: 0;
 }
+
+.monthly-sla-toolbar { display: flex; justify-content: flex-end; }
 
 .monthly-panel {
   min-width: 0;
@@ -551,7 +520,7 @@
 }
 
 .monthly-ticket-scroll {
-  max-height: 65vh;
+  max-height: var(--ticket-table-max-height, 65vh);
 }
 
 .monthly-records-table {
@@ -902,15 +871,6 @@ body:has(.monthly-powerbi[data-viewport-expanded="true"]) {
   color: var(--ui-muted, #94a3b8);
 }
 
-.monthly-report-workflow .report-actions-bar .btn {
-  min-height: 40px;
-  font-size: 14px;
-}
-
-.monthly-report-workflow .report-workflow-heading h1 {
-  color: var(--ui-text, #f1f5f9);
-}
-
 @media (max-width: 600px) {
   .monthly-module-header {
     padding: 16px;
@@ -941,10 +901,6 @@ body:has(.monthly-powerbi[data-viewport-expanded="true"]) {
   .monthly-report-module .monthly-search-field input {
     width: 100%;
   }
-
-  .monthly-module-tabs [role="tab"] {
-    padding-inline: 10px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -968,7 +924,12 @@ body:has(.monthly-powerbi[data-viewport-expanded="true"]) {
   gap: 14px;
 }
 
-.monthly-report-module[data-public-view="true"][data-active-tab="powerbi"] {
+.monthly-report-module[data-public-view="true"]:is(
+  [data-active-tab="all-tickets"],
+  [data-active-tab="closed-tickets"],
+  [data-active-tab="first-response"],
+  [data-active-tab="powerbi"]
+) {
   max-width: 100%;
 }
 

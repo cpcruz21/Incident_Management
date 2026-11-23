@@ -1,4 +1,4 @@
-import type { AgingReportData, RemarksTableData } from '@/types/aging';
+﻿import type { AgingReportData, RemarksTableData } from '@/types/aging';
 import type { Incident } from '@/types/incident';
 import { saveReport } from '@/lib/storage/report-storage';
 import { persistServerAgingReport } from '@/lib/api/client';
@@ -7,12 +7,10 @@ export function createAgingReportId(): string {
   return `aging-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
-/** Legacy records receive their archive ID on load; this covers standalone snapshots. */
 export function getAgingReportId(data: AgingReportData): string {
   return data.reportId || `aging-${new Date(data.generatedAt).getTime()}-${data.reportPeriod.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 }
 
-/** History must be newest first. Each matching IR receives its own copy of the last saved note. */
 export function carryForwardAgingRemarks(table: RemarksTableData, history: AgingReportData[]): RemarksTableData {
   const prior = new Map<string, RemarksTableData['rows'][number]>();
   for (const report of history) {
@@ -38,7 +36,6 @@ export function carryForwardAgingRemarks(table: RemarksTableData, history: Aging
   };
 }
 
-/** Persist only this report's snapshot, never the shared per-IR follow-up list. */
 export async function saveAgingSnapshot(
   data: AgingReportData,
   remarks: RemarksTableData,
@@ -77,7 +74,7 @@ export async function saveAgingSnapshot(
       const channel = new BroadcastChannel('smac_report_updates');
       channel.postMessage({ type: 'report_saved', reportType: 'aging', id: report.id });
       channel.close();
-    } catch { /* Saving remains successful when notifications are unavailable. */ }
+    } catch {  }
   }
   return snapshot;
 }

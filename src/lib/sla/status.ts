@@ -1,6 +1,5 @@
-import type { Incident } from '@/types/incident';
+﻿import type { Incident } from '@/types/incident';
 
-/** TRUE means overdue/failed; FALSE means passed. Missing or invalid values stay unknown. */
 export function isStatusOverdue(value: unknown): boolean | null {
   if (value === undefined || value === null) return null;
   const status = String(value).trim().toLowerCase();

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { normalizeStatus } from '@/lib/ir-analytics/engine';
+import { normalizeReportRequestId } from '@/lib/report/ticket-edits';
+import { sdpDisplayId } from '@/lib/sdp/request-id';
 import { requireAdmin } from '@/lib/server/auth';
 import { listArchive } from '@/lib/server/archive';
-import { getServerStoredAgingReports, getServerStoredMonthlyReports } from '@/lib/server/storage';
 import type { Incident } from '@/types/incident';
 
 export const dynamic = 'force-dynamic';
@@ -11,17 +12,13 @@ export function GET() {
   const denied = requireAdmin();
   if (denied) return denied;
 
-  const reports = [...listArchive(), ...getServerStoredAgingReports(), ...getServerStoredMonthlyReports()];
-  const ordered = reports.map((report) => ({
-    rows: report.routedIncidents,
-    savedAt: Date.parse(String('serverSavedAt' in report ? report.serverSavedAt : report.savedAt)) || 0,
-  })).sort((a, b) => b.savedAt - a.savedAt);
+  const reports = listArchive().sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
   const incidents = new Map<string, Incident>();
-  for (const { rows } of ordered) {
-    if (!Array.isArray(rows)) continue;
-    for (const row of rows as Incident[]) {
+  for (const { routedIncidents } of reports) {
+    if (!Array.isArray(routedIncidents)) continue;
+    for (const row of routedIncidents) {
       if (typeof row?.requestId !== 'string') continue;
-      const id = row.requestId.trim().toLowerCase();
+      const id = sdpDisplayId(row.requestId) ?? normalizeReportRequestId(row.requestId);
       if (id && !incidents.has(id)) incidents.set(id, row);
     }
   }
@@ -33,8 +30,15 @@ export function GET() {
   let resolutionDays = 0;
   let resolutions = 0;
   const counts = new Map<string, number>();
+  const importedStatuses = new Map<string, { label: string | null; count: number }>();
   for (const incident of Array.from(incidents.values())) {
-    const status = normalizeStatus(String(incident.requestStatus || ''));
+    const imported = String(incident.requestStatus ?? '').trim();
+    const key = imported.toLowerCase();
+    const entry = importedStatuses.get(key);
+    if (entry) entry.count += 1;
+    else importedStatuses.set(key, { label: imported || null, count: 1 });
+
+    const status = normalizeStatus(imported);
     const created = incident.createdTime ? new Date(incident.createdTime) : null;
     const completed = incident.completedTime ? new Date(incident.completedTime) : null;
     if (status === 'closed' || status === 'resolved') {
@@ -65,6 +69,7 @@ export function GET() {
 
   return NextResponse.json({
     total: incidents.size, open, closed, pending, unknown, trend,
+    importedStatuses: Array.from(importedStatuses.values()),
     averageDays: resolutions ? resolutionDays / resolutions : null,
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

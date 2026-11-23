@@ -1,29 +1,20 @@
-/**
- * Routing Types
- * Configurable rules for incident team assignment
- */
-
-/** A single routing rule */
-export interface RoutingRule {
+﻿export interface RoutingRule {
   id: string;
   name: string;
   description: string;
-  priority: number; // Lower number = higher priority
+  priority: number;
 
-  /** Conditions to match */
   conditions: {
-    sourceTeams?: string[];    // Match if sourceTeam is in this list
-    categories?: string[];      // Match if category contains/matches these
-    excludeCategories?: string[]; // Exclude if category contains any of these
-    subCategories?: string[];   // Match if subCategory contains/matches these
-    items?: string[];           // Match if item contains/matches these
-    categoryMatch?: 'exact' | 'contains'; // How to match categories
+    sourceTeams?: string[];
+    categories?: string[];
+    excludeCategories?: string[];
+    subCategories?: string[];
+    items?: string[];
+    categoryMatch?: 'exact' | 'contains';
   };
 
-  /** The final team assignment if rule matches */
   assignedTeam: string;
 
-  /** Whether this rule is active */
   enabled: boolean;
 }
 
@@ -32,7 +23,6 @@ export interface RoutingConfig {
 
   defaultTeamMapping: Record<string, string>;
 
-  /** Known report teams */
   reportTeams: string[];
 }
 
@@ -50,7 +40,6 @@ export interface RoutingResult {
   matchedRuleId?: string;
 }
 
-/** Summary of routing results */
 export interface RoutingSummary {
   totalRecords: number;
   reassignedRecords: number;

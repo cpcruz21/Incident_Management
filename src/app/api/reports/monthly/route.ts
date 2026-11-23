@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getAdminSession, requireAdmin } from '@/lib/server/auth';
 import { recordAudit } from '@/lib/server/audit';
+import { refreshStoredMonthlyReport } from '@/lib/monthly/calculator';
+import type { Incident } from '@/types/incident';
+import type { MonthlyReportData } from '@/types/monthly';
 
 import {
   getServerStoredMonthlyReports,
@@ -11,7 +14,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const reports = getServerStoredMonthlyReports();
+    const reports = getServerStoredMonthlyReports().map((report) => {
+      if (!report.reportData || typeof report.reportData !== 'object') return report;
+      const incidents = Array.isArray(report.routedIncidents) ? report.routedIncidents as Incident[] : undefined;
+      return { ...report, reportData: refreshStoredMonthlyReport(report.reportData as MonthlyReportData, incidents) };
+    });
     return NextResponse.json({
       success: true,
       reports,

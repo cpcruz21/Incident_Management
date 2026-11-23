@@ -107,15 +107,17 @@ export async function persistAssignmentsBulk(assignments: StoredIncidentAssignme
   }
 }
 
-export async function fetchServerWeeklyReports(): Promise<Record<string, unknown>[]> {
-  try {
-    const response = await fetch('/api/reports/weekly', { cache: 'no-store' });
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && Array.isArray(data.reports)) return data.reports;
-    }
-  } catch (error) { console.warn('Could not load weekly SLA reports:', error); }
-  return [];
+export async function fetchPublishedReports(
+  type: 'weekly' | 'aging' | 'monthly',
+  signal: AbortSignal,
+): Promise<Record<string, unknown>[]> {
+  const response = await fetch(`/api/reports/${type}`, { cache: 'no-store', signal });
+  if (!response.ok) throw new Error(`Could not load ${type} reports (${response.status}).`);
+  const data = await response.json();
+  if (!data?.success || !Array.isArray(data.reports)) {
+    throw new Error(`Invalid response for ${type} reports.`);
+  }
+  return data.reports.filter((report: unknown) => report && typeof report === 'object');
 }
 
 export async function persistServerWeeklyReport(report: Record<string, unknown>): Promise<boolean> {
@@ -123,21 +125,6 @@ export async function persistServerWeeklyReport(report: Record<string, unknown>)
     const response = await fetch('/api/reports/weekly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) });
     return response.ok;
   } catch { return false; }
-}
-
-export async function fetchServerAgingReports(): Promise<Record<string, unknown>[]> {
-  try {
-    const res = await fetch('/api/reports/aging');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.reports) {
-        return data.reports;
-      }
-    }
-  } catch (error) {
-    console.warn('API fetchServerAgingReports failed:', error);
-  }
-  return [];
 }
 
 export async function persistServerAgingReport(report: Record<string, unknown>): Promise<boolean> {
@@ -151,21 +138,6 @@ export async function persistServerAgingReport(report: Record<string, unknown>):
   } catch {
     return false;
   }
-}
-
-export async function fetchServerMonthlyReports(): Promise<Record<string, unknown>[]> {
-  try {
-    const res = await fetch('/api/reports/monthly');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.reports) {
-        return data.reports;
-      }
-    }
-  } catch (error) {
-    console.warn('API fetchServerMonthlyReports failed:', error);
-  }
-  return [];
 }
 
 export async function persistServerMonthlyReport(report: Record<string, unknown>): Promise<boolean> {

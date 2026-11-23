@@ -1,0 +1,68 @@
+.admin-shell[data-theme="night"] {
+  --admin-field-background: var(--ui-inset);
+  --admin-field-disabled-background: var(--ui-shell);
+  --success-bg: var(--report-success);
+  --warning-bg: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface));
+  --error-bg: var(--report-danger);
+  accent-color: var(--ui-link);
+  background: var(--incident-glass-backdrop);
+  background-attachment: fixed;
+}
+
+.admin-shell[data-theme="night"] .admin-sidebar {
+  background: var(--glass-navigation);
+  border-color: var(--glass-panel-edge);
+  backdrop-filter: blur(18px);
+}
+
+.admin-shell[data-theme="night"] .admin-profile-actions {
+  background: linear-gradient(145deg, #1a293e, #141f30);
+  border-color: #43536c;
+  box-shadow: inset 0 1px 0 #dbeafe14, 0 3px 0 #0e192a, 0 4px 0 #34445b, 0 12px 24px #02081680;
+}
+
+.admin-shell[data-theme="night"] .admin-profile-appearance .dashboard-theme-switch {
+  background: #111b2c;
+  border-color: #829bb6;
+  box-shadow: inset 0 0 8px #02081680, 0 0 14px #71c9e33b;
+}
+
+.admin-shell[data-theme="night"] .admin-profile-appearance .dashboard-theme-switch button[aria-pressed="true"] {
+  background: radial-gradient(ellipse at 60% 42%, #3e7288, #23394f 88%);
+  color: #aff0fb;
+  box-shadow: inset 0 0 0 1px #5e8298, 0 0 10px #6ddef36b;
+}
+
+.admin-shell[data-theme="night"] :is(.users-card, .report-workflow-header, .report-result-header, .monthly-module-header, .weekly-sla-summary-card) {
+  background: var(--glass-panel);
+  border-block-color: var(--glass-panel-edge);
+  box-shadow: var(--glass-panel-shadow);
+}
+
+.admin-shell[data-theme="night"] .stat-total .stat-value { color: var(--ui-link); }
+
+.admin-shell[data-theme="night"] .request-id-highlight {
+  background: color-mix(in srgb, var(--ui-warning) 18%, var(--ui-surface));
+  color: var(--ui-warning);
+}
+
+.admin-shell[data-theme="night"] .monthly-status {
+  --monthly-status-tone: var(--ui-secondary);
+  color: var(--monthly-status-tone);
+  background: color-mix(in srgb, var(--monthly-status-tone) 12%, var(--ui-surface));
+  border-color: color-mix(in srgb, var(--monthly-status-tone) 40%, var(--ui-surface));
+}
+.admin-shell[data-theme="night"] .monthly-status--met { --monthly-status-tone: var(--ui-success); }
+.admin-shell[data-theme="night"] .monthly-status--below { --monthly-status-tone: var(--ui-danger); }
+.admin-shell[data-theme="night"] .monthly-status--info { --monthly-status-tone: var(--ui-link); }
+
+.admin-shell[data-theme="night"] .aging-distribution-table [data-period="current"] {
+  background: var(--report-tint);
+  color: var(--ui-link);
+}
+
+.admin-shell[data-theme="night"] .aging-distribution-table [data-period="previous"] {
+  background: var(--ui-inset);
+  color: var(--ui-secondary);
+}
+

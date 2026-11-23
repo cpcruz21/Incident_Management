@@ -1,15 +1,12 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useId, useState, type RefObject } from 'react';
 import { Download, X } from 'lucide-react';
 
-type SavedImage = { title: string; filename: string; url: string };
+type SavedImage = { title: string; filename: string; url: string; cropToPanel?: boolean };
 type ImageSource = Omit<SavedImage, 'url'> & { panel: RefObject<HTMLElement>; heading?: string };
 type ExportState = 'idle' | 'loading' | 'ready' | 'error';
 
-/**
- * Filter function to skip UI buttons, action bars, and non-exportable elements
- */
 function shouldIncludeNode(node: HTMLElement): boolean {
   if (node.classList) {
     if (
@@ -24,33 +21,35 @@ function shouldIncludeNode(node: HTMLElement): boolean {
   return true;
 }
 
-/**
- * Capture an HTMLElement to PNG data URL using html-to-image with multi-tiered fallback.
- */
-async function capturePanel(panel: HTMLElement, heading?: string): Promise<string> {
+async function capturePanel(panel: HTMLElement, { heading, cropToPanel }: Pick<ImageSource, 'heading' | 'cropToPanel'>): Promise<string> {
+  if (cropToPanel) {
+    const { toPng } = await import('html-to-image');
+    await document.fonts?.ready;
+    return toPng(panel, {
+      pixelRatio: 2,
+      skipFonts: true,
+      filter: shouldIncludeNode,
+      style: { margin: '0', marginInline: '0' },
+    });
+  }
+
   const { renderFullHdPng } = await import('@/lib/report/full-hd-image');
 
-  // Tier 1: Attempt capture using an unrolled desktop-width clone container
   try {
     return await captureWithClone(panel, renderFullHdPng, heading);
   } catch (cloneErr) {
     console.warn('Cloned image capture failed, attempting direct capture:', cloneErr);
   }
 
-  // Tier 2: Fall back to capturing the live visible DOM element directly
   try {
     return await captureDirect(panel, renderFullHdPng, 2, heading);
   } catch (directErr) {
     console.warn('Direct 2x image capture failed, attempting 1x fallback:', directErr);
   }
 
-  // Tier 3: 1x direct capture fallback for low-memory environments
   return await captureDirect(panel, renderFullHdPng, 1, heading);
 }
 
-/**
- * Cloned desktop container capture for full table unrolling
- */
 async function captureWithClone(
   panel: HTMLElement,
   renderFullHdPng: typeof import('@/lib/report/full-hd-image').renderFullHdPng,
@@ -92,9 +91,6 @@ async function captureWithClone(
   }
 }
 
-/**
- * Direct capture of live DOM element
- */
 async function captureDirect(
   panel: HTMLElement,
   renderFullHdPng: typeof import('@/lib/report/full-hd-image').renderFullHdPng,
@@ -141,7 +137,6 @@ export function ReportImageExport({
   const [images, setImages] = useState<SavedImage[]>([]);
   const singleImage = sources.length === 1;
 
-  // Close dialog on Escape key
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -156,13 +151,13 @@ export function ReportImageExport({
     setImages([]);
     try {
       const previews: SavedImage[] = [];
-      for (const { panel, title, filename, heading } of sources) {
+      for (const { panel, title, filename, heading, cropToPanel } of sources) {
         if (!panel.current) {
           console.warn(`Panel ref for "${title}" is not available in DOM`);
           continue;
         }
-        const url = await capturePanel(panel.current, heading);
-        previews.push({ title, filename, url });
+        const url = await capturePanel(panel.current, { heading, cropToPanel });
+        previews.push({ title, filename, url, cropToPanel });
       }
 
       if (previews.length === 0) {
@@ -241,12 +236,12 @@ export function ReportImageExport({
 
             {status === 'ready' && (
               <>
-                <p>
-                  {singleImage ? 'The image is' : 'Each image is'} a 1920 × 1080 PNG.
-                </p>
+                {images.every(image => !image.cropToPanel) && (
+                  <p>{singleImage ? 'The image is' : 'Each image is'} a 1920 × 1080 PNG.</p>
+                )}
                 <div className="report-image-previews">
                   {images.map(image => (
-                    <figure key={image.filename}>
+                    <figure key={image.filename} className={image.cropToPanel ? 'report-image-preview-cropped' : undefined}>
                       <img
                         src={image.url}
                         alt={`${image.title} table for ${period || 'the selected report'}`}

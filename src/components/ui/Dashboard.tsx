@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Archive, ArrowRight, Bell, CalendarClock, CalendarRange, ChevronDown, ClipboardList, House,
-  LogOut, Menu, Plus, TrendingUp, UserRound,
+  Archive, CalendarClock, CalendarRange, ChartColumnIncreasing,
+  Check, ChevronDown, Circle, ClipboardList, Clock3, House, LogOut, Menu, TrendingUp, UserRound,
 } from 'lucide-react';
-import type { Account } from '@/lib/auth';
+import { isAdmin, type Account } from '@/lib/auth';
 import { StoredReportsList } from '@/components/report/StoredReportsList';
 import { UserManagement } from './UserManagement';
 import { AuditLog } from './AuditLog';
+import { IncidentLogo } from './IncidentLogo';
+import { IncidentOverviewCharts, type IncidentStatusCount } from './IncidentOverviewCharts';
+import { AppearanceSwitch } from './AppearanceSwitch';
+import { AppFooter } from './AppFooter';
+import { useAppearancePreference } from './useAppearancePreference';
 import { migrateLegacyReports, type StoredReport } from '@/lib/storage/report-storage';
 import './admin.css';
 
@@ -26,12 +31,10 @@ const navigation = [
 
 interface Overview {
   total: number;
-  open: number;
   closed: number;
-  pending: number;
-  unknown: number;
   averageDays: number | null;
   trend: { label: string; value: number }[];
+  importedStatuses: IncidentStatusCount[];
 }
 
 interface DashboardProps {
@@ -49,7 +52,9 @@ export function Dashboard({
 }: DashboardProps) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileButton = useRef<HTMLButtonElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, changeTheme] = useAppearancePreference('smac_admin_theme');
   const sidebarToggleLabel = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
   const initials = account.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase();
 
@@ -60,11 +65,11 @@ export function Dashboard({
   }
 
   return (
-    <div className="admin-shell" data-sidebar-collapsed={sidebarCollapsed}>
+    <div className="admin-shell" data-theme={theme} data-sidebar-collapsed={sidebarCollapsed}>
       <aside className="admin-sidebar" id="admin-sidebar">
         <div className="admin-brand-row">
-          <button className="admin-brand" type="button" onClick={() => select('dashboard')}>
-            <span className="equicom-logo"><img className="equicom-logo-art" src="/images/EQUI.png" width="82" height="72" alt="Equicom" /></span>
+          <button className="admin-brand" type="button" aria-label="Incident Management home" onClick={() => select('dashboard')}>
+            <IncidentLogo />
             <strong className="admin-brand-title">Incident Management</strong>
           </button>
           <button
@@ -73,12 +78,12 @@ export function Dashboard({
             title={navigationOpen ? 'Close navigation' : 'Open navigation'}
             onClick={() => setNavigationOpen(!navigationOpen)}
           >
-            <Menu size={20} aria-hidden="true" />
+            <Menu size={22} aria-hidden="true" />
           </button>
           <button
             className="admin-nav-toggle admin-nav-toggle-desktop"
             type="button"
-            aria-controls="admin-navigation"
+            aria-controls="admin-sidebar"
             aria-expanded={!sidebarCollapsed}
             aria-label={sidebarToggleLabel}
             title={sidebarToggleLabel}
@@ -87,65 +92,68 @@ export function Dashboard({
               setSidebarCollapsed((collapsed) => !collapsed);
             }}
           >
-            <Menu size={20} aria-hidden="true" />
+            <Menu size={22} aria-hidden="true" />
           </button>
         </div>
         <div id="admin-navigation" className="admin-navigation" data-open={navigationOpen}>
           <nav aria-label="Admin workspace">
-            {navigation.filter(item => item.view !== 'audit' || account.role === 'super-admin').map(({ view, label, Icon }) => (
-              <button
-                key={view} type="button" onClick={() => select(view)}
-                aria-current={activeView === view ? 'page' : undefined}
-              >
-                <Icon size={23} aria-hidden="true" /> {view === 'users' && account.role === 'admin' ? 'Account Settings' : label}
-              </button>
-            ))}
+            {navigation
+              .filter(({ view }) => account.role === 'super-admin' || (view !== 'users' && view !== 'audit'))
+              .map(({ view, label, Icon }) => (
+                <button
+                  key={view} type="button" onClick={() => select(view)}
+                  aria-label={label}
+                  aria-current={activeView === view ? 'page' : undefined}
+                  title={sidebarCollapsed ? label : undefined}
+                >
+                  <Icon size={22} aria-hidden="true" />
+                  <span className="admin-nav-label">{label}</span>
+                </button>
+              ))}
           </nav>
-          <div className="admin-profile">
-            {profileOpen && (
-              <div className="admin-profile-actions">
-                <button type="button" onClick={() => select('account')}><UserRound size={16} /> Account settings</button>
-                <button type="button" onClick={onLogout}><LogOut size={16} /> Sign out</button>
-              </div>
-            )}
-            <button className="admin-profile-button" type="button" aria-expanded={profileOpen}
-              onClick={() => setProfileOpen(!profileOpen)}>
+          <div className="admin-profile" onKeyDown={(event) => {
+            if (event.key === 'Escape' && profileOpen) {
+              setProfileOpen(false);
+              profileButton.current?.focus();
+            }
+          }}>
+            <button ref={profileButton} className="admin-profile-button" type="button"
+              aria-label={`${account.name} account menu`} aria-expanded={profileOpen} aria-controls="admin-profile-actions"
+              onClick={() => setProfileOpen((open) => !open)}>
               <span className="admin-avatar" aria-hidden="true">{initials}</span>
               <span><strong>{account.name}</strong><small>{account.role === 'super-admin' ? 'Super Administrator' : 'Administrator'}</small></span>
               <ChevronDown size={17} aria-hidden="true" />
             </button>
+            <div className="admin-profile-actions" id="admin-profile-actions" hidden={!profileOpen}>
+              <button type="button" onClick={() => select('account')}><UserRound size={20} aria-hidden="true" /> Account Settings</button>
+              <div className="admin-profile-appearance">
+                <span aria-hidden="true">Appearance</span>
+                <AppearanceSwitch label="Admin appearance" value={theme} onChange={changeTheme} />
+              </div>
+              <button type="button" onClick={onLogout}><LogOut size={20} aria-hidden="true" /> Sign out</button>
+            </div>
             {logoutError && <p className="admin-error" role="alert">{logoutError}</p>}
           </div>
         </div>
-        {sidebarCollapsed && (
-          <span className="admin-avatar admin-collapsed-avatar" role="img" aria-label={account.name} title={account.name}>
-            {initials}
-          </span>
-        )}
       </aside>
       <div className="admin-content">
-        {activeView === 'dashboard' && <HomeOverview onSelect={onSelectReport} />}
+        {activeView === 'dashboard' && <HomeOverview />}
         {activeView === 'archive' && (
-          <main className="admin-page">
-            <StoredReportsList onOpenReport={onOpenStoredReport} canDelete={account.role === 'super-admin'} />
-          </main>
+          <StoredReportsList onOpenReport={onOpenStoredReport} canDelete={isAdmin(account)} />
         )}
         {activeView === 'users' && <main className="admin-page"><UserManagement account={account} /></main>}
         {activeView === 'account' && <main className="admin-page"><UserManagement account={account} personalOnly /></main>}
         {activeView === 'audit' && account.role === 'super-admin' && <main className="admin-page admin-audit-page"><header className="users-page-header"><h1>Audit Logs</h1></header><AuditLog /></main>}
         {children}
-        <footer className="admin-footer app-footer">
-          <p>&copy; {new Date().getFullYear()} Equitable Computer Services Inc.</p>
-        </footer>
+        <AppFooter />
       </div>
     </div>
   );
 }
 
-function HomeOverview({ onSelect }: { onSelect: (view: DashboardView) => void }) {
+function HomeOverview() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -159,99 +167,32 @@ function HomeOverview({ onSelect }: { onSelect: (view: DashboardView) => void })
     return () => controller.abort();
   }, []);
 
+  const importedOpen = overview?.importedStatuses.find(({ label }) => label?.toLowerCase() === 'open')?.count;
   const metrics = [
-    ['Total incidents', overview?.total],
-    ['Open incidents', overview?.open],
-    ['Closed incidents', overview?.closed],
-    ['Avg. resolution time', overview?.averageDays == null ? null : `${overview.averageDays.toFixed(1)} days`],
-  ] as const;
-
-  const statuses = [
-    ['Open', overview?.open, 'open'],
-    ['Closed', overview?.closed, 'closed'],
-    ['Pending review', overview?.pending, 'pending'],
-    ...(overview?.unknown ? [['Unclassified', overview.unknown, 'unknown']] as const : []),
+    ['total', 'Total incidents', overview?.total, ChartColumnIncreasing],
+    ['open', 'Open incidents', overview ? importedOpen ?? 0 : null, Circle],
+    ['closed', 'Closed incidents', overview?.closed, Check],
+    ['resolution', 'Avg. resolution time', overview?.averageDays == null ? null : `${overview.averageDays.toFixed(1)} days`, Clock3],
   ] as const;
 
   return (
     <main className="admin-page admin-home">
-      <header className="admin-welcome">
-        <div>
-          <p className="admin-kicker">Welcome to</p>
-          <h1>SMAC Reporting</h1>
-          <p>Incident reports, weekly reviews, and performance insights.</p>
-        </div>
+      <header className="admin-home-header">
+        <h1><span className="admin-home-greeting">Welcome to</span> SMAC Reporting</h1>
       </header>
-      <section className="admin-overview" aria-labelledby="analytics-heading">
-        <div className="admin-overview-header">
-          <h2 id="analytics-heading">Analytics overview</h2>
-          <div className="admin-create">
-            <button className="admin-primary" type="button" aria-expanded={createOpen}
-              onClick={() => setCreateOpen(!createOpen)}>
-              <Plus size={17} /> Create new report
-            </button>
-            {createOpen && (
-              <div className="admin-create-options" onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  setCreateOpen(false);
-                  event.currentTarget.parentElement?.querySelector('button')?.focus();
-                }
-              }}>
-                {navigation.slice(1, 4).map(({ view, label, Icon }) => (
-                  <button key={view} type="button" onClick={() => onSelect(view)}><Icon size={17} /> {label}</button>
-                ))}
-              </div>
-            )}
+      {loadError && <p className="admin-error" role="alert">Could not load incident analytics.</p>}
+      <dl className="admin-metrics">
+        {metrics.map(([kind, label, value, Icon]) => (
+          <div key={kind} data-metric={kind}>
+            <dt>{label}</dt>
+            <dd>
+              <span className="admin-metric-value">{value?.toLocaleString() ?? '\u2014'}</span>
+              <span className="admin-metric-icon" aria-hidden="true"><Icon size={27} /></span>
+            </dd>
           </div>
-        </div>
-        {loadError && <p className="admin-error" role="alert">Could not load incident analytics.</p>}
-        <dl className="admin-metrics">
-          {metrics.map(([label, value]) => (
-            <div key={label}><dt>{label}</dt><dd>{value ?? '\u2014'}</dd></div>
-          ))}
-        </dl>
-        <div className="admin-charts">
-          <section className="admin-chart">
-            <h3>Incident volume over time</h3>
-            <IncidentTrend trend={overview?.trend || []} />
-          </section>
-          <section className="admin-chart">
-            <h3>Status breakdown</h3>
-            <ul className="admin-statuses">
-              {statuses.map(([label, count, status]) => (
-                <li key={status}><span className={`admin-dot admin-dot-${status}`} />{label}<strong>{count ?? '\u2014'}</strong></li>
-              ))}
-            </ul>
-          </section>
-        </div>
-        <section className="admin-insights">
-          <div>
-            <h3><Bell size={15} /> Insights &amp; alerts</h3>
-            <p>{overview ? `${overview.open + overview.pending} incidents open or pending review.` : 'Incident follow-ups'}</p>
-          </div>
-          <button className="admin-text-button" type="button" onClick={() => onSelect('weekly')}>
-            View follow-ups <ArrowRight size={16} />
-          </button>
-        </section>
-      </section>
-    </main>
-  );
-}
-
-function IncidentTrend({ trend }: { trend: Overview['trend'] }) {
-  if (!trend.length) return <div className="admin-trend-empty">No dated incidents to chart.</div>;
-  const scale = Math.max(1, ...trend.map((point) => point.value));
-  const points = trend.map((point, index) => [20 + index * 92, 116 - point.value / scale * 96]);
-  return (
-    <figure className="admin-trend">
-      <svg viewBox="0 0 500 134" role="img" aria-label={trend.map(({ label, value }) => `${label}: ${value}`).join(', ')}>
-        {[20, 52, 84, 116].map((y) => <line key={y} x1="20" x2="480" y1={y} y2={y} stroke="var(--ui-border, #214359)" />)}
-        <polyline points={points.map((point) => point.join(',')).join(' ')} fill="none" stroke="var(--ui-link, #31c2dd)" strokeWidth="3" />
-        {points.map(([x, y], index) => (
-          <circle key={x} cx={x} cy={y} r="4" fill="var(--ui-link, #31c2dd)"><title>{trend[index].label}: {trend[index].value}</title></circle>
         ))}
-      </svg>
-      <figcaption>{trend.map(({ label }) => <span key={label}>{label}</span>)}</figcaption>
-    </figure>
+      </dl>
+      <IncidentOverviewCharts trend={overview?.trend} statuses={overview?.importedStatuses} unavailable={loadError} />
+    </main>
   );
 }

@@ -1,9 +1,10 @@
-import type { Incident } from '@/types/incident';
-import type { AgingReportData, PreviousWeekAging } from '@/types/aging';
+﻿import type { Incident } from '@/types/incident';
+import type { AgingReportData, PreviousWeekAging, RemarksTableData } from '@/types/aging';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import { extractAgingFromStored, getPriorAgingReports, getStoredReports } from '@/lib/storage/report-storage';
 import { buildRemarksTableData, calculateAgingDistribution, calculateAgingSLA, filterOpenIncidents, toValidDate } from './calculator';
 import { getReportTeamOrder } from '@/lib/report/teams';
+import { normalizeReportRequestId, type ReportTicketEdit } from '@/lib/report/ticket-edits';
 import { carryForwardAgingRemarks, createAgingReportId } from './snapshot';
 
 export async function loadPreviousAgingReport(beforeGeneratedAt?: Date | string): Promise<PreviousWeekAging> {
@@ -14,7 +15,6 @@ export async function loadPreviousAgingReport(beforeGeneratedAt?: Date | string)
   };
 }
 
-/** Creation always snapshots the last stored report's CURRENT results as last week. */
 export async function createAgingReport(
   incidents: Incident[],
   reportPeriod: string,
@@ -34,7 +34,6 @@ export async function createAgingReport(
   };
 }
 
-/** Reconcile an entire imported snapshot against one explicit report timestamp. */
 export function calculateAgingReport(
   incidents: Incident[],
   reportPeriod: string,
@@ -75,5 +74,33 @@ export function calculateAgingReport(
     previousWeek,
     remarksTable: buildRemarksTableData(prepared, referenceDate, reportPeriod),
     teamOrder,
+  };
+}
+
+export function removeAgingRemarksTicket(remarks: RemarksTableData, requestId: string): RemarksTableData {
+  const id = normalizeReportRequestId(requestId);
+  const rows = remarks.rows.filter((row) => normalizeReportRequestId(row.requestId) !== id);
+  return { ...remarks, rows, totalRecords: rows.length };
+}
+
+export function refreshAgingTicketTotals(data: AgingReportData, incidents: Incident[], edit: ReportTicketEdit): AgingReportData {
+  const referenceDate = toValidDate(data.asOf) ?? toValidDate(data.generatedAt);
+  if (!referenceDate) throw new Error('This report is missing its Aging as of date.');
+  const open = filterOpenIncidents(incidents);
+  const teamOrder = getReportTeamOrder(open, data.teamOrder);
+  const { rows: slaRows, totals: slaTotals } = calculateAgingSLA(open, teamOrder, referenceDate);
+  if (edit.approval) return { ...data, slaRows, slaTotals, teamOrder };
+
+  const agingRows = calculateAgingDistribution(open, teamOrder, referenceDate);
+  const deletedId = normalizeReportRequestId(edit.requestId);
+  return {
+    ...data,
+    teamOrder,
+    slaRows,
+    slaTotals,
+    agingRows,
+    agingGrandTotal: agingRows.reduce((sum, row) => sum + row.totalAging, 0),
+    remarksTable: data.remarksTable && removeAgingRemarksTicket(data.remarksTable, edit.requestId),
+    highImpactIncidents: data.highImpactIncidents?.filter((ticket) => normalizeReportRequestId(ticket.requestId) !== deletedId),
   };
 }

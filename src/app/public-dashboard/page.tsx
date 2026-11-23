@@ -1,75 +1,84 @@
-'use client';
+﻿'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { AgingReportData } from '@/types/aging';
 import type { MonthlyReportData } from '@/types/monthly';
 import type { WeeklyReportData } from '@/types/sla';
 import type { Incident } from '@/types/incident';
 import { AgingReportTable } from '@/components/aging/AgingReportTable';
 import { MonthlyReportTable } from '@/components/monthly/MonthlyReportTable';
+import { refreshStoredMonthlyReport } from '@/lib/monthly/calculator';
 import { SLAReportTable } from '@/components/report/SLAReportTable';
 import { DetailModal } from '@/components/report/DetailModal';
-import {
-  fetchServerAgingReports,
-  fetchServerMonthlyReports,
-  fetchServerWeeklyReports,
-} from '@/lib/api/client';
-import { getLegacyStoredReports } from '@/lib/storage/report-storage';
+import { fetchPublishedReports } from '@/lib/api/client';
+import { getLegacyStoredReports, type StoredReport } from '@/lib/storage/report-storage';
 import { IRAnalyticsDashboard } from '@/components/ir-analytics/IRAnalyticsDashboard';
+import { IncidentLogo } from '@/components/ui/IncidentLogo';
+import { AppearanceSwitch } from '@/components/ui/AppearanceSwitch';
+import { AppFooter } from '@/components/ui/AppFooter';
+import { useAppearancePreference } from '@/components/ui/useAppearancePreference';
 
 type ReportTabType = 'weekly' | 'aging' | 'monthly' | 'ir-analytics';
-type DashboardTheme = 'light' | 'night';
 const DASHBOARD_THEME_KEY = 'smac_dashboard_theme';
+const PUBLIC_MODULES = [
+  { id: 'ir-analytics', label: 'Dashboard', icon: '📈' },
+  { id: 'weekly', label: 'Weekly SLA', icon: '📅' },
+  { id: 'aging', label: 'Aging', icon: '⏳' },
+  { id: 'monthly', label: 'Monthly', icon: '📊' },
+] as const;
 
-interface PublishedAgingReport {
+type ReportModule = Exclude<ReportTabType, 'ir-analytics'>;
+type ReportLoadStatus = 'loading' | 'ready' | 'error';
+
+interface PublishedReport<T> {
   id: string;
   title: string;
   period: string;
-  reportData: AgingReportData;
+  reportData: T;
   routedIncidents?: Incident[];
-  savedAt?: string;
-  savedBy?: string;
 }
 
-interface PublishedMonthlyReport {
-  id: string;
-  title: string;
-  period: string;
-  reportData: MonthlyReportData;
-  routedIncidents?: Incident[];
-  savedAt?: string;
-  savedBy?: string;
-}
+const INITIAL_LOAD_STATUS: Record<ReportModule, ReportLoadStatus> = {
+  weekly: 'loading',
+  aging: 'loading',
+  monthly: 'loading',
+};
+const REPORT_NAMES = { weekly: 'Weekly SLA', aging: 'Aging Report', monthly: 'Monthly Report' };
+const ANALYTICS_MODULES = ['aging', 'monthly'] as const;
+const REPORT_LOAD_TIMEOUT_MS = 15_000;
 
-interface PublishedWeeklyReport extends Omit<PublishedAgingReport, 'reportData'> {
-  reportData: WeeklyReportData;
+function readPublishedReports<T extends { reportTitle?: string; reportPeriod?: string }>(
+  type: ReportModule,
+  records: Record<string, unknown>[],
+): PublishedReport<T>[] {
+  return records.flatMap((record, index) => {
+    if (!record.reportData || typeof record.reportData !== 'object' || Array.isArray(record.reportData)) return [];
+    const reportData = record.reportData as T;
+    return [{
+      id: String(record.id || type + '-' + index),
+      title: String(record.title || reportData.reportTitle || REPORT_NAMES[type]),
+      period: String(record.period || reportData.reportPeriod || (type === 'monthly' ? '' : 'Current Period')),
+      reportData,
+      routedIncidents: Array.isArray(record.routedIncidents) ? record.routedIncidents as Incident[] : undefined,
+    }];
+  });
 }
 
 export default function PublicDashboardPage() {
   const [activeTab, setActiveTab] = useState<ReportTabType>('ir-analytics');
-  const [theme, setTheme] = useState<DashboardTheme>('light');
+  const [theme, changeTheme] = useAppearancePreference(DASHBOARD_THEME_KEY);
 
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(DASHBOARD_THEME_KEY) === 'night') setTheme('night');
-    } catch { }
-  }, []);
-
-  const changeTheme = (next: DashboardTheme) => {
-    setTheme(next);
-    try { localStorage.setItem(DASHBOARD_THEME_KEY, next); } catch { }
-  };
-
-  const [agingReports, setAgingReports] = useState<PublishedAgingReport[]>([]);
-  const [monthlyReports, setMonthlyReports] = useState<PublishedMonthlyReport[]>([]);
-  const [weeklyReports, setWeeklyReports] = useState<PublishedWeeklyReport[]>([]);
+  const [agingReports, setAgingReports] = useState<PublishedReport<AgingReportData>[]>([]);
+  const [monthlyReports, setMonthlyReports] = useState<PublishedReport<MonthlyReportData>[]>([]);
+  const [weeklyReports, setWeeklyReports] = useState<PublishedReport<WeeklyReportData>[]>([]);
 
   const [selectedAgingId, setSelectedAgingId] = useState<string>('');
   const [selectedMonthlyId, setSelectedMonthlyId] = useState<string>('');
   const [selectedWeeklyId, setSelectedWeeklyId] = useState<string>('');
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [legacyReports, setLegacyReports] = useState<StoredReport[]>([]);
+  const [loadStatus, setLoadStatus] = useState(INITIAL_LOAD_STATUS);
+  const pendingLoad = useRef<AbortController | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   const [modalState, setModalState] = useState<{
@@ -78,102 +87,63 @@ export default function PublicDashboardPage() {
     incidentIds: string[];
   }>({ isOpen: false, title: '', incidentIds: [] });
 
-  const loadReports = useCallback(async (isInitial = false) => {
-    if (isInitial) setIsLoading(true);
+  const loadReports = useCallback(async (showLoading = false) => {
+    if (pendingLoad.current && !showLoading) return;
+    pendingLoad.current?.abort();
+    const controller = new AbortController();
+    pendingLoad.current = controller;
+    if (showLoading) setLoadStatus(INITIAL_LOAD_STATUS);
+    const timeout = window.setTimeout(() => controller.abort(), REPORT_LOAD_TIMEOUT_MS);
+    const localReports = getLegacyStoredReports().filter(Boolean);
+    setLegacyReports(localReports);
 
-    const agingList: PublishedAgingReport[] = [];
-    const monthlyList: PublishedMonthlyReport[] = [];
-    const weeklyList: PublishedWeeklyReport[] = [];
-    const [serverWeekly, serverAging, serverMonthly] = await Promise.all([
-      fetchServerWeeklyReports(), fetchServerAgingReports(), fetchServerMonthlyReports(),
-    ]);
-    for (const item of serverWeekly) {
-      if (item.reportData && typeof item.reportData === 'object') {
-        const reportData = item.reportData as WeeklyReportData;
-        weeklyList.push({
-          id: String(item.id), title: String(item.title || reportData.reportTitle || 'Weekly SLA'),
-          period: String(item.period || reportData.reportPeriod || 'Current Period'), reportData,
-          routedIncidents: (item.routedIncidents as Incident[]) || [],
-          savedAt: String(item.savedAt || item.serverSavedAt || ''), savedBy: String(item.savedBy || 'System'),
-        });
+    async function loadModule<T extends { reportTitle?: string; reportPeriod?: string }>(
+      type: ReportModule,
+      setReports: React.Dispatch<React.SetStateAction<PublishedReport<T>[]>>,
+      prepareLegacy?: (report: StoredReport) => T,
+    ) {
+      let published: PublishedReport<T>[] | undefined;
+      try {
+        published = readPublishedReports<T>(type, await fetchPublishedReports(type, controller.signal));
+      } catch (error) {
+        if (pendingLoad.current === controller) console.warn('Could not load published ' + type + ' reports:', error);
       }
+      if (pendingLoad.current !== controller) return false;
+
+      const reports = published ?? [];
+      if (prepareLegacy) {
+        for (const report of localReports) {
+          if (report.type !== type || !report.reportData || reports.some(item => item.id === report.id)) continue;
+          try {
+            reports.push({
+              id: report.id,
+              title: report.title,
+              period: report.period,
+              reportData: prepareLegacy(report),
+              routedIncidents: report.routedIncidents,
+            });
+          } catch (error) {
+            console.warn('Could not load saved ' + type + ' report:', error);
+          }
+        }
+      }
+
+      setReports(previous => !published && previous.length > 0 ? previous : reports);
+      setLoadStatus(previous => ({ ...previous, [type]: published ? 'ready' : 'error' }));
+      return published !== undefined;
     }
 
     try {
-      if (Array.isArray(serverAging)) {
-        for (const item of serverAging) {
-          if (item.reportData && typeof item.reportData === 'object') {
-            agingList.push({
-              id: String(item.id || `server-aging-${Date.now()}`),
-              title: String(item.title || (item.reportData as any).reportTitle || 'Aging Report'),
-              period: String(item.period || (item.reportData as any).reportPeriod || 'Current Period'),
-              reportData: item.reportData as AgingReportData,
-              routedIncidents: (item.routedIncidents as Incident[]) || [],
-              savedAt: String(item.savedAt || (item as any).serverSavedAt || ''),
-              savedBy: String(item.savedBy || 'System'),
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Could not load server aging reports:', err);
+      const results = await Promise.all([
+        loadModule('weekly', setWeeklyReports),
+        loadModule<AgingReportData>('aging', setAgingReports, report => ({ ...report.reportData as AgingReportData, reportId: report.id })),
+        loadModule('monthly', setMonthlyReports, report => refreshStoredMonthlyReport(report.reportData as MonthlyReportData, report.routedIncidents)),
+      ]);
+      if (pendingLoad.current === controller && results.some(Boolean)) setLastSyncTime(new Date());
+    } finally {
+      window.clearTimeout(timeout);
+      if (pendingLoad.current === controller) pendingLoad.current = null;
     }
-
-    try {
-      if (Array.isArray(serverMonthly)) {
-        for (const item of serverMonthly) {
-          if (item.reportData && typeof item.reportData === 'object') {
-            monthlyList.push({
-              id: String(item.id || `server-monthly-${Date.now()}`),
-              title: String(item.title || (item.reportData as any).reportTitle || 'Monthly Report'),
-              period: String(item.period || (item.reportData as any).reportPeriod || ''),
-              reportData: item.reportData as MonthlyReportData,
-              routedIncidents: (item.routedIncidents as Incident[]) || [],
-              savedAt: String(item.savedAt || ''),
-              savedBy: String(item.savedBy || 'System'),
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Could not load server monthly reports:', err);
-    }
-
-    try {
-      const localReports = getLegacyStoredReports();
-      for (const r of localReports) {
-        if (r.type === 'aging' && r.reportData) {
-          const alreadyAdded = agingList.some((x) => x.id === r.id);
-          if (!alreadyAdded) {
-            agingList.push({
-              id: r.id,
-              title: r.title,
-              period: r.period,
-              reportData: { ...(r.reportData as AgingReportData), reportId: r.id },
-              routedIncidents: r.routedIncidents as Incident[] | undefined,
-            });
-          }
-        }
-        if (r.type === 'monthly' && r.reportData) {
-          const alreadyAdded = monthlyList.some((x) => x.id === r.id);
-          if (!alreadyAdded) {
-            monthlyList.push({
-              id: r.id,
-              title: r.title,
-              period: r.period,
-              reportData: r.reportData as MonthlyReportData,
-              routedIncidents: r.routedIncidents as Incident[] | undefined,
-            });
-          }
-        }
-      }
-    } catch { }
-
-    setAgingReports(agingList);
-    setMonthlyReports(monthlyList);
-    setWeeklyReports(weeklyList);
-    setLastSyncTime(new Date());
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -201,6 +171,9 @@ export default function PublicDashboardPage() {
 
     return () => {
       clearInterval(pollInterval);
+      const controller = pendingLoad.current;
+      pendingLoad.current = null;
+      controller?.abort();
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorage);
       if (bc) bc.close();
@@ -217,59 +190,34 @@ export default function PublicDashboardPage() {
     setModalState({ isOpen: true, title, incidentIds: ids });
   };
 
-  // ─── Nav Tab descriptor ────────────────────────────────────────────────────
-  const tabs: { key: ReportTabType; icon: string; label: string; count?: number }[] = [
-    { key: 'ir-analytics', icon: '📈', label: 'Dashboard' },
-    { key: 'weekly', icon: '📅', label: 'Weekly SLA', count: weeklyReports.length || undefined },
-    { key: 'aging', icon: '⏳', label: 'Aging', count: agingReports.length || undefined },
-    { key: 'monthly', icon: '📊', label: 'Monthly', count: monthlyReports.length || undefined },
-  ];
+  const visibleModules = activeTab === 'ir-analytics' ? ANALYTICS_MODULES : [activeTab];
+  const unavailableModules = visibleModules.filter(type => loadStatus[type] === 'error');
+
+  const reportCounts = { weekly: weeklyReports.length, aging: agingReports.length, monthly: monthlyReports.length };
+
+  function changeReportView(view: ReportTabType) {
+    if (view !== activeTab) {
+      setActiveTab(view);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }
 
   return (
     <div className="public-dashboard" data-theme={theme} style={{
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      background: 'var(--ui-page, #060f1e)',
       color: 'var(--ui-text, #f8fafc)',
       fontFamily: "var(--font-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     }}>
 
-      {/* ═══════════════════ TOPBAR ═══════════════════ */}
-      <header style={{
-        background: 'linear-gradient(180deg, var(--ui-inset, #0c1a30) 0%, var(--ui-inset, #091426) 100%)',
-        borderBottom: '1px solid var(--ui-panel-border)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        boxShadow: '0 4px 24px var(--ui-shadow, rgba(0,0,0,0.45))',
-      }}>
-        {/* Thin accent bar at top */}
-        <div style={{ height: '3px', background: 'linear-gradient(90deg, #2563eb 0%, #7c3aed 50%, #06b6d4 100%)' }} />
+      <a href="#public-report-content" className="live-skip">Skip to report content</a>
+      <header className="live-header">
+        <div className="live-header-accent" aria-hidden="true" />
 
         <div className="live-header-row">
-          {/* ── Brand ── */}
           <div className="live-header-brand">
-            <div style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              background: 'var(--ui-inset, #101f36)',
-              border: '1px solid var(--ui-border, #1e3a5f)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: '0 2px 10px var(--ui-shadow, rgba(0,0,0,0.3))',
-            }}>
-              <img
-                className="equicom-logo-art"
-                src="/images/EQUI.png"
-                alt="Equicom"
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-            </div>
+            <IncidentLogo />
             <div>
               <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--ui-link, #38bdf8)', textTransform: 'uppercase' }}>
                 Incident Management
@@ -280,185 +228,60 @@ export default function PublicDashboardPage() {
             </div>
           </div>
 
-          {/* ── Navigation Tabs ── */}
-          <nav className="live-navigation" aria-label="Public report modules" style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: 'var(--ui-wash, rgba(255,255,255,0.04))',
-            border: '1px solid var(--ui-panel-border)',
-            borderRadius: '12px',
-            padding: '4px',
-            gap: '3px',
-          }}>
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  aria-current={isActive ? 'page' : undefined}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: isActive ? '#2563eb' : 'transparent',
-                    color: isActive ? '#ffffff' : 'var(--ui-secondary, #94a3b8)',
-                    fontWeight: isActive ? 800 : 600,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    boxShadow: isActive ? '0 2px 14px rgba(37,99,235,0.4)' : 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {tab.key === 'ir-analytics' ? (
-                    <img src="/images/DASH.png" alt="" style={{ width: '16px', height: '16px', objectFit: 'contain', opacity: isActive ? 1 : 0.6 }} />
-                  ) : (
-                    <span style={{ fontSize: '15px' }}>{tab.icon}</span>
-                  )}
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined && (
-                    <span style={{
-                      background: isActive ? '#173b9c' : 'var(--ui-wash)',
-                      color: isActive ? '#ffffff' : 'var(--ui-secondary, #94a3b8)',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      padding: '1px 7px',
-                      borderRadius: '999px',
-                    }}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <nav className="live-navigation" aria-label="Public report modules">
+            {PUBLIC_MODULES.map(({ id, label, icon }) => (
+              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined}
+                onClick={() => changeReportView(id)}>
+                <span className="live-navigation-icon" aria-hidden="true">
+                  {id === 'ir-analytics' ? <img src="/images/DASH.png" alt="" /> : icon}
+                </span>
+                <span>{label}</span>
+                {id !== 'ir-analytics' && <span className="live-navigation-count" aria-hidden="true">{reportCounts[id]}</span>}
+              </button>
+            ))}
           </nav>
 
-          {/* ── Right Controls ── */}
-          <div className="live-header-actions">
-            {/* Live Sync indicator */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '7px',
-              padding: '6px 13px',
-              background: 'rgba(16,185,129,0.12)',
-              border: '1px solid rgba(16,185,129,0.3)',
-              borderRadius: '999px',
-              fontSize: '12px',
-              color: 'var(--ui-success, #34d399)',
-              fontWeight: 700,
-              cursor: 'default',
-            }}
+          <div className="live-header-controls">
+            <div className="live-status"
               title={lastSyncTime ? `Last sync: ${lastSyncTime.toLocaleTimeString()}` : 'Auto-sync active'}
             >
-              <span style={{
-                width: '7px', height: '7px', borderRadius: '50%', background: 'var(--ui-success)',
-                boxShadow: '0 0 0 3px rgba(16,185,129,0.35)',
-                animation: 'pulse 2s infinite',
-                display: 'inline-block',
-              }} />
-              Live Dashboard
+              <span className="live-status-dot" aria-hidden="true" />
+              <span className="live-status-label">Live Dashboard</span>
             </div>
 
-            {/* Period selector */}
-            {activeTab === 'weekly' && weeklyReports.length > 0 && (
-              <select aria-label="Weekly SLA report period" value={activeWeeklyReport?.id || ''} onChange={(event) => setSelectedWeeklyId(event.target.value)}
-                style={{ background: 'var(--ui-surface, #111c30)', color: 'var(--ui-text, #f8fafc)', border: '1px solid var(--ui-control-border)', borderRadius: '8px', padding: '7px 12px', fontSize: '12px', fontWeight: 600, maxWidth: '230px' }}>
-                {weeklyReports.map((report, index) => <option key={report.id} value={report.id}>{report.period || report.title}{index === 0 ? ' (Latest)' : ''}</option>)}
-              </select>
-            )}
-            {activeTab === 'aging' && agingReports.length > 0 && (
-              <select
-                aria-label="Aging report period"
-                value={selectedAgingId}
-                onChange={(e) => setSelectedAgingId(e.target.value)}
-                style={{
-                  background: 'var(--ui-surface, #111c30)',
-                  color: 'var(--ui-text, #f8fafc)',
-                  border: '1px solid var(--ui-control-border)',
-                  borderRadius: '8px',
-                  padding: '7px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  maxWidth: '200px',
-                }}
-              >
-                {agingReports.map((r, i) => (
-                  <option key={r.id} value={r.id}>{r.period || r.title}{i === 0 ? ' (Latest)' : ''}</option>
-                ))}
-              </select>
-            )}
-
-            {activeTab === 'monthly' && monthlyReports.length > 0 && (
-              <select
-                aria-label="Monthly SLA report period"
-                value={selectedMonthlyId}
-                onChange={(e) => setSelectedMonthlyId(e.target.value)}
-                style={{
-                  background: 'var(--ui-surface, #111c30)',
-                  color: 'var(--ui-text, #f8fafc)',
-                  border: '1px solid var(--ui-control-border)',
-                  borderRadius: '8px',
-                  padding: '7px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  maxWidth: '200px',
-                }}
-              >
-                {monthlyReports.map((r, i) => (
-                  <option key={r.id} value={r.id}>{r.period || r.title}{i === 0 ? ' (Latest)' : ''}</option>
-                ))}
-              </select>
-            )}
-
-          </div>
-
-          <div className="dashboard-theme-switch" role="group" aria-label="Dashboard appearance">
-            <button type="button" aria-label="Light" title="Light mode" aria-pressed={theme === 'light'} onClick={() => changeTheme('light')}>
-              <Sun size={13} aria-hidden="true" />
-            </button>
-            <button type="button" aria-label="Night" title="Night mode" aria-pressed={theme === 'night'} onClick={() => changeTheme('night')}>
-              <Moon size={13} aria-hidden="true" />
-            </button>
+            <AppearanceSwitch label="Dashboard appearance" value={theme} onChange={changeTheme} />
           </div>
         </div>
       </header>
+      <main id="public-report-content" tabIndex={-1} className="live-content" style={{ flex: 1 }}>
 
-      {/* ═══════════════════ MAIN CONTENT ═══════════════════ */}
-      <main className="live-content" style={{ flex: 1 }}>
-
-        {/* ── IR Analytics Dashboard Tab ── */}
+        {unavailableModules.length > 0 && (
+          <div className="public-report-load-notice" role="status">
+            <span>Could not refresh {unavailableModules.map(type => REPORT_NAMES[type]).join(' and ')}.</span>
+            <button type="button" onClick={() => loadReports(true)}>Try again</button>
+          </div>
+        )}
         {activeTab === 'ir-analytics' && (
-          <IRAnalyticsDashboard
-            agingReports={agingReports}
-            monthlyReports={monthlyReports}
-          />
+          <IRAnalyticsDashboard agingReports={agingReports} monthlyReports={monthlyReports} legacyReports={legacyReports}
+            isLoading={ANALYTICS_MODULES.some(type => loadStatus[type] === 'loading')}
+            hasLoadError={unavailableModules.length > 0} />
         )}
 
         {activeTab === 'weekly' && (
-          isLoading ? <LoadingState label="Loading weekly SLA reports…" /> : !activeWeeklyReport ? (
-            <EmptyState icon="📅" title="No Published Weekly SLA Reports"
-              description="Open a weekly report in the administrator workspace and choose Publish to dashboard."
+          !activeWeeklyReport ? (
+            <ReportPlaceholder status={loadStatus.weekly} loadingLabel="Loading weekly SLA reports…"
+              icon="📅" title="No Published Weekly SLA Reports"
               onRetry={() => loadReports(true)} />
           ) : (
             <SLAReportTable key={activeWeeklyReport.id} data={activeWeeklyReport.reportData}
-              routedIncidents={activeWeeklyReport.routedIncidents} onCellClick={handleCellClick} isPublicView />
+              routedIncidents={activeWeeklyReport.routedIncidents} onCellClick={handleCellClick} isPublicView
+              periodControl={<ReportPeriodPicker label="Weekly SLA report period" reports={weeklyReports}
+                selectedId={activeWeeklyReport.id} onSelect={setSelectedWeeklyId} />} />
           )
         )}
-
-        {/* ── Aging Tab ── */}
         {activeTab === 'aging' && (
-          isLoading ? (
-            <LoadingState label="Loading aging ticket reports…" />
-          ) : !activeAgingReport ? (
-            <EmptyState
+          !activeAgingReport ? (
+            <ReportPlaceholder status={loadStatus.aging} loadingLabel="Loading aging ticket reports…"
               icon="⏳"
               title="No Published Aging Reports"
               description="There are no published aging ticket reports yet. Generate and publish a report from the administrator workspace to view it here."
@@ -472,16 +295,14 @@ export default function PublicDashboardPage() {
               routedIncidents={activeAgingReport.routedIncidents}
               accountName="Department Guest"
               isPublicView={true}
+              periodControl={<ReportPeriodPicker label="Aging report period" reports={agingReports}
+                selectedId={activeAgingReport.id} onSelect={setSelectedAgingId} />}
             />
           )
         )}
-
-        {/* ── Monthly SLA Tab ── */}
         {activeTab === 'monthly' && (
-          isLoading ? (
-            <LoadingState label="Loading monthly SLA reports…" />
-          ) : !activeMonthlyReport ? (
-            <EmptyState
+          !activeMonthlyReport ? (
+            <ReportPlaceholder status={loadStatus.monthly} loadingLabel="Loading monthly SLA reports…"
               icon="📊"
               title="No Published Monthly Reports"
               description="There are no published monthly SLA reports yet. Generate and publish a monthly report from the Monthly Incident Report module to view it here."
@@ -495,25 +316,19 @@ export default function PublicDashboardPage() {
               routedIncidents={activeMonthlyReport.routedIncidents}
               isAdmin={false}
               isPublicView={true}
+              periodControl={<ReportPeriodPicker label="Monthly SLA report period" reports={monthlyReports}
+                selectedId={activeMonthlyReport.id} onSelect={setSelectedMonthlyId} />}
             />
           )
         )}
       </main>
-
-      {/* ═══════════════════ FOOTER ═══════════════════ */}
-      <footer className="admin-footer app-footer">
-        <p>&copy; {new Date().getFullYear()} Equitable Computer Services Inc.</p>
-      </footer>
-
-      {/* ═══════════════════ MODAL ═══════════════════ */}
+      <AppFooter />
       <DetailModal
         isOpen={modalState.isOpen}
         title={modalState.title}
         incidentIds={modalState.incidentIds}
         onClose={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
       />
-
-      {/* ═══════════════════ GLOBAL STYLES ═══════════════════ */}
       <style>{`
         @keyframes pulse {
           0%, 100% { box-shadow: 0 0 0 3px rgba(16,185,129,0.35); }
@@ -537,7 +352,25 @@ export default function PublicDashboardPage() {
   );
 }
 
-// ── Shared Helper Components ──────────────────────────────────────────────────
+
+function ReportPeriodPicker({ label, reports, selectedId, onSelect }: {
+  label: string;
+  reports: { id: string; period: string; title: string }[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const selected = reports.find((report) => report.id === selectedId);
+  return (
+    <select className="live-report-select" aria-label={label} value={selectedId} title={selected?.period || selected?.title}
+      onChange={(event) => onSelect(event.target.value)}>
+      {reports.map((report, index) => (
+        <option key={report.id} value={report.id}>
+          {report.period || report.title}{index === 0 ? ' (Latest)' : ''}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function LoadingState({ label }: { label: string }) {
   return (
@@ -549,15 +382,20 @@ function LoadingState({ label }: { label: string }) {
   );
 }
 
-function EmptyState({ icon, title, description, onRetry }: {
+function ReportPlaceholder({ status, loadingLabel, icon, title, description, onRetry }: {
+  status: ReportLoadStatus;
+  loadingLabel: string;
   icon: string;
   title: string;
-  description: string;
+  description?: string;
   onRetry: () => void;
 }) {
+  if (status === 'loading') return <LoadingState label={loadingLabel} />;
+  if (status === 'error') return null;
+
   return (
-    <div style={{
-      background: 'linear-gradient(145deg, var(--ui-surface, #0d1a2e), var(--ui-page, #0a1525))',
+    <div className="public-report-state" style={{
+      background: 'var(--glass-panel, linear-gradient(145deg, var(--ui-surface, #0d1a2e), var(--ui-page, #0a1525)))',
       border: '1px solid var(--ui-panel-border)',
       borderRadius: '20px',
       padding: '64px 32px',
@@ -567,7 +405,7 @@ function EmptyState({ icon, title, description, onRetry }: {
     }}>
       <div style={{ fontSize: '52px', marginBottom: '18px' }}>{icon}</div>
       <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--ui-text, #fff)', marginBottom: '10px' }}>{title}</h2>
-      <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '14px', lineHeight: 1.7, marginBottom: '24px', maxWidth: '420px', margin: '0 auto 24px' }}>{description}</p>
+      {description && <p style={{ color: 'var(--ui-muted, #64748b)', fontSize: '14px', lineHeight: 1.7, maxWidth: '420px', margin: '0 auto 24px' }}>{description}</p>}
       <button
         type="button"
         onClick={onRetry}

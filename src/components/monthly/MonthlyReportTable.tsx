@@ -1,35 +1,42 @@
 'use client';
 
-import React, { useEffect, useId, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { BarChart3, Check, ClipboardList, Clock3, FileCheck2, Maximize, Minimize, Search, X, ArrowDown, ArrowUp } from 'lucide-react';
 import type { Incident } from '@/types/incident';
 import type { MonthlyReportData } from '@/types/monthly';
 import {
   ALL_TICKETS_COLUMNS, CLOSED_TICKETS_COLUMNS, FIRST_RESPONSE_COLUMNS,
-  getIncidentMonthlyValue as getRawValue, ROOT_CAUSE_FACTORS, ROOT_CAUSE_TYPES, findRootCauseType,
+  getIncidentMonthlyValue as getRawValue, ROOT_CAUSE_TYPES,
 } from '@/types/monthly';
-import { saveReport } from '@/lib/storage/report-storage';
 import { filterAcceptableFirstResponse } from '@/lib/monthly/calculator';
+import { getRootCauseOptions, type MonthlyRootCauseField } from '@/lib/monthly/root-cause';
+import { isMonthlyClosedTicket } from '@/lib/monthly/ticket-status';
 import { generateMonthlyRemarks } from '@/lib/monthly/remarks';
 import { ExecutiveRemarksCard } from '@/components/monthly/ExecutiveRemarksCard';
-import { AcceptableFRInput } from '@/components/monthly/AcceptableFRInput';
-import { DeleteIR } from '@/components/monthly/DeleteIR';
+import { ArchiveReportButton } from '@/components/report/ArchiveReportButton';
+import { ReportTicketActions } from '@/components/report/ReportTicketActions';
+import { ReportImageExport } from '@/components/report/ReportImageExport';
+import { ReportResultHeader } from '@/components/report/ReportResultHeader';
 import { RequestIdLink } from '@/components/report/RequestIdLink';
 import { SLAMetricHeading } from '@/components/report/SLATableLabels';
-import { ReportImageExport } from '@/components/report/ReportImageExport';
 
 interface MonthlyReportTableProps {
   data: MonthlyReportData;
   onCellClick?: (title: string, incidentIds: string[]) => void;
   routedIncidents?: Incident[];
   isAdmin?: boolean;
-  onUpdateIncident?: (requestId: string, field: 'Revised Root Cause Type' | 'Revised Identified Root Cause', value: string) => void;
-  onArchiveReport?: () => void | Promise<void>;
+  onUpdateIncident?: (requestId: string, field: MonthlyRootCauseField, value: string) => void;
   onAddAcceptableFR?: (requestId: string) => void;
   onDeleteIncident?: (requestId: string) => void;
   onSaveReport?: () => void | Promise<void>;
+  onSaveChanges?: () => Promise<void>;
   isArchived?: boolean;
+  saving?: boolean;
+  saveError?: string;
   isPublicView?: boolean;
+  headingLevel?: 1 | 2;
+  exportAction?: React.ReactNode;
+  periodControl?: React.ReactNode;
 }
 
 type TabId = 'sla-dashboard' | 'all-tickets' | 'closed-tickets' | 'first-response' | 'powerbi';
@@ -53,37 +60,30 @@ function RateBadge({ rate, target, emptyLabel = 'N/A' }: { rate: number | null; 
   );
 }
 
-function EditableRevisedCell({ value, requestId, field, currentType, isAdmin, onSave }: {
+function EditableRevisedCell({ value, requestId, field, currentType, saving, onSave }: {
   value: string;
   requestId: string;
-  field: 'Revised Root Cause Type' | 'Revised Identified Root Cause';
-  currentType?: string;
-  isAdmin: boolean;
+  field: MonthlyRootCauseField;
+  currentType: string;
+  saving: boolean;
   onSave?: MonthlyReportTableProps['onUpdateIncident'];
 }) {
   const isType = field === 'Revised Root Cause Type';
+  const options = isType ? ROOT_CAUSE_TYPES : getRootCauseOptions(currentType);
+  const disabled = !isType && !options.length;
   return (
-    <td className="monthly-revised-cell cell-revised-highlight is-editable">
-      {isAdmin && onSave ? (
+    <td className={'monthly-revised-cell cell-revised-highlight' + (onSave ? ' is-editable' : '')}>
+      {onSave ? (
         <>
-          <select value={value || ''} aria-label={`${field} for ${requestId}`} onChange={event => {
-            const next = event.target.value;
-            onSave(requestId, field, next);
-            if (!isType && next) {
-              const parent = findRootCauseType(next);
-              if (parent && parent !== currentType) onSave(requestId, 'Revised Root Cause Type', parent);
-            }
-          }}>
-            <option value="">{isType ? 'Select root cause type' : 'Select identified root cause'}</option>
-            {isType ? <>
-              {value && !ROOT_CAUSE_TYPES.includes(value) && <option value={value}>{value} (Current)</option>}
-              {ROOT_CAUSE_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
-            </> : <>
-              {value && !Object.values(ROOT_CAUSE_FACTORS).some(causes => causes.includes(value)) && <option value={value}>{value} (Current)</option>}
-              {Object.entries(ROOT_CAUSE_FACTORS).map(([type, causes]) => (
-                <optgroup key={type} label={type}>{causes.map(cause => <option key={cause} value={cause}>{cause}</option>)}</optgroup>
-              ))}
-            </>}
+          <select
+            value={isType || options.includes(value) ? value : ''}
+            aria-label={`${field} for ${requestId}`}
+            disabled={saving || disabled}
+            onChange={(event) => onSave(requestId, field, event.target.value)}
+          >
+            <option value="">{isType ? 'Select root cause type' : disabled ? 'Select a revised type first' : 'Select identified root cause'}</option>
+            {isType && value && !options.includes(value) && <option value={value}>{value} (Current)</option>}
+            {options.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
           {value && <span className="monthly-revision-value">{value}</span>}
         </>
@@ -95,7 +95,6 @@ function EditableRevisedCell({ value, requestId, field, currentType, isAdmin, on
 function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; onCellClick?: Drilldown }) {
   const kpiPanelRef = useRef<HTMLDivElement>(null);
   const technicianSlaPanelRef = useRef<HTMLDivElement>(null);
-
   const fr = data.kpis.find(k => k.label.toLowerCase().includes('response'));
   const rt = data.kpis.find(k => k.label.toLowerCase().includes('resolution'));
   const frTarget = fr?.targetPercent ?? 85;
@@ -106,14 +105,7 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
 
   return (
     <div className="monthly-sla-content">
-      <div
-        className="monthly-sla-toolbar no-export"
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          marginBottom: '16px',
-        }}
-      >
+      <div className="monthly-sla-toolbar no-export">
         <ReportImageExport
           sources={[
             {
@@ -133,7 +125,6 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
           period={data.reportPeriod || ''}
         />
       </div>
-
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
       >
@@ -209,11 +200,11 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
                   <th scope="row">{row.technician}</th>
                   <td><TicketCount count={row.frTotal} ids={row.frTotalIds} label={`${row.technician} — First Response — Total`} onOpen={onCellClick} /></td>
                   <td className={row.frFailed > 0 ? 'monthly-failed-count' : ''}><TicketCount count={row.frFailed} ids={row.frFailedIds} label={`${row.technician} — First Response — Failed`} onOpen={onCellClick} /></td>
-                  <td><TicketCount count={row.frPassed} ids={row.frPassedIds} label={`${row.technician} — First Response — Passed`} onOpen={onCellClick} /></td>
+                  <td data-sla-passed={row.frPassed > 0}><TicketCount count={row.frPassed} ids={row.frPassedIds} label={`${row.technician} — First Response — Passed`} onOpen={onCellClick} /></td>
                   <td><RateBadge rate={row.frPassRate} target={frTarget} /></td>
                   <td><TicketCount count={row.rtTotal} ids={row.rtTotalIds} label={`${row.technician} — Resolution — Total`} onOpen={onCellClick} /></td>
                   <td className={row.rtFailed > 0 ? 'monthly-failed-count' : ''}><TicketCount count={row.rtFailed} ids={row.rtFailedIds} label={`${row.technician} — Resolution — Failed`} onOpen={onCellClick} /></td>
-                  <td><TicketCount count={row.rtPassed} ids={row.rtPassedIds} label={`${row.technician} — Resolution — Passed`} onOpen={onCellClick} /></td>
+                  <td data-sla-passed={row.rtPassed > 0}><TicketCount count={row.rtPassed} ids={row.rtPassedIds} label={`${row.technician} — Resolution — Passed`} onOpen={onCellClick} /></td>
                   <td><RateBadge rate={row.rtPassRate} target={rtTarget} /></td>
                 </tr>
               ))}
@@ -223,11 +214,11 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
               <th scope="row">Total</th>
               <td><TicketCount count={totals.frTotal} ids={totals.frTotalIds} label="Total — First Response — Total" onOpen={onCellClick} /></td>
               <td className={totals.frFailed > 0 ? 'monthly-failed-count' : ''}><TicketCount count={totals.frFailed} ids={totals.frFailedIds} label="Total — First Response — Failed" onOpen={onCellClick} /></td>
-              <td><TicketCount count={totals.frPassed} ids={totals.frPassedIds} label="Total — First Response — Passed" onOpen={onCellClick} /></td>
+              <td data-sla-passed={totals.frPassed > 0}><TicketCount count={totals.frPassed} ids={totals.frPassedIds} label="Total — First Response — Passed" onOpen={onCellClick} /></td>
               <td><RateBadge rate={totals.frPassRate} target={frTarget} /></td>
               <td><TicketCount count={totals.rtTotal} ids={totals.rtTotalIds} label="Total — Resolution — Total" onOpen={onCellClick} /></td>
               <td className={totals.rtFailed > 0 ? 'monthly-failed-count' : ''}><TicketCount count={totals.rtFailed} ids={totals.rtFailedIds} label="Total — Resolution — Failed" onOpen={onCellClick} /></td>
-              <td><TicketCount count={totals.rtPassed} ids={totals.rtPassedIds} label="Total — Resolution — Passed" onOpen={onCellClick} /></td>
+              <td data-sla-passed={totals.rtPassed > 0}><TicketCount count={totals.rtPassed} ids={totals.rtPassedIds} label="Total — Resolution — Passed" onOpen={onCellClick} /></td>
               <td><RateBadge rate={totals.rtPassRate} target={rtTarget} /></td>
             </tr></tfoot>
           </table>
@@ -239,9 +230,13 @@ function MonthlySLADashboard({ data, onCellClick }: { data: MonthlyReportData; o
   );
 }
 
-function EnhancedTicketGrid({ incidents, columns, title, emptyMessage, isAdmin = false, onUpdateIncident, acceptable = false }: {
+function EnhancedTicketGrid({
+  incidents, columns, title, emptyMessage, isAdmin = false, onUpdateIncident, acceptable = false,
+  saveAction, saveError, saving = false,
+}: {
   incidents: Incident[]; columns: readonly string[]; title: string; emptyMessage: string;
   isAdmin?: boolean; onUpdateIncident?: MonthlyReportTableProps['onUpdateIncident']; acceptable?: boolean;
+  saveAction?: React.ReactNode; saveError?: string; saving?: boolean;
 }) {
   const controlId = useId();
   const [searchTerm, setSearchTerm] = useState('');
@@ -277,8 +272,10 @@ function EnhancedTicketGrid({ incidents, columns, title, emptyMessage, isAdmin =
           </div></div>
           {statuses.length > 0 && <div className="monthly-filter-field"><label htmlFor={`${controlId}-status`}>Status</label><select id={`${controlId}-status`} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}><option value="ALL">All statuses</option>{statuses.map(status => <option key={status} value={status}>{status}</option>)}</select></div>}
           <div className="monthly-filter-field"><label htmlFor={`${controlId}-size`}>Rows per page</label><select id={`${controlId}-size`} value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}>{[10, 25, 50].map(size => <option key={size} value={size}>{size}</option>)}<option value={-1}>All</option></select></div>
+          {saveAction}
         </div>
       </div>
+      {saveError && <p className="monthly-error" role="alert">{saveError}</p>}
       {!incidents.length ? <p className="monthly-empty">{emptyMessage}</p> : <>
         <p className="monthly-table-hint">Scroll horizontally to view all columns. Select a column heading to sort.</p>
         <div className="monthly-report-scroll monthly-ticket-scroll" role="region" aria-label={`${title} table`} tabIndex={0}>
@@ -303,10 +300,14 @@ function EnhancedTicketGrid({ incidents, columns, title, emptyMessage, isAdmin =
               <td className="monthly-row-index">{start + index + 1}</td>
               {columns.map((col, columnIndex) => {
                 const value = getRawValue(inc, col);
-                if (col === 'Revised Root Cause Type' || col === 'Revised Identified Root Cause') return <EditableRevisedCell key={col} value={value} requestId={inc.requestId} field={col} currentType={getRawValue(inc, 'Revised Root Cause Type') || getRawValue(inc, 'Root Cause Type')} isAdmin={isAdmin} onSave={onUpdateIncident} />;
+                if (col === 'Revised Root Cause Type' || col === 'Revised Identified Root Cause') {
+                  if (!isMonthlyClosedTicket(inc)) return <td key={col}>—</td>;
+                  return <EditableRevisedCell key={col} value={value} requestId={inc.requestId} field={col}
+                    currentType={getRawValue(inc, 'Revised Root Cause Type')} saving={saving} onSave={isAdmin ? onUpdateIncident : undefined} />;
+                }
                 const normalized = col.toLowerCase();
                 if (normalized.includes('request status') || normalized === 'status') {
-                  const closed = /^(closed|resolved|completed)$/i.test(value);
+                  const closed = isMonthlyClosedTicket(inc);
                   return <td key={col}><span className={`monthly-status monthly-status--${closed ? 'met' : 'info'}`}>{value || '—'}</span></td>;
                 }
                 if (normalized.includes('overdue status')) {
@@ -395,33 +396,23 @@ function PowerBIReport() {
   );
 }
 
-export function MonthlyReportTable({ data, onCellClick, routedIncidents, isAdmin = false, isPublicView = false, onUpdateIncident, onArchiveReport, onAddAcceptableFR, onDeleteIncident, onSaveReport, isArchived = false }: MonthlyReportTableProps) {
+export function MonthlyReportTable({
+  data, onCellClick, routedIncidents, isAdmin = false, isPublicView = false, periodControl, headingLevel, exportAction,
+  onUpdateIncident, onAddAcceptableFR, onDeleteIncident, onSaveReport, onSaveChanges,
+  isArchived = false, saving = false, saveError,
+}: MonthlyReportTableProps) {
   const [activeTab, setActiveTab] = useState<TabId>('sla-dashboard');
-  const [internalSaved, setInternalSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [archiveError, setArchiveError] = useState('');
   const tabsId = useId();
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const allIncidents = routedIncidents?.length ? routedIncidents : data.allTickets;
   const acceptableFR = useMemo(() => filterAcceptableFirstResponse(allIncidents), [allIncidents]);
-  const savedState = isArchived || internalSaved;
-  const handleSaveReport = useCallback(async () => {
-    if (saving) return;
-    setSaving(true);
-    setArchiveError('');
-    try {
-      if (onSaveReport) await onSaveReport();
-      else if (onArchiveReport) await onArchiveReport();
-      else {
-        const period = data.reportPeriod || 'Monthly Period';
-        await saveReport({ id: `monthly-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`, type: 'monthly', title: data.reportTitle || `Monthly Overall Ticket Report - ${period}`, period, reportData: data, routedIncidents });
-        setInternalSaved(true);
-        setTimeout(() => setInternalSaved(false), 4000);
-      }
-    } catch (error) {
-      setArchiveError(error instanceof Error ? error.message : 'Could not save the monthly report to the archive.');
-    } finally { setSaving(false); }
-  }, [saving, onSaveReport, onArchiveReport, data, routedIncidents]);
+  const saveChanges = isAdmin && !isPublicView && onSaveChanges && (
+    <button type="button" className="report-save-button" onClick={onSaveChanges}
+      disabled={saving} aria-busy={saving}>
+      {isArchived && !saving && <Check size={16} aria-hidden="true" />}
+      <span aria-live="polite">{saving ? 'Saving…' : isArchived ? 'Changes saved' : 'Save changes'}</span>
+    </button>
+  );
   const tabs = [
     { id: 'sla-dashboard' as const, label: 'SLA dashboard', count: null, Icon: BarChart3 },
     { id: 'all-tickets' as const, label: 'All tickets', count: allIncidents.length, Icon: ClipboardList },
@@ -432,11 +423,40 @@ export function MonthlyReportTable({ data, onCellClick, routedIncidents, isAdmin
 
   return (
     <div className="monthly-report-module" id="monthly-report-canvas" data-public-view={isPublicView} data-active-tab={activeTab}>
-      <header className="monthly-module-header">
-        <div className="monthly-module-heading"><span className="monthly-module-icon" aria-hidden="true">📊</span><div className="monthly-module-title"><h2>Monthly SLA Report</h2><span className="monthly-period">{data.reportPeriod || 'Monthly review'}</span></div></div>
-        {!isPublicView && <button type="button" className={`monthly-save-button${savedState ? ' is-saved' : ''}`} onClick={handleSaveReport} disabled={saving} aria-busy={saving}>{savedState && <Check size={16} aria-hidden="true" />}{saving ? 'Saving…' : savedState ? 'Archived' : 'Archive report'}</button>}
-      </header>
-      {archiveError && <p className="monthly-error" role="alert">{archiveError}</p>}
+      {isPublicView ? <header className="monthly-module-header">
+        <div className="monthly-module-heading">
+          <span className="monthly-module-icon" aria-hidden="true">📊</span>
+          <div className="monthly-module-title">
+            <h2>Monthly SLA Report</h2>
+            {!periodControl && <span className="monthly-period">{data.reportPeriod || 'Monthly review'}</span>}
+          </div>
+        </div>
+        {periodControl}
+      </header> : (
+        <ReportResultHeader
+          title="Monthly SLA Report"
+          icon="📊"
+          headingLevel={headingLevel}
+          periodLabel={data.reportPeriod}
+          actions={isAdmin && (
+            <>
+              {onSaveReport && <ArchiveReportButton onArchive={onSaveReport} saving={saving} archived={isArchived} />}
+              {exportAction}
+            </>
+          )}
+        />
+      )}
+      {saveError && activeTab !== 'all-tickets' && <p className="monthly-error" role="alert">{saveError}</p>}
+      {isAdmin && !isPublicView && (onAddAcceptableFR || onDeleteIncident) && (
+        <ReportTicketActions
+          incidents={allIncidents}
+          failedIds={data.technicianTotals.frFailedIds}
+          reportName="monthly report"
+          busy={saving}
+          onApprove={onAddAcceptableFR}
+          onDelete={onDeleteIncident}
+        />
+      )}
       <div className="monthly-module-tabs" role="tablist" aria-label="Monthly report sections">
         {tabs.map((tab, index) => (
           <button key={tab.id} ref={element => { tabButtons.current[index] = element; }} type="button" role="tab" id={`${tabsId}-${tab.id}`} aria-controls={`${tabsId}-panel-${tab.id}`} aria-selected={activeTab === tab.id} tabIndex={activeTab === tab.id ? 0 : -1} onClick={() => setActiveTab(tab.id)} onKeyDown={event => {
@@ -453,18 +473,17 @@ export function MonthlyReportTable({ data, onCellClick, routedIncidents, isAdmin
       {tabs.map(tab => <div key={tab.id} role="tabpanel" id={`${tabsId}-panel-${tab.id}`} aria-labelledby={`${tabsId}-${tab.id}`} hidden={activeTab !== tab.id} tabIndex={0}>
         {activeTab === tab.id && <>
           {tab.id === 'sla-dashboard' && <MonthlySLADashboard data={data} onCellClick={onCellClick} />}
-          {tab.id === 'all-tickets' && <>
-            {isAdmin && !isPublicView && onDeleteIncident && <DeleteIR incidents={allIncidents} onDelete={onDeleteIncident} />}
-            <EnhancedTicketGrid incidents={allIncidents} columns={ALL_TICKETS_COLUMNS} title="All incidents" emptyMessage="No tickets found for this period." isAdmin={isAdmin && !isPublicView} onUpdateIncident={onUpdateIncident} />
-          </>}
-          {tab.id === 'closed-tickets' && <>
-            {isAdmin && !isPublicView && onDeleteIncident && <DeleteIR incidents={data.closedTickets} onDelete={onDeleteIncident} />}
+          {tab.id === 'all-tickets' && (
+            <EnhancedTicketGrid incidents={allIncidents} columns={ALL_TICKETS_COLUMNS} title="All incidents"
+              emptyMessage="No tickets found for this period." isAdmin={isAdmin && !isPublicView}
+              onUpdateIncident={onUpdateIncident} saveAction={saveChanges} saveError={saveError} saving={saving} />
+          )}
+          {tab.id === 'closed-tickets' && (
             <EnhancedTicketGrid incidents={data.closedTickets} columns={CLOSED_TICKETS_COLUMNS} title="Closed incidents" emptyMessage="No closed tickets found for this period." isAdmin={isAdmin && !isPublicView} onUpdateIncident={onUpdateIncident} />
-          </>}
-          {tab.id === 'first-response' && <>
-            {isAdmin && !isPublicView && onAddAcceptableFR && <AcceptableFRInput incidents={allIncidents} onAdd={onAddAcceptableFR} />}
+          )}
+          {tab.id === 'first-response' && (
             <EnhancedTicketGrid incidents={acceptableFR} columns={FIRST_RESPONSE_COLUMNS} title="Acceptable first response" emptyMessage="No accepted first-response exceptions for this period." isAdmin={isAdmin && !isPublicView} onUpdateIncident={onUpdateIncident} acceptable />
-          </>}
+          )}
           {tab.id === 'powerbi' && <PowerBIReport />}
         </>}
       </div>)}

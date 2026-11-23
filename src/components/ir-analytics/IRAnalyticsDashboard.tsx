@@ -1,6 +1,7 @@
 ﻿'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { SlidersHorizontal, Zap } from 'lucide-react';
 import type {
   NormalizedTicket,
   IRDashboardFilters,
@@ -21,11 +22,12 @@ import {
   convertIncidentsToNormalizedTickets,
 } from '@/lib/ir-analytics/engine';
 import type { Incident } from '@/types/incident';
-import { getLegacyStoredReports } from '@/lib/storage/report-storage';
-import { fetchServerAgingReports, fetchServerMonthlyReports } from '@/lib/api/client';
+import type { StoredReport } from '@/lib/storage/report-storage';
+import { IncidentOverviewCharts } from '@/components/ui/IncidentOverviewCharts';
+import { AnalyticsClearButton } from '@/components/ui/AnalyticsClearButton';
 import { IRSummaryCards } from './SummaryCards';
 import { IRFilterBar } from './FilterBar';
-import { BarChart, DonutChart, LineChart, CHART_COLORS, STATUS_COLORS, AGING_COLORS, analyticsChartColor } from './Charts';
+import { BarChart, CHART_COLORS, AGING_COLORS, analyticsChartColor } from './Charts';
 
 export interface ReportSourceItem {
   id: string;
@@ -36,136 +38,80 @@ export interface ReportSourceItem {
   tickets: NormalizedTicket[];
 }
 
-export interface IRAnalyticsDashboardProps {
-  agingReports?: Array<{
-    id: string;
-    title: string;
-    period: string;
-    reportData?: any;
-    routedIncidents?: Incident[];
-  }>;
-  monthlyReports?: Array<{
-    id: string;
-    title: string;
-    period: string;
-    reportData?: any;
-    routedIncidents?: Incident[];
-  }>;
+interface AnalyticsReport {
+  id: string;
+  title: string;
+  period: string;
+  routedIncidents?: Incident[];
 }
 
+export interface IRAnalyticsDashboardProps {
+  agingReports: AnalyticsReport[];
+  monthlyReports: (AnalyticsReport & {
+    reportData: { allTickets?: Incident[]; closedTickets?: Incident[] };
+  })[];
+  legacyReports: StoredReport[];
+  isLoading: boolean;
+  hasLoadError: boolean;
+}
+
+const SOURCE_ICONS = { monthly: '📊', aging: '⏳', weekly: '📅' };
+const FILTER_KEYS = Object.keys(DEFAULT_FILTERS) as (keyof IRDashboardFilters)[];
+type ClearPanel = 'toolbar' | 'trend' | 'status' | 'aging' | 'technicians' | 'departments';
+
 export function IRAnalyticsDashboard({
-  agingReports = [],
-  monthlyReports = [],
+  agingReports,
+  monthlyReports,
+  legacyReports,
+  isLoading,
+  hasLoadError,
 }: IRAnalyticsDashboardProps) {
-  const [tickets, setTickets] = useState<NormalizedTicket[]>([]);
-  const [reportSources, setReportSources] = useState<ReportSourceItem[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string>('all');
   const [filters, setFilters] = useState<IRDashboardFilters>(DEFAULT_FILTERS);
   const [techRankMode, setTechRankMode] = useState<TechRankMode>('resolved');
-  const [drilldownLabel, setDrilldownLabel] = useState('');
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [chartSelection, setChartSelection] = useState<{ chart: 'trend' | 'aging'; label: string } | null>(null);
+  const [clearPanel, setClearPanel] = useState<ClearPanel>('toolbar');
   const [showFilters, setShowFilters] = useState(false);
 
-  // ── Sync data from reporting modules (Weekly, Monthly, Aging & Stored Archive) ──
-  const syncModuleData = useCallback(async () => {
+  const { reportSources, tickets } = useMemo(() => {
     const sources: ReportSourceItem[] = [];
-    const allNormalizedTickets: NormalizedTicket[] = [];
+    const ticketsById = new Map<string, NormalizedTicket>();
 
-    // 1. Monthly Reports
-    let mReports = monthlyReports;
-    if (!mReports || mReports.length === 0) {
+    function addSource(report: AnalyticsReport, type: StoredReport['type'], incidents: Incident[] | undefined, label: string) {
+      if (!Array.isArray(incidents) || incidents.length === 0) return;
+      const id = report.id || type + '-' + report.period;
       try {
-        const serverM = await fetchServerMonthlyReports();
-        if (Array.isArray(serverM)) mReports = serverM as any;
-      } catch { }
-    }
-    if (Array.isArray(mReports)) {
-      for (const m of mReports) {
-        const incidents: Incident[] =
-          (m.routedIncidents as Incident[]) ||
-          (m.reportData as any)?.allTickets ||
-          (m.reportData as any)?.closedTickets ||
-          [];
-        if (incidents.length > 0) {
-          const norm = convertIncidentsToNormalizedTickets(incidents, `monthly-${m.id || m.period}`);
-          sources.push({
-            id: String(m.id || `monthly-${m.period}`),
-            name: `📊 Monthly: ${m.title || 'Monthly Report'} (${m.period})`,
-            type: 'monthly',
-            period: m.period || '',
-            ticketCount: norm.length,
-            tickets: norm,
-          });
-          allNormalizedTickets.push(...norm);
-        }
+        const normalized = convertIncidentsToNormalizedTickets(incidents, type + '-' + id);
+        sources.push({
+          id,
+          name: `${label} (${report.period})`,
+          type,
+          period: report.period || '',
+          ticketCount: normalized.length,
+          tickets: normalized,
+        });
+        for (const ticket of normalized) ticketsById.set(ticket.ticketId, ticket);
+      } catch (error) {
+        console.warn('Could not read incident analytics for ' + type + ' report:', error);
       }
     }
 
-    // 2. Aging Reports
-    let aReports = agingReports;
-    if (!aReports || aReports.length === 0) {
-      try {
-        const serverA = await fetchServerAgingReports();
-        if (Array.isArray(serverA)) aReports = serverA as any;
-      } catch { }
+    for (const report of monthlyReports) {
+      addSource(report, 'monthly', report.routedIncidents || report.reportData.allTickets || report.reportData.closedTickets,
+        `${SOURCE_ICONS.monthly} Monthly: ${report.title || 'Monthly Report'}`);
     }
-    if (Array.isArray(aReports)) {
-      for (const a of aReports) {
-        const incidents: Incident[] = (a.routedIncidents as Incident[]) || [];
-        if (incidents.length > 0) {
-          const norm = convertIncidentsToNormalizedTickets(incidents, `aging-${a.id || a.period}`);
-          sources.push({
-            id: String(a.id || `aging-${a.period}`),
-            name: `⏳ Aging: ${a.title || 'Aging Report'} (${a.period})`,
-            type: 'aging',
-            period: a.period || '',
-            ticketCount: norm.length,
-            tickets: norm,
-          });
-          allNormalizedTickets.push(...norm);
-        }
+    for (const report of agingReports) {
+      addSource(report, 'aging', report.routedIncidents, `${SOURCE_ICONS.aging} Aging: ${report.title || 'Aging Report'}`);
+    }
+    for (const report of legacyReports) {
+      if (report && SOURCE_ICONS[report.type] && !sources.some(source => source.id === report.id)) {
+        addSource(report, report.type, report.routedIncidents, `📁 ${SOURCE_ICONS[report.type]} ${report.title}`);
       }
     }
 
-    // 3. Stored Reports Archive (Weekly / Monthly / Aging)
-    try {
-      const localArchive = getLegacyStoredReports();
-      for (const item of localArchive) {
-        const alreadyInSources = sources.some((s) => s.id === item.id);
-        if (!alreadyInSources && item.routedIncidents && item.routedIncidents.length > 0) {
-          const norm = convertIncidentsToNormalizedTickets(item.routedIncidents, `local-${item.type}-${item.id}`);
-          sources.push({
-            id: item.id,
-            name: `📁 ${item.type === 'weekly' ? '📅 Weekly' : item.type === 'monthly' ? '📊 Monthly' : '⏳ Aging'}: ${item.title} (${item.period})`,
-            type: item.type,
-            period: item.period || '',
-            ticketCount: norm.length,
-            tickets: norm,
-          });
-          allNormalizedTickets.push(...norm);
-        }
-      }
-    } catch { }
+    return { reportSources: sources, tickets: Array.from(ticketsById.values()) };
+  }, [agingReports, monthlyReports, legacyReports]);
 
-    // Deduplicate merged records by ticketId
-    const dedupedMap = new Map<string, NormalizedTicket>();
-    for (const t of allNormalizedTickets) {
-      dedupedMap.set(t.ticketId, t);
-    }
-    const mergedTickets = Array.from(dedupedMap.values());
-
-    setReportSources(sources);
-    if (mergedTickets.length > 0) {
-      setTickets(mergedTickets);
-    }
-    setIsLoaded(true);
-  }, [agingReports, monthlyReports]);
-
-  useEffect(() => {
-    syncModuleData();
-  }, [syncModuleData]);
-
-  // Active tickets depending on selected source (or 'all' for merged)
   const sourceTickets = useMemo(() => {
     if (selectedSourceId === 'all') return tickets;
     const found = reportSources.find((s) => s.id === selectedSourceId);
@@ -174,60 +120,67 @@ export function IRAnalyticsDashboard({
 
   const canonicalTickets = useMemo(() => sourceTickets.filter((t) => t.isCanonicalTicket), [sourceTickets]);
 
-  // Filtered dataset
   const filteredTickets = useMemo(() => {
     return applyFilters(canonicalTickets, filters);
   }, [canonicalTickets, filters]);
 
-  // Aggregated analytics
   const summary = useMemo(
     () => computeSummaryStats(canonicalTickets.length, filteredTickets, filters.inactivityThreshold),
     [canonicalTickets.length, filteredTickets, filters.inactivityThreshold]
   );
 
   const irTrend = useMemo(() => computeMonthlyTrend(filteredTickets, 'createdDate'), [filteredTickets]);
-  const statusDist = useMemo(() => computeStatusDistribution(filteredTickets), [filteredTickets]);
+  const statusDist = useMemo(() => computeStatusDistribution(filteredTickets).map(({ label, value }) => ({
+    label, count: value,
+  })), [filteredTickets]);
   const typeDist = useMemo(() => computeIncidentTypeDistribution(filteredTickets), [filteredTickets]);
   const deptDist = useMemo(() => computeDepartmentDistribution(filteredTickets), [filteredTickets]);
   const agingDist = useMemo(() => computeAgingDistribution(filteredTickets, filters.includeResolved), [filteredTickets, filters.includeResolved]);
   const techRankings = useMemo(() => computeTechnicianRankings(filteredTickets), [filteredTickets]);
 
-  // Distinct filter options
   const technicians = useMemo(() => Array.from(new Set(canonicalTickets.map((t) => t.technician))).filter(Boolean).sort(), [canonicalTickets]);
   const incidentTypes = useMemo(() => Array.from(new Set(canonicalTickets.map((t) => t.incidentType))).filter(Boolean).sort(), [canonicalTickets]);
   const departments = useMemo(() => Array.from(new Set(canonicalTickets.map((t) => t.department))).filter(Boolean).sort(), [canonicalTickets]);
   const statuses = useMemo(() => Array.from(new Set(canonicalTickets.map((t) => (t.rawStatus || t.statusCategory).trim()))).filter(Boolean).sort(), [canonicalTickets]);
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (filters.search) count++;
-    if (filters.technician) count++;
-    if (filters.status) count++;
-    if (filters.incidentType) count++;
-    if (filters.department) count++;
-    if (filters.agingCategory) count++;
-    if (filters.dateFrom || filters.dateTo) count++;
-    return count;
-  }, [filters]);
+  const activeFilterCount = FILTER_KEYS.filter((key) => filters[key] !== DEFAULT_FILTERS[key]).length;
+  const canClear = activeFilterCount > 0 || chartSelection !== null || selectedSourceId !== 'all' || techRankMode !== 'resolved';
+  const panelsWithSelection: Record<ClearPanel, boolean> = {
+    toolbar: true,
+    trend: chartSelection?.chart === 'trend' && irTrend.some(({ label }) => label === chartSelection.label),
+    status: Boolean(filters.status),
+    aging: chartSelection?.chart === 'aging',
+    technicians: Boolean(filters.technician) || techRankMode !== 'resolved',
+    departments: Boolean(filters.department) && deptDist.length > 0,
+  };
+  const clearLocation = canClear ? (panelsWithSelection[clearPanel] ? clearPanel : 'toolbar') : null;
 
   const handleCardClick = useCallback((statusFilter: string) => {
+    setClearPanel('status');
     setFilters((f) => ({ ...f, status: statusFilter === f.status ? '' : statusFilter }));
   }, []);
 
-  const handleChartClick = useCallback((_ids: string[], label: string) => {
-    setDrilldownLabel(label);
-    // Filter by the clicked label if matching a status or category
-    if (statuses.includes(label)) {
-      setFilters((f) => ({ ...f, status: label }));
-    } else if (incidentTypes.includes(label)) {
-      setFilters((f) => ({ ...f, incidentType: label }));
-    }
-  }, [statuses, incidentTypes]);
+  function toggleChartSelection(chart: 'trend' | 'aging', label: string) {
+    setClearPanel(chart);
+    setChartSelection((current) => current?.chart === chart && current.label === label ? null : { chart, label });
+  }
 
-  const clearDrilldown = () => {
-    setDrilldownLabel('');
+  function clearSelections() {
+    setClearPanel('toolbar');
+    setChartSelection(null);
     setFilters(DEFAULT_FILTERS);
-  };
+    setSelectedSourceId('all');
+    setTechRankMode('resolved');
+  }
+
+  function clearFor(panel: ClearPanel) {
+    return clearLocation === panel ? clearSelections : undefined;
+  }
+
+  function changeSource(sourceId: string) {
+    setClearPanel('toolbar');
+    setSelectedSourceId(sourceId);
+  }
 
   const handleExportCSV = () => {
     const rows = ticketsToExportRows(filteredTickets, new Date().toLocaleDateString());
@@ -262,7 +215,7 @@ export function IRAnalyticsDashboard({
     return copy.map((r, i) => ({ ...r, rank: i + 1 }));
   }, [techRankings, techRankMode]);
 
-  if (!isLoaded) {
+  if (isLoading && tickets.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--ui-secondary, #94a3b8)' }}>
         <div style={{ fontSize: '36px', marginBottom: '14px' }}>⏳</div>
@@ -274,6 +227,8 @@ export function IRAnalyticsDashboard({
   }
 
   if (canonicalTickets.length === 0) {
+    if (hasLoadError) return null;
+
     return (
       <div id="ir-analytics-container">
         <DashboardHeader
@@ -281,19 +236,17 @@ export function IRAnalyticsDashboard({
           summary={null}
           reportSources={reportSources}
           selectedSourceId={selectedSourceId}
-          onSourceChange={setSelectedSourceId}
-          onSync={syncModuleData}
+          onSourceChange={changeSource}
           onExport={handleExportCSV}
           filteredCount={0}
-          drilldownLabel={drilldownLabel}
-          onClearDrilldown={clearDrilldown}
+          onClear={canClear ? clearSelections : undefined}
           showFilters={showFilters}
           onToggleFilters={() => setShowFilters((v) => !v)}
           activeFilterCount={activeFilterCount}
         />
-        <div
+        <div className="public-report-state"
           style={{
-            background: 'linear-gradient(145deg, var(--ui-surface, #0d1a2e), var(--ui-inset, #091426))',
+            background: 'var(--glass-panel, linear-gradient(145deg, var(--ui-surface, #0d1a2e), var(--ui-inset, #091426)))',
             border: '2px dashed var(--ui-panel-border, var(--ui-border))',
             borderRadius: '20px',
             padding: '72px 24px',
@@ -315,149 +268,92 @@ export function IRAnalyticsDashboard({
   }
 
   return (
-    <div id="ir-analytics-container" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-
-      {/* ── View-Only Dashboard Header ── */}
+    <div id="ir-analytics-container">
       <DashboardHeader
         canonicalCount={canonicalTickets.length}
         summary={summary}
         reportSources={reportSources}
         selectedSourceId={selectedSourceId}
-        onSourceChange={setSelectedSourceId}
-        onSync={syncModuleData}
+        onSourceChange={changeSource}
         onExport={handleExportCSV}
         filteredCount={filteredTickets.length}
-        drilldownLabel={drilldownLabel}
-        onClearDrilldown={clearDrilldown}
+        onClear={clearFor('toolbar')}
         showFilters={showFilters}
         onToggleFilters={() => setShowFilters((v) => !v)}
         activeFilterCount={activeFilterCount}
       />
-
-      {/* ── Collapsible Advanced Filter Bar ── */}
-      {showFilters && (
-        <div style={{ marginBottom: '20px', animation: 'slideDown 0.2s ease' }}>
+      <div id="analytics-advanced-filters" hidden={!showFilters}>
+        {showFilters && (
           <IRFilterBar
             filters={filters}
-            onChange={setFilters}
+            onChange={(next) => {
+              setClearPanel('toolbar');
+              setFilters(next);
+            }}
             technicians={technicians}
             incidentTypes={incidentTypes}
             departments={departments}
             statuses={statuses}
             activeFilterCount={activeFilterCount}
           />
-        </div>
-      )}
-
-      {/* ── Active Filter Chips ── */}
-      {!showFilters && activeFilterCount > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '11px', color: 'var(--ui-muted, #64748b)', fontWeight: 600 }}>Active Filters:</span>
-          {filters.status && (
-            <FilterChip label={`Status: ${filters.status}`} onRemove={() => setFilters((f) => ({ ...f, status: '' }))} />
-          )}
-          {filters.technician && (
-            <FilterChip label={`Tech: ${filters.technician}`} onRemove={() => setFilters((f) => ({ ...f, technician: '' }))} />
-          )}
-          {filters.incidentType && (
-            <FilterChip label={`Type: ${filters.incidentType}`} onRemove={() => setFilters((f) => ({ ...f, incidentType: '' }))} />
-          )}
-          {filters.department && (
-            <FilterChip label={`Dept: ${filters.department}`} onRemove={() => setFilters((f) => ({ ...f, department: '' }))} />
-          )}
-          {filters.search && (
-            <FilterChip label={`Search: "${filters.search}"`} onRemove={() => setFilters((f) => ({ ...f, search: '' }))} />
-          )}
-          <button
-            type="button"
-            onClick={() => setFilters(DEFAULT_FILTERS)}
-            style={{
-              fontSize: '11px',
-              color: 'var(--ui-secondary, #94a3b8)',
-              background: 'transparent',
-              border: '1px solid var(--ui-border, #243650)',
-              borderRadius: '6px',
-              padding: '3px 8px',
-              cursor: 'pointer',
-            }}
-          >
-            Clear All
-          </button>
-        </div>
-      )}
-
-      {/* ══ SECTION 1: Executive KPI Summary Cards & Dynamic Status Ribbon ══ */}
+        )}
+      </div>
       <IRSummaryCards stats={summary} filters={filters} onCardClick={handleCardClick} />
-
-      {/* ══ SECTION 2: Analytics Overview (1x4 Grid) ══ */}
       <SectionDivider label="Analytics Overview" />
-      <div
-        className="analytics-1x4-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '12px',
-          marginBottom: '14px',
-          width: '100%',
+      <IncidentOverviewCharts trend={irTrend} statuses={statusDist} compact
+        selectedMonth={chartSelection?.chart === 'trend' ? chartSelection.label : undefined}
+        onMonthSelect={(label) => toggleChartSelection('trend', label)}
+        onStatusSelect={(label) => {
+          setClearPanel('status');
+          setFilters((current) => ({ ...current, status: label }));
         }}
-      >
-        <LineChart
-          data={irTrend}
-          title="Incident Creation Trend (Monthly)"
-          height={210}
-          onPointClick={handleChartClick}
-        />
-        <DonutChart
-          data={statusDist}
-          title="Status Distribution"
-          colorMap={STATUS_COLORS}
-          onSliceClick={handleChartClick}
-        />
+        onClearTrend={clearFor('trend')}
+        onClearStatus={clearFor('status')}
+      />
+      <div className="analytics-chart-grid">
         <BarChart
           data={agingDist}
-          title="Aging & Inactivity Bracket Distribution"
+          title="Aging & Inactivity Distribution"
           colorMap={AGING_COLORS}
-          height={210}
+          cylindrical
+          height={148}
           maxBars={5}
-          onBarClick={handleChartClick}
+          selectedLabel={chartSelection?.chart === 'aging' ? chartSelection.label : undefined}
+          onBarClick={(_, label) => toggleChartSelection('aging', label)}
+          onClear={clearFor('aging')}
         />
         <BarChart
           data={typeDist}
           title="Incident Category Distribution"
-          height={210}
+          height={148}
           maxBars={6}
         />
       </div>
-
-      {/* ══ SECTION 3: Performance & Department Analytics ══ */}
       <SectionDivider label="Performance & Department Distribution" />
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
-          gap: '14px',
-          marginBottom: '10px',
-        }}
-      >
-        {/* Top Technicians Card with Integrated Mode Controls */}
+      <div className="analytics-ranking-grid">
         <TopTechniciansCard
           rankings={sortedRankings}
           rankMode={techRankMode}
-          onRankModeChange={setTechRankMode}
-          onTechClick={(tech) =>
-            setFilters((f) => ({ ...f, technician: tech === f.technician ? '' : tech }))
-          }
+          onRankModeChange={(mode) => {
+            setClearPanel('technicians');
+            setTechRankMode(mode);
+          }}
+          onTechClick={(tech) => {
+            setClearPanel('technicians');
+            setFilters((f) => ({ ...f, technician: tech === f.technician ? '' : tech }));
+          }}
+          onClear={clearFor('technicians')}
           activeTech={filters.technician}
         />
-
-        {/* Resized & Elegant Incidents by Department Graph Card */}
         {deptDist.length > 0 && (
           <DepartmentRankingCard
             data={deptDist}
             total={canonicalTickets.length}
-            onDeptClick={(dept) =>
-              setFilters((f) => ({ ...f, department: dept === f.department ? '' : dept }))
-            }
+            onDeptClick={(dept) => {
+              setClearPanel('departments');
+              setFilters((f) => ({ ...f, department: dept === f.department ? '' : dept }));
+            }}
+            onClear={clearFor('departments')}
             activeDept={filters.department}
           />
         )}
@@ -466,16 +362,6 @@ export function IRAnalyticsDashboard({
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
-        }
-        @media (max-width: 1100px) {
-          .analytics-1x4-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          }
-        }
-        @media (max-width: 640px) {
-          .analytics-1x4-grid {
-            grid-template-columns: 1fr !important;
-          }
         }
       `}</style>
     </div>
@@ -488,11 +374,9 @@ function DashboardHeader({
   reportSources,
   selectedSourceId,
   onSourceChange,
-  onSync,
   onExport,
   filteredCount,
-  drilldownLabel,
-  onClearDrilldown,
+  onClear,
   showFilters,
   onToggleFilters,
   activeFilterCount,
@@ -502,105 +386,46 @@ function DashboardHeader({
   reportSources: ReportSourceItem[];
   selectedSourceId: string;
   onSourceChange: (id: string) => void;
-  onSync: () => void;
   onExport: () => void;
   filteredCount: number;
-  drilldownLabel: string;
-  onClearDrilldown: () => void;
+  onClear?: () => void;
   showFilters: boolean;
   onToggleFilters: () => void;
   activeFilterCount: number;
 }) {
+  const filtersButton = useRef<HTMLButtonElement>(null);
+  const sourceSelect = useRef<HTMLSelectElement>(null);
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '20px',
-        flexWrap: 'wrap',
-        gap: '12px',
-        background: 'linear-gradient(145deg, var(--ui-surface, #111c30) 0%, var(--ui-surface, #0d1a2e) 100%)',
-        border: '1px solid var(--ui-panel-border, var(--ui-border))',
-        borderRadius: '16px',
-        padding: '16px 22px',
-        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
-      }}
-    >
-      {/* Left: Brand Title & Metadata */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        <div
-          style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #2563eb, #0891b2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
-            flexShrink: 0,
-          }}
-        >
-          <img
-            src="/images/DASH.png"
-            alt="Dashboard"
-            style={{
-              width: '50px',
-              height: '40px',
-              objectFit: 'contain',
-            }}
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = '/DASH.png';
-            }}
-          />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, letterSpacing: '-0.01em' }}>
-            IR Analytics Dashboard
-          </h2>
-          <span
-            style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: '999px',
-              background: 'rgba(37,99,235,0.15)',
-              border: '1px solid rgba(37,99,235,0.3)',
-              color: 'var(--ui-link, #93c5fd)',
-            }}
-          >
-            {canonicalCount} Total Incidents
-          </span>
+    <div className="analytics-report-header">
+      <div className="analytics-report-brand">
+        <span className="analytics-report-mark"><img src="/images/DASH.png" alt="" /></span>
+        <div className="analytics-report-title">
+          <h2>IR Analytics Dashboard</h2>
+          <span className="analytics-report-count">{canonicalCount.toLocaleString()} Total Incidents</span>
         </div>
       </div>
 
-      {/* Right: View-Only Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        {/* Module source selector */}
+      <div className="analytics-report-actions">
+        {canonicalCount > 0 && (
+          <button ref={filtersButton} type="button" className="analytics-filter-toggle" aria-expanded={showFilters}
+            aria-controls="analytics-advanced-filters" onClick={onToggleFilters}>
+            <SlidersHorizontal size={15} aria-hidden="true" />
+            Filters{activeFilterCount > 0 ? ' (' + activeFilterCount + ')' : ''}
+          </button>
+        )}
+        <AnalyticsClearButton onClear={onClear} restoreFocus={() => (filtersButton.current ?? sourceSelect.current)?.focus()} />
         {reportSources.length > 0 && (
-          <select
-            value={selectedSourceId}
-            onChange={(e) => onSourceChange(e.target.value)}
-            style={{
-              background: 'var(--ui-inset, #091426)',
-              border: '1px solid var(--ui-control-border)',
-              borderRadius: '8px',
-              color: 'var(--ui-text, #e2e8f0)',
-              padding: '7px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              maxWidth: '260px',
-            }}
-          >
-            <option value="all">⚡ All Published Reports</option>
-            {reportSources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.ticketCount})
-              </option>
-            ))}
-          </select>
+          <div className="analytics-source-picker">
+            <Zap className="analytics-source-icon" size={14} aria-hidden="true" />
+            <select ref={sourceSelect} className="live-report-select" aria-label="Published reports" value={selectedSourceId}
+              onChange={(event) => onSourceChange(event.target.value)}>
+              <option value="all">All Published Reports</option>
+              {reportSources.map((source) => (
+                <option key={source.id} value={source.id}>{source.name} ({source.ticketCount})</option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
     </div>
@@ -618,375 +443,118 @@ const iconBtnStyle: React.CSSProperties = {
 };
 
 function SectionDivider({ label }: { label: string }) {
+  return <h2 className="analytics-section-title">{label}</h2>;
+}
+
+function RankingRow({ rank, label, value, comparison, width, color, selected, onClick }: {
+  rank: number;
+  label: string;
+  value: React.ReactNode;
+  comparison?: React.ReactNode;
+  width: number;
+  color: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '12px 0 16px' }}>
-      <div style={{ height: '1px', background: 'linear-gradient(90deg, #1e3a5f, transparent)', flex: 1 }} />
-      <span
-        style={{
-          fontSize: '11px',
-          fontWeight: 800,
-          color: 'var(--ui-muted, #64748b)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {label}
+    <button type="button" className="analytics-ranking-row" aria-pressed={selected} onClick={onClick}>
+      <span className="analytics-ranking-index">{rank}</span>
+      <span className="analytics-ranking-main">
+        <span className="analytics-ranking-name">{label}</span>
+        <strong>{value}</strong>
+        {comparison && <span className="analytics-ranking-note">{comparison}</span>}
       </span>
-      <div style={{ height: '1px', background: 'linear-gradient(270deg, #1e3a5f, transparent)', flex: 1 }} />
-    </div>
+      <span className="analytics-ranking-track" aria-hidden="true">
+        <span style={{ width: width + '%', backgroundColor: color }} />
+      </span>
+    </button>
   );
 }
 
-function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        background: 'rgba(37,99,235,0.14)',
-        border: '1px solid rgba(37,99,235,0.3)',
-        color: 'var(--ui-link, #93c5fd)',
-        fontSize: '11px',
-        fontWeight: 600,
-        borderRadius: '999px',
-        padding: '3px 10px 3px 8px',
-      }}
-    >
-      <span>{label}</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: 'var(--ui-secondary, #94a3b8)',
-          cursor: 'pointer',
-          padding: 0,
-          fontSize: '12px',
-          lineHeight: 1,
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-function TopTechniciansCard({
-  rankings,
-  rankMode,
-  onRankModeChange,
-  onTechClick,
-  activeTech,
-}: {
+function TopTechniciansCard({ rankings, rankMode, onRankModeChange, onTechClick, activeTech, onClear }: {
   rankings: ReturnType<typeof computeTechnicianRankings>;
   rankMode: TechRankMode;
   onRankModeChange: (mode: TechRankMode) => void;
   onTechClick: (tech: string) => void;
   activeTech?: string;
+  onClear?: () => void;
 }) {
-  const top8 = rankings.slice(0, 8);
-  const maxVal = Math.max(
-    ...top8.map((r) =>
-      rankMode === 'resolved' ? r.resolved
-        : rankMode === 'assigned' ? r.assigned
-          : rankMode === 'resolutionRate' ? Math.round(r.resolutionRate ?? 0)
-            : r.noMovement7d
-    ),
-    1
-  );
-
+  const top = rankings.slice(0, 8);
+  const rankedValue = (row: (typeof top)[number]) =>
+    rankMode === 'resolved' ? row.resolved
+      : rankMode === 'assigned' ? row.assigned
+        : rankMode === 'resolutionRate' ? Math.round(row.resolutionRate ?? 0)
+          : row.noMovement7d;
+  const max = Math.max(...top.map(rankedValue), 1);
   const modeLabels: Record<TechRankMode, string> = {
-    resolved: 'Incidents Resolved',
-    assigned: 'Incidents Assigned',
-    resolutionRate: 'Resolution Rate (%)',
+    resolved: 'Incidents resolved',
+    assigned: 'Incidents assigned',
+    resolutionRate: 'Resolution rate',
     aging: 'Stagnant (7d+)',
-    avgResolution: 'Avg Days',
+    avgResolution: 'Avg days',
   };
+  const modeOptions = [
+    { key: 'resolved', label: 'Resolved' },
+    { key: 'assigned', label: 'Assigned' },
+    { key: 'resolutionRate', label: 'Rate' },
+    { key: 'aging', label: 'Stagnant' },
+  ] as const;
 
   return (
-    <div
-      style={{
-        background: 'var(--ui-surface, #111c30)',
-        border: '1px solid var(--ui-panel-border, var(--ui-border))',
-        borderRadius: '16px',
-        padding: '20px 22px',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
-      }}
-    >
-      {/* Header: Title + Inline Mode Pills */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '16px',
-          flexWrap: 'wrap',
-          gap: '10px',
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '15px' }}>👥</span>
-            <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Top Technicians
-            </h3>
+    <section className="analytics-ranking-card" aria-label="Technician performance">
+      <div className="analytics-ranking-heading">
+        <div><h3 tabIndex={-1}>Top Technicians</h3><p>Ranked by {modeLabels[rankMode]}</p></div>
+        <div className="analytics-ranking-tools">
+          <div className="analytics-rank-modes" role="group" aria-label="Rank technicians by">
+            {modeOptions.map(({ key, label }) => (
+              <button key={key} type="button" className="analytics-rank-mode" aria-pressed={rankMode === key}
+                onClick={() => onRankModeChange(key)}>{label}</button>
+            ))}
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', margin: '2px 0 0' }}>
-            Ranked by {modeLabels[rankMode]}
-          </p>
-        </div>
-
-        {/* Integrated Filter Pills */}
-        <div style={{ display: 'flex', gap: '4px', background: 'var(--ui-inset, #091426)', padding: '3px', borderRadius: '8px', border: '1px solid var(--ui-border, #1e3a5f)' }}>
-          {([
-            { key: 'resolved' as TechRankMode, label: 'Resolved' },
-            { key: 'assigned' as TechRankMode, label: 'Assigned' },
-            { key: 'resolutionRate' as TechRankMode, label: 'Rate' },
-            { key: 'aging' as TechRankMode, label: 'Stagnant' },
-          ]).map(({ key, label }) => {
-            const isSelected = rankMode === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => onRankModeChange(key)}
-                style={{
-                  background: isSelected ? '#2563eb' : 'transparent',
-                  color: isSelected ? '#ffffff' : 'var(--ui-secondary, #94a3b8)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.12s ease',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+          <AnalyticsClearButton onClear={onClear} />
         </div>
       </div>
-
-      {/* Rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, justifyContent: 'space-around' }}>
-        {top8.map((r, i) => {
-          const val =
-            rankMode === 'resolved' ? r.resolved
-              : rankMode === 'assigned' ? r.assigned
-                : rankMode === 'resolutionRate' ? Math.round(r.resolutionRate ?? 0)
-                  : r.noMovement7d;
-
-          const pctWidth = maxVal > 0 && val > 0 ? Math.max(3, (val / maxVal) * 100) : 0;
-          const isSelected = activeTech?.toLowerCase() === r.technician.toLowerCase();
-          const barColor = analyticsChartColor(CHART_COLORS[i % CHART_COLORS.length]);
-          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
-
-          return (
-            <div
-              key={r.technician}
-              onClick={() => onTechClick(r.technician)}
-              style={{
-                cursor: 'pointer',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                background: isSelected ? 'rgba(37,99,235,0.18)' : 'transparent',
-                border: isSelected ? '1px solid #3b82f6' : '1px solid transparent',
-                transition: 'all 0.12s ease',
-              }}
-              onMouseEnter={(e) => {
-                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'var(--ui-wash, rgba(255,255,255,0.03))';
-              }}
-              onMouseLeave={(e) => {
-                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, paddingRight: '8px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--ui-secondary, #94a3b8)', width: '20px', flexShrink: 0, textAlign: 'center' }}>
-                    {medal}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? 'var(--ui-link, #60a5fa)' : 'var(--ui-text, #f8fafc)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {r.technician}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: val > 0 ? 'var(--ui-text, #f8fafc)' : 'var(--ui-muted, #64748b)', fontVariantNumeric: 'tabular-nums' }}>
-                    {val}
-                    {rankMode === 'resolutionRate' ? '%' : ''}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', fontWeight: 500 }}>
-                    {rankMode === 'resolved' ? 'res.' : rankMode === 'assigned' ? 'assign.' : rankMode === 'aging' ? 'stagn.' : ''}
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div style={{ width: '100%', height: '6px', background: 'var(--ui-inset, #091426)', borderRadius: '999px', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${pctWidth}%`,
-                    height: '100%',
-                    background: val > 0 ? barColor : 'transparent',
-                    borderRadius: '999px',
-                    transition: 'width 0.4s ease',
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+      {top.map((row, index) => {
+        const value = rankedValue(row);
+        return <RankingRow key={row.technician} rank={index + 1} label={row.technician}
+          value={rankMode === 'resolutionRate' ? value + '%' : value}
+          width={value > 0 ? Math.max(3, (value / max) * 100) : 0}
+          selected={activeTech?.toLowerCase() === row.technician.toLowerCase()}
+          color={analyticsChartColor(CHART_COLORS[rankMode === 'aging' ? 3 : 0])}
+          onClick={() => onTechClick(row.technician)} />;
+      })}
+    </section>
   );
 }
 
-function DepartmentRankingCard({
-  data,
-  total,
-  onDeptClick,
-  activeDept,
-}: {
+function DepartmentRankingCard({ data, total, onDeptClick, activeDept, onClear }: {
   data: { label: string; value: number; ids?: string[] }[];
   total: number;
   onDeptClick: (dept: string) => void;
   activeDept?: string;
+  onClear?: () => void;
 }) {
-  const top8 = data.slice(0, 8);
-  const maxVal = Math.max(...top8.map((d) => d.value), 1);
-  const grandTotal = total > 0 ? total : data.reduce((s, d) => s + d.value, 0) || 1;
+  const top = data.slice(0, 8);
+  const max = Math.max(...top.map(item => item.value), 1);
+  const grandTotal = total > 0 ? total : data.reduce((sum, item) => sum + item.value, 0) || 1;
 
   return (
-    <div
-      style={{
-        background: 'var(--ui-surface, #111c30)',
-        border: '1px solid var(--ui-panel-border, var(--ui-border))',
-        borderRadius: '16px',
-        padding: '20px 22px',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 4px 20px var(--ui-shadow, rgba(0,0,0,0.25))',
-      }}
-    >
-      {/* Top Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '16px',
-          flexWrap: 'wrap',
-          gap: '10px',
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '15px' }}>🏢</span>
-            <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Incidents by Department
-            </h3>
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', margin: '2px 0 0' }}>
-            Top 8 organizational units by volume
-          </p>
-        </div>
-
-        {/* Badge */}
-        <div
-          style={{
-            background: 'rgba(56,189,248,0.12)',
-            border: '1px solid rgba(56,189,248,0.3)',
-            color: 'var(--ui-link, #38bdf8)',
-            fontSize: '11px',
-            fontWeight: 800,
-            padding: '3px 10px',
-            borderRadius: '999px',
-          }}
-        >
-          {data.length} Departments
+    <section className="analytics-ranking-card" aria-label="Incidents by department">
+      <div className="analytics-ranking-heading">
+        <div><h3 tabIndex={-1}>Incidents by Department</h3><p>Top 8 organizational units by volume</p></div>
+        <div className="analytics-ranking-tools">
+          <span className="analytics-ranking-note">{data.length} departments</span>
+          <AnalyticsClearButton onClear={onClear} />
         </div>
       </div>
-
-      {/* Rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, justifyContent: 'space-around' }}>
-        {top8.map((d, i) => {
-          const pct = ((d.value / grandTotal) * 100).toFixed(1);
-          const pctWidth = Math.max(3, (d.value / maxVal) * 100);
-          const isSelected = activeDept?.toLowerCase() === d.label.toLowerCase();
-          const barColor = analyticsChartColor(CHART_COLORS[i % CHART_COLORS.length]);
-
-          return (
-            <div
-              key={d.label}
-              onClick={() => onDeptClick(d.label)}
-              style={{
-                cursor: 'pointer',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                background: isSelected ? 'rgba(59,130,246,0.18)' : 'transparent',
-                border: isSelected ? '1px solid #3b82f6' : '1px solid transparent',
-                transition: 'all 0.12s ease',
-              }}
-              onMouseEnter={(e) => {
-                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'var(--ui-wash, rgba(255,255,255,0.03))';
-              }}
-              onMouseLeave={(e) => {
-                if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-              }}
-            >
-              {/* Row text */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, paddingRight: '8px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--ui-secondary, #94a3b8)', width: '20px', flexShrink: 0, textAlign: 'center' }}>
-                    {i + 1}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      color: isSelected ? 'var(--ui-link, #60a5fa)' : 'var(--ui-text, #f8fafc)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                    title={d.label}
-                  >
-                    {d.label}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  <span style={{ fontSize: '11px', color: 'var(--ui-secondary, #94a3b8)', fontWeight: 500 }}>
-                    {pct}%
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', fontVariantNumeric: 'tabular-nums' }}>
-                    {d.value}
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div style={{ width: '100%', height: '6px', background: 'var(--ui-inset, #091426)', borderRadius: '999px', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${pctWidth}%`,
-                    height: '100%',
-                    background: barColor,
-                    borderRadius: '999px',
-                    transition: 'width 0.4s ease',
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+      {top.map((item, index) => (
+        <RankingRow key={item.label} rank={index + 1} label={item.label} value={item.value}
+          comparison={((item.value / grandTotal) * 100).toFixed(1) + '%'}
+          width={Math.max(3, (item.value / max) * 100)}
+          color={analyticsChartColor(CHART_COLORS[0])}
+          selected={activeDept?.toLowerCase() === item.label.toLowerCase()}
+          onClick={() => onDeptClick(item.label)} />
+      ))}
+    </section>
   );
 }
-

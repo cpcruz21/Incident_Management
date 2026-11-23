@@ -3,12 +3,13 @@ require('./register-typescript.cjs');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const XLSX = require('xlsx');
-const { calculateMonthlyReport } = require('../src/lib/monthly/calculator.ts');
+const { calculateMonthlyReport, refreshStoredMonthlyReport } = require('../src/lib/monthly/calculator.ts');
+const { getIncidentMonthlyValue } = require('../src/types/monthly.ts');
 const { generateMonthlyRemarks } = require('../src/lib/monthly/remarks.ts');
 const { MonthlyReportTable } = require('../src/components/monthly/MonthlyReportTable.tsx');
 const { ExecutiveRemarksCard } = require('../src/components/monthly/ExecutiveRemarksCard.tsx');
-const { ExportDropdown } = require('../src/components/report/ExportDropdown.tsx');
-const { exportToXLSX, exportToHTML } = require('../src/lib/report/export.ts');
+const { ReportExportButton } = require('../src/components/report/ReportExportButton.tsx');
+const { getRootCauseOptions, updateMonthlyRootCause } = require('../src/lib/monthly/root-cause.ts');
 
 function team(name, total, lateFR, closed, lateRT) {
   return Array.from({ length: total }, (_, i) => ({
@@ -53,6 +54,46 @@ const openOnly = calculateMonthlyReport(team('ECS SDS', 5, 0, 0, 0), 'November 2
 assert.match(openOnly.remarks, /Resolution Time: No data \(N\/A\)/);
 assert.match(openOnly.remarks, /100\.00% first response and N\/A resolution/);
 assert.doesNotMatch(openOnly.remarks, /N\/A%|both.*targets/);
+
+const hradTickets = team('ECS HRAD', 2, 1, 2, 1);
+const oldTechnicianReport = JSON.parse(JSON.stringify(calculateMonthlyReport(hradTickets, 'October 2026')));
+const posTicket = { category: 'Operational Issues', subCategory: 'POS Services Operations Issues' };
+Object.assign(oldTechnicianReport.allTickets[0], posTicket);
+const corrected = refreshStoredMonthlyReport(oldTechnicianReport);
+assert.equal(corrected.generatedAt, oldTechnicianReport.generatedAt);
+assert.deepEqual(corrected.technicianSLA.find(row => row.technician === 'ECS HR').frFailedIds, [hradTickets[0].requestId]);
+assert.deepEqual(corrected.technicianSLA.find(row => row.technician === 'ECS HRAD').frTotalIds, [hradTickets[1].requestId]);
+assert.equal(corrected.slaReport.resolutionTime.find(row => row.teamName === 'ECS HR').failed, 1);
+assert.deepEqual(corrected.kpis, oldTechnicianReport.kpis);
+assert.equal(refreshStoredMonthlyReport(corrected), corrected);
+assert.equal(getIncidentMonthlyValue(corrected.allTickets[0], 'Technician'), 'ECS HR');
+assert.equal(corrected.allTickets[0].rawData.Technician, 'ECS HRAD');
+assert.equal(getIncidentMonthlyValue({ ...incidents.at(-1), ...posTicket }, 'Technician'), 'ECS PSD');
+
+const revisedType = 'Revised Root Cause Type';
+const revisedCause = 'Revised Identified Root Cause';
+const [humanCause] = getRootCauseOptions('Human Factors');
+const [technicalCause] = getRootCauseOptions('Technical Factors');
+const closedRevision = { ...incidents[0], requestId: 'CLOSED-REVISION' };
+const rawClosedRevision = { ...closedRevision, requestStatus: undefined, rawData: { 'Ticket Status': 'Resolved' } };
+const openRevision = {
+  ...closedRevision, requestId: 'OPEN-REVISION', requestStatus: 'Open',
+  rawData: { 'Request Status': 'Closed', Revised_Root_Cause_Type: 'Human Factors', [revisedCause]: humanCause },
+};
+assert.equal(updateMonthlyRootCause(openRevision, revisedType, 'Technical Factors'), openRevision);
+assert.equal(getIncidentMonthlyValue(openRevision, revisedType), '');
+assert.equal(getIncidentMonthlyValue(openRevision, revisedCause), '');
+assert.equal(updateMonthlyRootCause(closedRevision, revisedCause, humanCause), closedRevision);
+const humanType = updateMonthlyRootCause(rawClosedRevision, revisedType, 'Human Factors');
+assert.equal(updateMonthlyRootCause(humanType, revisedCause, technicalCause), humanType);
+const humanRevision = updateMonthlyRootCause(humanType, revisedCause, humanCause);
+assert.equal(getIncidentMonthlyValue(humanRevision, revisedCause), humanCause);
+const technicalType = updateMonthlyRootCause(humanRevision, revisedType, 'Technical Factors');
+assert.equal(getIncidentMonthlyValue(technicalType, revisedType), 'Technical Factors');
+assert.equal(getIncidentMonthlyValue(technicalType, revisedCause), '');
+const technicalRevision = updateMonthlyRootCause(technicalType, revisedCause, technicalCause);
+assert.equal(getIncidentMonthlyValue(technicalRevision, revisedCause), technicalCause);
+assert.equal(getIncidentMonthlyValue(updateMonthlyRootCause(technicalRevision, revisedType, ''), revisedCause), '');
 
 // Meeting the overall target must still allow team-level follow-up.
 const boundary = calculateMonthlyReport([
@@ -100,74 +141,68 @@ try {
   assert.match(admin, /monthly-long-cell/);
   assert.match(admin, /<label[^>]*>Search tickets<\/label>/);
   assert.match(admin, /aria-label="Revised Root Cause Type for/);
+  const revisionPreview = renderToStaticMarkup(React.createElement(MonthlyReportTable, {
+    ...props, data: calculateMonthlyReport([humanRevision, openRevision], 'November 2026'),
+  }));
+  const causeSelect = revisionPreview.match(/<select[^>]*aria-label="Revised Identified Root Cause for CLOSED-REVISION"[^>]*>.*?<\/select>/)?.[0];
+  assert.ok(causeSelect.includes(humanCause));
+  assert.ok(!causeSelect.includes(technicalCause));
+  assert.doesNotMatch(revisionPreview, /aria-label="Revised [^"]+ for OPEN-REVISION"/);
   const publicHTML = renderToStaticMarkup(React.createElement(MonthlyReportTable, { ...props, isPublicView: true }));
   assert.doesNotMatch(publicHTML, /aria-label="Revised Root Cause Type for|Archive report/);
 } finally { React.useState = useState; }
 
-let workbook;
-const writeFile = XLSX.writeFile;
-XLSX.writeFile = value => { workbook = value; };
-try { exportToXLSX([], restored); } finally { XLSX.writeFile = writeFile; }
-const excel = XLSX.utils.sheet_to_json(workbook.Sheets.SLA, { header: 1 }).flat().join('\n');
-assert.ok(excel.includes(report.remarks.split('\n').find(line => line.startsWith('Next steps:'))));
-assert.doesNotMatch(excel, /Old cached remarks/);
-
-// Exercise the actual dropdown actions and read the generated XLSX workbook back.
-const exportTickets = restored.allTickets.map((ticket, index) => index === 0
-  ? { ...ticket, wasReassigned: true, rawData: { ...ticket.rawData, 'Custom Import Field': 'Original value' } }
-  : ticket);
-const { useRef, useEffect } = React;
-let exportFilename;
-React.useState = () => [true, () => {}];
-React.useRef = () => ({ current: null });
-React.useEffect = () => {};
-XLSX.writeFile = (value, filename) => {
-  workbook = XLSX.read(XLSX.write(value, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
-  exportFilename = filename;
-};
-try {
-  const dropdown = ExportDropdown({
-    incidents: exportTickets,
+async function verifyExport() {
+  const exportTickets = restored.allTickets.map((ticket, index) => index === 0
+    ? { ...ticket, rawData: { ...ticket.rawData, 'Custom Import Field': 'Original value' } }
+    : ticket);
+  exportTickets.push(openRevision, technicalRevision, corrected.allTickets[0]);
+  const account = { id: 'admin', role: 'admin', username: 'admin', name: 'Test Admin' };
+  const props = {
+    account,
+    incidents: [],
     reportData: { ...restored, allTickets: exportTickets },
-  });
-  const menu = React.Children.toArray(dropdown.props.children).find(child => child.props.role === 'menu');
-  const items = React.Children.toArray(menu.props.children);
-  items.find(item => item.props.children === 'XLSX file (All Sheets)').props.onClick();
-  assert.match(exportFilename, /\.xlsx$/);
-  assert.deepEqual(workbook.SheetNames, ['SLA', 'All Tickets', 'Closed Tickets', 'Acceptable First Response', 'Re-assigned Technicians', 'Raw Data']);
+    baseFilename: 'SMAC_Monthly_Incident_Report',
+  };
+  const renderButton = account => renderToStaticMarkup(React.createElement(ReportExportButton, { ...props, account }));
+  assert.equal(renderButton(null), '');
+  assert.equal(renderButton({ ...account, role: 'viewer' }), '');
+  assert.match(renderButton({ ...account, role: 'super-admin' }), /Export XLSX/);
+  assert.equal((renderButton(account).match(/<button\b/g) || []).length, 1);
+
+  let workbook;
+  let exportFilename;
+  const writeFile = XLSX.writeFile;
+  React.useState = initial => [initial, () => {}];
+  XLSX.writeFile = (value, filename, options) => {
+    workbook = XLSX.read(XLSX.write(value, { ...options, type: 'buffer' }), { type: 'buffer' });
+    exportFilename = filename;
+  };
+  try {
+    const element = ReportExportButton(props);
+    await element.props.children[0].props.onClick();
+  } finally {
+    React.useState = useState;
+    XLSX.writeFile = writeFile;
+  }
+
+  assert.match(exportFilename, /^SMAC_Monthly_Incident_Report_.*\.xlsx$/);
+  assert.deepEqual(workbook.SheetNames, ['All Tickets']);
   const ticketRows = XLSX.utils.sheet_to_json(workbook.Sheets['All Tickets']);
   assert.deepEqual(ticketRows.map(row => row.RequestID), exportTickets.map(ticket => ticket.requestId));
-  assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Closed Tickets']).length, restored.closedTickets.length);
-  assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Acceptable First Response'], { header: 1 })[0][0], 'Request ID');
-  const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets['Raw Data']);
-  assert.equal(rawRows.length, exportTickets.length);
-  assert.equal(rawRows[0]['Custom Import Field'], 'Original value');
-  items.find(item => item.props.children === '↳ Re-assigned Technician (XLSX)').props.onClick();
-  assert.match(exportFilename, /_Reassigned_Technicians\.xlsx$/);
-  assert.deepEqual(workbook.SheetNames, ['Re-assigned Technicians']);
-} finally {
-  Object.assign(React, { useState, useRef, useEffect });
-  XLSX.writeFile = writeFile;
+  assert.ok(ticketRows.some(row => row['Request Status'] === 'Open'));
+  assert.ok(ticketRows.some(row => row['Request Status'] === 'Closed'));
+  assert.equal(ticketRows[0]['Custom Import Field'], 'Original value');
+  assert.equal(ticketRows[0].Technician, exportTickets[0].sourceTeam);
+  const openRow = ticketRows.find(row => row.RequestID === openRevision.requestId);
+  assert.equal(openRow[revisedType], '');
+  assert.equal(openRow[revisedCause], '');
+  assert.equal(openRow.Revised_Root_Cause_Type, undefined);
+  assert.equal(ticketRows.find(row => row.RequestID === technicalRevision.requestId)[revisedCause], technicalCause);
+  assert.equal(ticketRows.at(-1).Technician, 'ECS HR');
+  console.log('Monthly remarks and the admin-only All Tickets XLSX export passed.');
 }
-
-let downloaded;
-const createURL = URL.createObjectURL;
-const revokeURL = URL.revokeObjectURL;
-const priorDocument = global.document;
-URL.createObjectURL = blob => { downloaded = blob; return 'blob:test'; };
-URL.revokeObjectURL = () => {};
-global.document = { createElement: () => ({ click() {}, remove() {} }), body: { appendChild() {}, removeChild() {} } };
-try { exportToHTML([], restored); } finally {
-  URL.createObjectURL = createURL;
-  URL.revokeObjectURL = revokeURL;
-  if (priorDocument === undefined) delete global.document; else global.document = priorDocument;
-}
-downloaded.text().then(html => {
-  assert.match(html, /66 of 80 tickets passed first response/);
-  assert.match(html, /2\.50 percentage points/);
-  assert.doesNotMatch(html, /Old cached remarks/);
-  console.log('Monthly remarks verified: KPI counts, both gaps, thresholds, empty/open-only data, exceptions, saved admin/public reports, and Excel/HTML exports.');
-}).catch(error => { console.error(error); process.exitCode = 1; });
+verifyExport().catch(error => { console.error(error); process.exitCode = 1; });
 
 if (process.argv.includes('--preview')) {
   const fs = require('node:fs');

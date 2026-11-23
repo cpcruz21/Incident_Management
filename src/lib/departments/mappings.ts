@@ -1,11 +1,7 @@
-export interface DepartmentMappingConfig {
+﻿export interface DepartmentMappingConfig {
   [department: string]: string[];
 }
 
-/**
- * All valid Responsible/Dependency sub-teams.
- * Automated assignment maps ticket Category + context directly to these sub-teams.
- */
 export const ALL_SUB_TEAMS = [
   'ISS MT',
   'ISS Binondo',
@@ -17,11 +13,6 @@ export const ALL_SUB_TEAMS = [
   'HR',
 ];
 
-/**
- * Department mappings config.
- * All sub-teams are permitted for all departments to allow flexible manual override
- * while automation handles the category-based assignment.
- */
 export const DEFAULT_DEPARTMENT_MAPPINGS: DepartmentMappingConfig = {
   'ECS ISS': ALL_SUB_TEAMS,
   'ISS': ALL_SUB_TEAMS,

@@ -4,7 +4,7 @@ Request IDs can open their matching ServiceDesk Plus request in a new tab. Confi
 
 From the application directory, run `npm run setup:admin` to create the first super admin. The command displays a randomly generated password once. To choose a username, run `npm run setup:admin -- your-username`. Then run `npm run dev` and sign in.
 
-Development assets use `.next-dev`; production builds use `.next`. This allows `npm run build` to run without replacing a running localhost development server’s CSS or JavaScript.
+Development on port 3000 uses `.next-dev`. Other development ports use `.next-dev-<port>`, and production builds use `.next`. Each server has its own generated CSS and JavaScript.
 
 Super admins can create admin accounts in User Management and delete archived reports. Admins can generate, edit, archive, and publish reports. Both roles can change their own passwords.
 

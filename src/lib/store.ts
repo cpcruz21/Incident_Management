@@ -1,44 +1,35 @@
-
-import type { Incident, ValidationSummary, ColumnMapping } from '@/types/incident';
+﻿import type { Incident, ValidationSummary, ColumnMapping } from '@/types/incident';
 import type { RoutingConfig, RoutingSummary } from '@/types/routing';
 import type { PreviousWeekSLA, WeeklyReportData } from '@/types/sla';
 import { DEFAULT_COLUMN_MAPPING } from '@/types/incident';
 import { DEFAULT_ROUTING_CONFIG, REPORT_TEAMS } from '@/lib/routing/routing-engine';
+import { applyReportTicketEdit, type ReportTicketEdit } from '@/lib/report/ticket-edits';
 
-/** Application processing step */
 export type AppStep = 'upload' | 'validation' | 'routing' | 'previous-week' | 'report';
 
-/** Complete application state */
 export interface AppState {
   currentStep: AppStep;
 
-  // Upload
   fileName: string | null;
   rawData: Record<string, unknown>[] | null;
   detectedColumns: string[];
   columnMapping: ColumnMapping;
 
-  // Validation
   incidents: Incident[];
   validationSummary: ValidationSummary | null;
 
-  // Routing
   routingConfig: RoutingConfig;
   routedIncidents: Incident[];
   routingSummary: RoutingSummary | null;
 
-  // Previous Week (manual input)
   previousWeekSLA: PreviousWeekSLA;
 
-  // Report
   reportData: WeeklyReportData | null;
   reportPeriod: string;
 
-  // UI
   isProcessing: boolean;
   error: string | null;
 
-  // Detail modal
   detailModal: {
     isOpen: boolean;
     title: string;
@@ -46,7 +37,6 @@ export interface AppState {
   };
 }
 
-/** Action types */
 export type AppAction =
   | { type: 'SET_STEP'; step: AppStep }
   | { type: 'SET_FILE'; fileName: string; rawData: Record<string, unknown>[]; columns: string[] }
@@ -56,6 +46,7 @@ export type AppAction =
   | { type: 'SET_ROUTING_RESULT'; incidents: Incident[]; summary: RoutingSummary }
   | { type: 'SET_PREVIOUS_WEEK'; previousWeek: PreviousWeekSLA }
   | { type: 'SET_REPORT_DATA'; data: WeeklyReportData }
+  | { type: 'SET_REPORT_TICKETS'; data: WeeklyReportData; routedIncidents: Incident[]; edit: ReportTicketEdit }
   | { type: 'SET_REPORT_PERIOD'; period: string }
   | { type: 'SET_PROCESSING'; isProcessing: boolean }
   | { type: 'SET_ERROR'; error: string | null }
@@ -64,7 +55,6 @@ export type AppAction =
   | { type: 'LOAD_STORED_REPORT'; reportData: WeeklyReportData; routedIncidents: Incident[] }
   | { type: 'RESET' };
 
-/** Create empty previous week SLA */
 function createEmptyPreviousWeekSLA(): PreviousWeekSLA {
   const firstResponse: Record<string, number | null> = {};
   const resolutionTime: Record<string, number | null> = {};
@@ -82,7 +72,6 @@ function createEmptyPreviousWeekSLA(): PreviousWeekSLA {
   };
 }
 
-/** Initial state */
 export const initialState: AppState = {
   currentStep: 'upload',
   fileName: null,
@@ -106,7 +95,6 @@ export const initialState: AppState = {
   },
 };
 
-/** State reducer */
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_STEP':
@@ -153,6 +141,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'SET_REPORT_DATA':
       return { ...state, reportData: action.data };
+
+    case 'SET_REPORT_TICKETS':
+      return {
+        ...state,
+        incidents: applyReportTicketEdit(state.incidents, action.edit),
+        routedIncidents: action.routedIncidents,
+        reportData: action.data,
+      };
 
     case 'SET_REPORT_PERIOD':
       return { ...state, reportPeriod: action.period };

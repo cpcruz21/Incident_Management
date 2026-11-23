@@ -1,11 +1,4 @@
-/**
- * IR Analytics Engine
- * 
- * Pure calculation functions for the IR Analytics Dashboard.
- * No UI dependencies. All functions accept normalized tickets and filters.
- */
-
-import type {
+﻿import type {
   IRRawRow,
   IRColumnMapping,
   NormalizedTicket,
@@ -24,7 +17,6 @@ import type {
 import type { Incident } from '@/types/incident';
 import { toValidDate } from '@/lib/aging/calculator';
 
-// ─── Status normalization ─────────────────────────────────────────────────────
 
 const OPEN_PATTERNS = /^open$/i;
 const PENDING_PATTERNS = /pending/i;
@@ -47,7 +39,6 @@ export function isActiveTicket(t: NormalizedTicket): boolean {
   return t.statusCategory !== 'resolved' && t.statusCategory !== 'closed';
 }
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function safeDate(val: unknown): Date | null {
   if (!val) return null;
@@ -63,7 +54,7 @@ export function daysBetween(a: Date | null, b: Date | null): number | null {
 export function daysAgo(d: Date | null, referenceDate: Date = new Date()): number | null {
   if (!d) return null;
   const ms = referenceDate.getTime() - d.getTime();
-  if (ms < 0) return null; // future date
+  if (ms < 0) return null;
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
@@ -85,7 +76,6 @@ function classifyInactivity(days: number | null): InactivityCategory {
   return 'active';
 }
 
-// ─── Auto-detect column mapping ───────────────────────────────────────────────
 
 export function autoDetectIRMapping(columns: string[]): IRColumnMapping {
   const mapping: IRColumnMapping = {};
@@ -158,7 +148,6 @@ export function autoDetectIRMapping(columns: string[]): IRColumnMapping {
     }
   }
 
-  // If no separate irId was found but ticketId was, use ticketId as irId too
   if (!mapping.irId && mapping.ticketId) {
     mapping.irId = mapping.ticketId;
   }
@@ -166,7 +155,6 @@ export function autoDetectIRMapping(columns: string[]): IRColumnMapping {
   return mapping;
 }
 
-// ─── Normalize a raw row ──────────────────────────────────────────────────────
 
 function getString(row: IRRawRow, col: string | undefined): string {
   if (!col) return '';
@@ -190,15 +178,13 @@ export function normalizeRow(
   const rawIrId = getString(row, mapping.irId);
   const rawTicketId = getString(row, mapping.ticketId);
 
-  // Normalize IDs: trim whitespace only (case preserved for numeric IDs)
   const irId = rawIrId;
-  const ticketId = rawTicketId || rawIrId; // Fall back to IR ID if no separate ticket ID
+  const ticketId = rawTicketId || rawIrId;
 
   const createdDate = getDate(row, mapping.createdDate);
   const lastUpdated = getDate(row, mapping.lastUpdated);
   const resolvedDate = getDate(row, mapping.resolvedDate);
 
-  // Best available "last movement" date
   let lastMovementDate: Date | null = null;
   let lastMovementSource: NormalizedTicket['lastMovementSource'] = 'none';
 
@@ -219,7 +205,6 @@ export function normalizeRow(
   const daysSinceMovement = daysAgo(lastMovementDate, referenceDate);
   const agingDays = daysAgo(createdDate, referenceDate);
 
-  // If resolved/closed, label as 'resolved' for aging display
   const agingCategory: AgingCategory =
     statusCategory === 'resolved' || statusCategory === 'closed'
       ? 'resolved'
@@ -256,22 +241,13 @@ export function normalizeRow(
     agingCategory,
     inactivityCategory,
     rawRow: row,
-    isCanonicalTicket: true,  // set later in deduplication
+    isCanonicalTicket: true,
     isCanonicalIR: true,
     isDuplicate: false,
   };
 }
 
-// ─── Import & deduplication ───────────────────────────────────────────────────
 
-/**
- * Process a list of raw rows into normalized, deduplicated tickets.
- * 
- * Deduplication rules:
- * - Tickets with the same non-blank ticketId from the SAME import batch are duplicates.
- * - Across batches, we prefer the latest batch's record (replacing the older one).
- * - Blank IDs are kept as individual rows (never merged).
- */
 export function processImportBatch(
   rows: IRRawRow[],
   mapping: IRColumnMapping,
@@ -293,19 +269,16 @@ export function processImportBatch(
     normalizeRow(row, mapping, i, batchId, referenceDate)
   );
 
-  // Deduplicate within new batch: for the same non-blank ticketId, keep the last row
   const batchByTicketId = new Map<string, NormalizedTicket>();
-  const batchDuplicates = new Set<string>(); // rowKeys of duplicate rows
+  const batchDuplicates = new Set<string>();
 
   for (const t of normalized) {
     if (!t.ticketIdBlank) {
       const existing = batchByTicketId.get(t.ticketId);
       if (existing) {
-        // Mark the earlier one as duplicate, keep the later one
         existing.isDuplicate = true;
         existing.isCanonicalTicket = false;
         batchDuplicates.add(existing.rowKey);
-        // Note conflict if statuses differ
         if (existing.statusCategory !== t.statusCategory) {
           t.conflictNote = `Conflict: earlier row had status "${existing.rawStatus}", using latest`;
         }
@@ -314,9 +287,6 @@ export function processImportBatch(
     }
   }
 
-  // Merge with existing tickets from previous batches
-  // For each new canonical ticket, if a ticket with the same non-blank ticketId
-  // already exists in the store, replace it (new batch wins for current status)
   const existingByTicketId = new Map<string, NormalizedTicket>();
   for (const t of existingTickets) {
     if (!t.ticketIdBlank && t.isCanonicalTicket) {
@@ -327,10 +297,9 @@ export function processImportBatch(
   const resolvedResult: NormalizedTicket[] = [...existingTickets];
 
   for (const t of normalized) {
-    if (t.isDuplicate) continue; // Skip within-batch duplicates
+    if (t.isDuplicate) continue;
 
     if (!t.ticketIdBlank && existingByTicketId.has(t.ticketId)) {
-      // Replace existing canonical record with new batch's version
       const idx = resolvedResult.findIndex(
         (r) => r.isCanonicalTicket && r.ticketId === t.ticketId
       );
@@ -341,11 +310,10 @@ export function processImportBatch(
     resolvedResult.push(t);
   }
 
-  // Mark canonical IRs
   const irSeen = new Set<string>();
   for (const t of resolvedResult) {
     if (t.irIdBlank) {
-      t.isCanonicalIR = true; // blank IDs are always their own
+      t.isCanonicalIR = true;
     } else if (!irSeen.has(t.irId)) {
       irSeen.add(t.irId);
       t.isCanonicalIR = true;
@@ -354,7 +322,6 @@ export function processImportBatch(
     }
   }
 
-  // Mark canonical tickets
   const ticketSeen = new Set<string>();
   for (const t of resolvedResult) {
     if (t.ticketIdBlank) {
@@ -368,7 +335,7 @@ export function processImportBatch(
   }
 
   const accepted = normalized.filter((t) => !t.isDuplicate).length;
-  const rejected = 0; // Rows without any ID are still accepted but flagged
+  const rejected = 0;
   const duplicateCount = normalized.filter((t) => t.isDuplicate).length;
 
   const uniqueTicketIds = new Set(
@@ -391,7 +358,6 @@ export function processImportBatch(
   };
 }
 
-// ─── Filtering ────────────────────────────────────────────────────────────────
 
 export function applyFilters(
   tickets: NormalizedTicket[],
@@ -402,10 +368,8 @@ export function applyFilters(
   const searchLower = filters.search.toLowerCase();
 
   return tickets.filter((t) => {
-    // Canonical only — don't count duplicates in analytics
     if (!t.isCanonicalTicket) return false;
 
-    // Search
     if (searchLower) {
       const matchId = t.ticketId.toLowerCase().includes(searchLower) ||
         t.irId.toLowerCase().includes(searchLower) ||
@@ -413,7 +377,6 @@ export function applyFilters(
       if (!matchId) return false;
     }
 
-    // Status filter: match exact rawStatus or normalized statusCategory
     if (filters.status) {
       const target = filters.status.toLowerCase().trim();
       const matchRaw = (t.rawStatus || '').toLowerCase().trim() === target;
@@ -421,19 +384,14 @@ export function applyFilters(
       if (!matchRaw && !matchCat) return false;
     }
 
-    // Technician filter
     if (filters.technician && t.technician !== filters.technician) return false;
 
-    // Incident type filter
     if (filters.incidentType && t.incidentType !== filters.incidentType) return false;
 
-    // Department filter
     if (filters.department && t.department !== filters.department) return false;
 
-    // Aging category filter
     if (filters.agingCategory && t.agingCategory !== filters.agingCategory) return false;
 
-    // Date range filter
     if (dateFrom || dateTo) {
       let dateVal: Date | null = null;
       switch (filters.dateField) {
@@ -451,26 +409,22 @@ export function applyFilters(
   });
 }
 
-// ─── Status counting & breakdown ─────────────────────────────────────────────
 
-/**
- * For all request status: get it, count it, compute percentage, and retain IDs.
- * Satisfies the requirement: "for all request status, get it and count it."
- */
 export function computeAllRequestStatusCounts(tickets: NormalizedTicket[]): StatusCountItem[] {
-  const map = new Map<string, { count: number; ids: string[]; category: TicketStatusCategory }>();
+  const map = new Map<string, { status: string; count: number; ids: string[]; category: TicketStatusCategory }>();
   const total = tickets.length;
 
   for (const t of tickets) {
-    const raw = (t.rawStatus || 'Unknown').trim();
-    const entry = map.get(raw) || { count: 0, ids: [], category: t.statusCategory };
+    const status = t.rawStatus?.trim() || 'Unknown';
+    const key = status.toLowerCase();
+    const entry = map.get(key) || { status, count: 0, ids: [], category: t.statusCategory };
     entry.count++;
     entry.ids.push(t.ticketId || t.rowKey);
-    map.set(raw, entry);
+    map.set(key, entry);
   }
 
-  return Array.from(map.entries())
-    .map(([status, { count, ids, category }]) => ({
+  return Array.from(map.values())
+    .map(({ status, count, ids, category }) => ({
       status,
       count,
       category,
@@ -480,7 +434,6 @@ export function computeAllRequestStatusCounts(tickets: NormalizedTicket[]): Stat
     .sort((a, b) => b.count - a.count);
 }
 
-// ─── Summary stats ────────────────────────────────────────────────────────────
 
 export function computeSummaryStats(
   allRawRows: number,
@@ -508,14 +461,12 @@ export function computeSummaryStats(
     (t) => t.daysSinceMovement !== null && t.daysSinceMovement >= 30
   ).length;
 
-  // Resolution rate
   const eligibleTotal = uniqueTickets;
   const resolutionRate =
     eligibleTotal > 0
       ? ((resolvedTickets + closedTickets) / eligibleTotal) * 100
       : null;
 
-  // Average resolution time (only tickets with both createdDate and resolvedDate)
   const withResolution = filteredTickets.filter(
     (t) => t.createdDate && t.resolvedDate
   );
@@ -527,7 +478,6 @@ export function computeSummaryStats(
       }, 0) / withResolution.length
       : null;
 
-  // Oldest inactive ticket
   const inactiveMovementDays = activeTickets
     .map((t) => t.daysSinceMovement)
     .filter((d): d is number => d !== null);
@@ -561,7 +511,6 @@ export function computeSummaryStats(
   };
 }
 
-// ─── Time-series ──────────────────────────────────────────────────────────────
 
 export function computeMonthlyTrend(
   tickets: NormalizedTicket[],
@@ -579,13 +528,15 @@ export function computeMonthlyTrend(
     byMonth.set(label, existing);
   }
 
-  return Array.from(byMonth.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([label, { count, ids }]) => ({
-      label: formatMonthLabel(label),
-      value: count,
-      ids,
-    }));
+  const latest = Array.from(byMonth.keys()).sort().at(-1);
+  if (!latest) return [];
+  const [year, month] = latest.split('-').map(Number);
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(year, month - 6 + index, 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const entry = byMonth.get(key);
+    return { label: formatMonthLabel(key), value: entry?.count ?? 0, ids: entry?.ids ?? [] };
+  });
 }
 
 function formatMonthLabel(yyyyMM: string): string {
@@ -595,25 +546,11 @@ function formatMonthLabel(yyyyMM: string): string {
   return `${months[parseInt(month) - 1]} ${year}`;
 }
 
-// ─── Distribution charts ───────────────────────────────────────────────────────
 
 export function computeStatusDistribution(tickets: NormalizedTicket[]): DistributionBar[] {
-  const map = new Map<string, { count: number; ids: string[] }>();
-  for (const t of tickets) {
-    const raw = (t.rawStatus || t.statusCategory || 'Unknown').trim();
-    const key = raw.charAt(0).toUpperCase() + raw.slice(1);
-    const entry = map.get(key) || { count: 0, ids: [] };
-    entry.count++;
-    entry.ids.push(t.ticketId || t.rowKey);
-    map.set(key, entry);
-  }
-  return Array.from(map.entries())
-    .sort((a, b) => b[1].count - a[1].count)
-    .map(([label, { count, ids }]) => ({
-      label,
-      value: count,
-      ids,
-    }));
+  return computeAllRequestStatusCounts(tickets).map(({ status, count, ids }) => ({
+    label: status, value: count, ids,
+  }));
 }
 
 export function computeIncidentTypeDistribution(tickets: NormalizedTicket[]): DistributionBar[] {
@@ -646,7 +583,6 @@ export function computeDepartmentDistribution(tickets: NormalizedTicket[]): Dist
     .map(([label, { count, ids }]) => ({ label, value: count, ids }));
 }
 
-// ─── Aging distribution ───────────────────────────────────────────────────────
 
 export function computeAgingDistribution(
   tickets: NormalizedTicket[],
@@ -692,7 +628,6 @@ export function computeAgingDistribution(
   }));
 }
 
-// ─── Technician rankings ──────────────────────────────────────────────────────
 
 export function computeTechnicianRankings(tickets: NormalizedTicket[]): TechnicianRankRow[] {
   const map = new Map<string, {
@@ -764,14 +699,12 @@ export function computeTechnicianRankings(tickets: NormalizedTicket[]): Technici
     };
   });
 
-  // Sort by resolved count descending
   rows.sort((a, b) => b.resolved - a.resolved);
   rows.forEach((r, i) => { r.rank = i + 1; });
 
   return rows;
 }
 
-// ─── Export helpers ───────────────────────────────────────────────────────────
 
 export function exportToCSV(rows: Record<string, unknown>[], filename: string): void {
   if (!rows.length) return;
@@ -826,13 +759,7 @@ export function ticketsToExportRows(
   }));
 }
 
-// ─── Module report integration ───────────────────────────────────────────────
 
-/**
- * Converts Incidents from generated module reports (Weekly, Monthly, Aging)
- * into NormalizedTicket records for the IR Analytics Dashboard.
- * Enables the dashboard to automatically pull data from reporting modules.
- */
 export function convertIncidentsToNormalizedTickets(
   incidents: Incident[],
   batchId: string = 'stored-reports',
@@ -851,7 +778,6 @@ export function convertIncidentsToNormalizedTickets(
 
     if (!rawId) continue;
 
-    // Request status: capture exact status from raw data or incident property
     let rawStatus = (
       inc.requestStatus ||
       String(raw['Request Status'] || raw['Status'] || raw['status'] || raw['Ticket Status'] || '')
@@ -860,7 +786,6 @@ export function convertIncidentsToNormalizedTickets(
     if (!rawStatus) rawStatus = 'Unknown';
     const statusCategory = normalizeStatus(rawStatus);
 
-    // Technician
     const technician = (
       String(raw['Technician'] || '') ||
       inc.assignedTeam ||
@@ -868,24 +793,20 @@ export function convertIncidentsToNormalizedTickets(
       'Unassigned'
     ).trim();
 
-    // Department
     const department = (
       inc.department ||
       String(raw['Department'] || raw['Affected Client/Department'] || raw['Dept'] || '')
     ).trim();
 
-    // Incident type / category
     const incidentType = (
       inc.category ||
       String(raw['Category'] || raw['Incident Type'] || raw['Type'] || '')
     ).trim();
 
-    // Dates
     const createdDate = toValidDate(inc.createdTime) || toValidDate(raw['Created Time']) || null;
     const resolvedDate = toValidDate(inc.completedTime) || toValidDate(raw['Completed Time']) || toValidDate(raw['Resolved Time']) || null;
     const lastUpdated = toValidDate(raw['Last Updated Date']) || toValidDate(raw['Assigned Time']) || toValidDate(raw['Responded Date']) || null;
 
-    // Movement tracking
     let lastMovementDate: Date | null = null;
     let lastMovementSource: NormalizedTicket['lastMovementSource'] = 'none';
 
@@ -913,7 +834,6 @@ export function convertIncidentsToNormalizedTickets(
         ? 'active'
         : classifyInactivity(daysSinceMovement);
 
-    // Remarks & descriptions
     const remarks = (
       inc.recentUpdate ||
       String(raw['Recent Update'] || raw['Remarks'] || raw['remarks'] || raw['Latest Update'] || raw['Resolution:'] || '')
@@ -956,7 +876,6 @@ export function convertIncidentsToNormalizedTickets(
     });
   }
 
-  // Deduplicate tickets: if the same ticket appears across multiple reports, keep latest
   const byTicket = new Map<string, NormalizedTicket>();
   for (const t of result) {
     byTicket.set(t.ticketId, t);

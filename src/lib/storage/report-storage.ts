@@ -1,9 +1,4 @@
-/**
- * Report Storage Service
- * Persists generated reports in the private server archive.
- */
-
-import type { Incident } from '@/types/incident';
+﻿import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingReportData } from '@/types/aging';
 import type { MonthlyReportData } from '@/types/monthly';
@@ -15,16 +10,14 @@ export interface StoredReport {
   type: 'weekly' | 'aging' | 'monthly';
   title: string;
   period: string;
-  savedAt: string; // ISO date string
+  savedAt: string;
   savedAtFormatted: string;
   author?: string;
+  privateOnly?: boolean;
   reportData: WeeklyReportData | AgingReportData | MonthlyReportData;
   routedIncidents?: Incident[];
 }
 
-/**
- * Retrieve all stored reports from localStorage
- */
 export function getLegacyStoredReports(): StoredReport[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -94,10 +87,15 @@ export async function saveReport(params: {
   title: string;
   period: string;
   author?: string;
+  privateOnly?: boolean;
   reportData: WeeklyReportData | AgingReportData | MonthlyReportData;
   routedIncidents?: Incident[];
-}): Promise<StoredReport> {
-  const now = new Date();
+  expectedSavedAt?: string;
+  weeklyPublication?: true;
+  monthlyPublication?: 'publish' | 'update';
+}): Promise<StoredReport & { publication?: 'updated' | 'unchanged' | 'failed' }> {
+  const previousSave = params.expectedSavedAt ? Date.parse(params.expectedSavedAt) : 0;
+  const now = new Date(Math.max(Date.now(), previousSave + 1));
   const formattedDate = now.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -116,17 +114,24 @@ export async function saveReport(params: {
     savedAt: now.toISOString(),
     savedAtFormatted: formattedDate,
     author: params.author,
+    privateOnly: params.privateOnly,
     reportData: params.reportData,
     routedIncidents: params.routedIncidents || [],
   };
 
-  await archiveRequest('POST', { reports: [record] });
+  const response = await archiveRequest('POST', {
+    reports: [record],
+    expectedSavedAt: params.expectedSavedAt,
+    weeklyPublication: params.weeklyPublication,
+    monthlyPublication: params.monthlyPublication,
+  });
+  if (params.weeklyPublication || params.monthlyPublication) {
+    const { publication } = await response.json() as { publication: 'updated' | 'unchanged' | 'failed' };
+    return { ...record, publication };
+  }
   return record;
 }
 
-/**
- * Delete a stored report by ID
- */
 export async function deleteStoredReport(report: StoredReport): Promise<void> {
   await archiveRequest('DELETE', { id: report.id, type: report.type });
 }
@@ -135,9 +140,6 @@ import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import type { PreviousWeekSLA } from '@/types/sla';
 import type { PreviousWeekAging } from '@/types/aging';
 
-/**
- * Extract PreviousWeekSLA values from a stored Weekly report
- */
 export function extractWeeklySLAFromStored(report: StoredReport): PreviousWeekSLA {
   const data = report.reportData as WeeklyReportData;
   const firstResponse: Record<string, number | null> = {};
@@ -158,7 +160,6 @@ export function extractWeeklySLAFromStored(report: StoredReport): PreviousWeekSL
   };
 }
 
-/** Latest extraction first; never use the report being edited as its own comparison. */
 export function getPriorAgingReports(reports: StoredReport[], beforeGeneratedAt?: Date | string): StoredReport[] {
   const cutoff = beforeGeneratedAt ? new Date(beforeGeneratedAt).getTime() : Infinity;
   const extractedAt = (report: StoredReport) => new Date(report.reportData.generatedAt || report.savedAt).getTime();
@@ -166,7 +167,6 @@ export function getPriorAgingReports(reports: StoredReport[], beforeGeneratedAt?
     .sort((a, b) => extractedAt(b) - extractedAt(a) || Date.parse(b.savedAt) - Date.parse(a.savedAt));
 }
 
-/** Extract aging counts and original SLA rates from the last saved extract. */
 export function extractAgingFromStored(report: StoredReport): PreviousWeekAging {
   const data = report.reportData as AgingReportData;
   const teamTotals: Record<string, number | null> = {};

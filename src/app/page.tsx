@@ -1,33 +1,34 @@
-'use client';
+﻿'use client';
 
 import React, { useReducer, useCallback, useState, useEffect } from 'react';
 import { AdminLogin } from '@/components/ui/AdminLogin';
+import { AppFooter } from '@/components/ui/AppFooter';
 import { Dashboard } from '@/components/ui/Dashboard';
 import type { DashboardView } from '@/components/ui/Dashboard';
 import type { Account } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth';
 
 import { appReducer, initialState } from '@/lib/store';
 import type { AppStep } from '@/lib/store';
 import { incidentReportSteps, Stepper } from '@/components/ui/Stepper';
 import { ReportWorkflowHeader } from '@/components/report/ReportWorkflowHeader';
-import { FileUpload } from '@/components/upload/FileUpload';
+import { ReportPeriodField, ReportSetup } from '@/components/report/ReportSetup';
 import { ValidationSummaryView } from '@/components/validation/ValidationSummary';
 import { RoutingPreview } from '@/components/routing/RoutingPreview';
 import { PreviousWeekInput } from '@/components/report/PreviousWeekInput';
 import { SLAReportTable } from '@/components/report/SLAReportTable';
-import { ExportDropdown } from '@/components/report/ExportDropdown';
+import { ReportExportButton } from '@/components/report/ReportExportButton';
 import { DetailModal } from '@/components/report/DetailModal';
 import { AgingReportWorkflow } from '@/components/aging/AgingReportWorkflow';
 import { MonthlyReportWorkflow } from '@/components/monthly/MonthlyReportWorkflow';
 
-import { parseFile } from '@/lib/excel/parser';
-import { autoDetectMapping, mapAllRows } from '@/lib/excel/mapper';
+import { readIncidentUpload } from '@/lib/excel/incident-upload';
 import { applyRouting } from '@/lib/routing/routing-engine';
-import { calculateSLAReport, calculateWeeklyCompletion } from '@/lib/sla/calculator';
-import { exportAsPng } from '@/lib/report/export';
+import { calculateSLAReport, calculateWeeklyCompletion, refreshWeeklyTicketTotals } from '@/lib/sla/calculator';
+import { applyReportTicketEdit, createReportTicketEdit, type ReportTicketAction } from '@/lib/report/ticket-edits';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 
-import type { ColumnMapping, Incident } from '@/types/incident';
+import type { Incident } from '@/types/incident';
 import type { WeeklyReportData } from '@/types/sla';
 import type { AgingReportData } from '@/types/aging';
 import type { StoredReport } from '@/lib/storage/report-storage';
@@ -51,20 +52,24 @@ export default function HomePage() {
   }, []);
 
   const [activeView, setActiveView] = useState<DashboardView>('dashboard');
-  const [weeklyArchiveId, setWeeklyArchiveId] = useState<string>();
+  const [weeklyArchive, setWeeklyArchive] = useState<{ id: string; savedAt?: string }>();
   const [agingStoredReport, setAgingStoredReport] = useState<{
     data: AgingReportData;
     incidents?: Incident[];
   } | null>(null);
   const [monthlyStoredReport, setMonthlyStoredReport] = useState<{
+    id: string;
+    title: string;
+    savedAt: string;
+    period: string;
+    privateOnly?: boolean;
     data: import('@/types/monthly').MonthlyReportData;
     incidents?: Incident[];
-    period?: string;
   } | null>(null);
 
   const handleOpenStoredReport = useCallback((storedReport: StoredReport) => {
     if (storedReport.type === 'weekly') {
-      setWeeklyArchiveId(storedReport.id);
+      setWeeklyArchive({ id: storedReport.id, savedAt: storedReport.savedAt });
       dispatch({
         type: 'LOAD_STORED_REPORT',
         reportData: storedReport.reportData as WeeklyReportData,
@@ -79,79 +84,53 @@ export default function HomePage() {
       setActiveView('aging');
     } else if (storedReport.type === 'monthly') {
       setMonthlyStoredReport({
+        id: storedReport.id,
+        title: storedReport.title,
+        savedAt: storedReport.savedAt,
+        period: storedReport.period,
+        privateOnly: storedReport.privateOnly,
         data: storedReport.reportData as import('@/types/monthly').MonthlyReportData,
         incidents: storedReport.routedIncidents,
-        period: storedReport.period,
       });
       setActiveView('monthly');
     }
   }, []);
 
-  //FILE UPLOAD
   const handleFileSelected = useCallback(async (file: File) => {
     dispatch({ type: 'SET_PROCESSING', isProcessing: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      const result = await parseFile(file);
-
-      if (!result.success) {
-        dispatch({ type: 'SET_ERROR', error: result.errors.join('. ') });
-        return;
-      }
-
-      // Auto-detect column mapping
-      const detectedMapping = autoDetectMapping(result.columns);
-      const fullMapping: ColumnMapping = {
-        ...state.columnMapping,
-        ...detectedMapping,
-      };
-      // Map and validate
-      const { incidents, validationSummary } = mapAllRows(result.data, fullMapping);
-      setWeeklyArchiveId(undefined);
-      dispatch({
-        type: 'SET_FILE',
-        fileName: file.name,
-        rawData: result.data as Record<string, unknown>[],
-        columns: result.columns,
-      });
-      dispatch({ type: 'SET_COLUMN_MAPPING', mapping: fullMapping });
+      const { data, columns, mapping, incidents, validationSummary } = await readIncidentUpload(file);
+      setWeeklyArchive(undefined);
+      dispatch({ type: 'SET_FILE', fileName: file.name, rawData: data, columns });
+      dispatch({ type: 'SET_COLUMN_MAPPING', mapping });
       dispatch({ type: 'SET_VALIDATION', incidents, summary: validationSummary });
-
-      // Auto-advance to validation
       dispatch({ type: 'SET_STEP', step: 'validation' });
-    } catch (error) {
-      dispatch({
-        type: 'SET_ERROR',
-        error: `Failed to process file: ${error instanceof Error ? error.message : String(error)}`,
-      });
     } finally {
       dispatch({ type: 'SET_PROCESSING', isProcessing: false });
     }
-  }, [state.columnMapping]);
+  }, []);
 
-  //ROUTING
   const handleProceedToRouting = useCallback(() => {
     const { routedIncidents, summary } = applyRouting(state.incidents, state.routingConfig);
     dispatch({ type: 'SET_ROUTING_RESULT', incidents: routedIncidents, summary });
     dispatch({ type: 'SET_STEP', step: 'routing' });
   }, [state.incidents, state.routingConfig]);
 
-  // PREVIOUS WEEK
   const handleProceedToPreviousWeek = useCallback(() => {
     dispatch({ type: 'SET_STEP', step: 'previous-week' });
   }, []);
 
-  //REPORT GENERATION 
   const handleGenerateReport = useCallback(() => {
     const currentWeekReport = state.reportData?.currentWeek ?? calculateSLAReport(state.routedIncidents, REPORT_TEAMS);
     const weeklyCompletion = state.reportData?.weeklyCompletion ?? calculateWeeklyCompletion(state.routedIncidents);
-    setWeeklyArchiveId((id) => id || `report-weekly-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    setWeeklyArchive(archive => archive ?? { id: `report-weekly-${Date.now()}-${Math.random().toString(36).slice(2)}` });
 
     const reportData: WeeklyReportData = {
       reportTitle: 'Closed Incident Weekly Report',
       reportPeriod: state.reportPeriod || `Week of ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
-      generatedAt: new Date(),
+      generatedAt: state.reportData?.generatedAt ?? new Date(),
       currentWeek: currentWeekReport,
       previousWeek: state.previousWeekSLA,
       weeklyCompletion,
@@ -162,21 +141,20 @@ export default function HomePage() {
     dispatch({ type: 'SET_STEP', step: 'report' });
   }, [state.routedIncidents, state.previousWeekSLA, state.reportPeriod, state.reportData]);
 
-  //NAVIGATION
+  const handleWeeklyTicketEdit = (action: ReportTicketAction, requestId: string) => {
+    if (!state.reportData) return;
+    const failedIds = new Set(state.reportData.currentWeek.firstResponseTotal.failedIncidentIds);
+    const edit = createReportTicketEdit(state.routedIncidents, requestId, action, currentAccount,
+      (ticket) => failedIds.has(ticket.requestId));
+    const routedIncidents = applyReportTicketEdit(state.routedIncidents, edit);
+    dispatch({ type: 'SET_REPORT_TICKETS', edit, routedIncidents, data: refreshWeeklyTicketTotals(state.reportData, routedIncidents) });
+  };
+
   const handleStepClick = useCallback((step: AppStep) => {
     dispatch({ type: 'SET_STEP', step });
   }, []);
 
-  // EXPORT
-  const handleExportPng = useCallback(async () => {
-    try {
-      await exportAsPng('sla-report-canvas', `SLA_Report_${new Date().toISOString().split('T')[0]}.png`);
-    } catch {
-      dispatch({ type: 'SET_ERROR', error: 'Failed to export report as PNG' });
-    }
-  }, []);
 
-  // DETAIL MODAL 
   const handleCellClick = useCallback((title: string, incidentIds: string[]) => {
     dispatch({ type: 'OPEN_DETAIL_MODAL', title, incidentIds });
   }, []);
@@ -203,7 +181,7 @@ export default function HomePage() {
   const handleSelectReport = useCallback((view: DashboardView) => {
     if (view === 'weekly') {
       dispatch({ type: 'RESET' });
-      setWeeklyArchiveId(undefined);
+      setWeeklyArchive(undefined);
       setActiveView('weekly');
     } else if (view === 'aging') {
       setAgingStoredReport(null);
@@ -215,8 +193,14 @@ export default function HomePage() {
     }
   }, []);
 
-  if (!mounted) return <main className="admin-login" role="status">Checking session...</main>;
-  if (!currentAccount) return <AdminLogin onLogin={handleLogin} />;
+  if (!mounted || !currentAccount) {
+    return (
+      <div className="admin-login-page">
+        {mounted ? <AdminLogin onLogin={handleLogin} /> : <main className="admin-login" role="status">Checking session...</main>}
+        <AppFooter />
+      </div>
+    );
+  }
 
   function workspace(content?: React.ReactNode) {
     return currentAccount && (
@@ -233,32 +217,20 @@ export default function HomePage() {
     );
   }
 
-  // 3) Monthly Report Module
   if (activeView === 'monthly') {
     return workspace(
       <MonthlyReportWorkflow
         account={currentAccount}
         initialStoredReport={monthlyStoredReport}
-        onBack={() => {
-          setActiveView('dashboard');
-          dispatch({ type: 'RESET' });
-          setMonthlyStoredReport(null);
-        }}
       />
     );
   }
 
-  // 4) Aging Trends Module
   if (activeView === 'aging') {
     return workspace(
       <AgingReportWorkflow
         key={agingStoredReport ? `stored-${agingStoredReport.data.reportId || agingStoredReport.data.generatedAt}` : `new-${agingKey}`}
         account={currentAccount}
-        onBack={() => {
-          setAgingStoredReport(null);
-          setActiveView('dashboard');
-          dispatch({ type: 'RESET' });
-        }}
         initialReportData={agingStoredReport?.data}
         initialRoutedIncidents={agingStoredReport?.incidents}
       />
@@ -267,68 +239,50 @@ export default function HomePage() {
 
   if (activeView !== 'weekly') return workspace();
 
-  // 5) Weekly SLA Report (existing workflow)
+  const showingWeeklyReport = state.currentStep === 'report' && Boolean(state.reportData);
+  const showWeeklyWorkflow = !showingWeeklyReport || state.rawData !== null;
+  const startNewWeeklyReport = () => {
+    dispatch({ type: 'RESET' });
+    setWeeklyArchive(undefined);
+  };
   return workspace(
-    <main className="app-main">
-      <ReportWorkflowHeader
-        title="Weekly SLA Report"
-        fileName={state.fileName}
-        busy={state.isProcessing}
-        onBack={() => {
-          setActiveView('dashboard');
-          dispatch({ type: 'RESET' });
-        }}
-        onReset={() => {
-          dispatch({ type: 'RESET' });
-          setWeeklyArchiveId(undefined);
-        }}
-      />
-      <Stepper
-        steps={incidentReportSteps}
-        currentStep={state.currentStep}
-        onStepClick={handleStepClick}
-        busy={state.isProcessing}
-        availableSteps={[
-          'upload',
-          ...(state.validationSummary ? ['validation' as const] : []),
-          ...(state.routingSummary ? ['routing' as const, 'previous-week' as const] : []),
-          ...(state.reportData && !state.routingSummary ? ['previous-week' as const] : []),
-        ]}
-      />
-
-      {/* Error Banner */}
+    <main className="app-main"
+      data-report-setup={state.currentStep === 'upload' || undefined}>
+      {showWeeklyWorkflow && (
+        <ReportWorkflowHeader
+          title="Generate Weekly Report"
+          fileName={state.fileName}
+          busy={state.isProcessing}
+          onReset={startNewWeeklyReport}
+        />
+      )}
+      {showWeeklyWorkflow && (
+        <Stepper
+          steps={incidentReportSteps}
+          currentStep={state.currentStep}
+          onStepClick={handleStepClick}
+          busy={state.isProcessing}
+          availableSteps={[
+            'upload',
+            ...(state.validationSummary ? ['validation' as const] : []),
+            ...(state.routingSummary ? ['routing' as const, 'previous-week' as const] : []),
+            ...(state.reportData && !state.routingSummary ? ['previous-week' as const] : []),
+          ]}
+        />
+      )}
       {state.error && (
         <div className="error-banner report-workflow-error" role="alert">
           <span>{state.error}</span>
           <button type="button" aria-label="Dismiss error" onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
         </div>
       )}
-
-      {/* Main Content */}
-      <div className="app-content">
-        {/* STEP 1: Upload */}
+      <div className={showingWeeklyReport ? 'app-content report-results-content' : 'app-content'}>
         {state.currentStep === 'upload' && (
-          <section className="report-setup" aria-labelledby="report-setup-title">
-            <h2 id="report-setup-title">Report setup</h2>
-            <div className="report-setup-fields">
-              <div className="report-setup-field">
-                <label htmlFor="report-period">
-                  Report period <span>(optional)</span>
-                </label>
-                <input
-                  id="report-period"
-                  type="text"
-                  placeholder="e.g., September 29 - October 5, 2026"
-                  value={state.reportPeriod}
-                  onChange={(e) => dispatch({ type: 'SET_REPORT_PERIOD', period: e.target.value })}
-                />
-              </div>
-            </div>
-            <FileUpload onFileSelected={handleFileSelected} isProcessing={state.isProcessing} />
-          </section>
+          <ReportSetup onFileSelected={handleFileSelected} isProcessing={state.isProcessing}>
+            <ReportPeriodField value={state.reportPeriod}
+              onChange={period => dispatch({ type: 'SET_REPORT_PERIOD', period })} />
+          </ReportSetup>
         )}
-
-        {/* STEP 2: Validation */}
         {state.currentStep === 'validation' && state.validationSummary && (
           <ValidationSummaryView
             summary={state.validationSummary}
@@ -336,8 +290,6 @@ export default function HomePage() {
             onBack={() => dispatch({ type: 'SET_STEP', step: 'upload' })}
           />
         )}
-
-        {/* STEP 3: Routing */}
         {state.currentStep === 'routing' && state.routingSummary && (
           <RoutingPreview
             summary={state.routingSummary}
@@ -345,8 +297,6 @@ export default function HomePage() {
             onBack={() => dispatch({ type: 'SET_STEP', step: 'validation' })}
           />
         )}
-
-        {/* STEP 4: Previous Week */}
         {state.currentStep === 'previous-week' && (
           <PreviousWeekInput
             initialValues={state.previousWeekSLA}
@@ -356,53 +306,27 @@ export default function HomePage() {
             onProceed={handleGenerateReport}
           />
         )}
-
-        {/* STEP 5: Report */}
         {state.currentStep === 'report' && state.reportData && (
-          <div className="report-step">
-            <div className="report-actions-bar">
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    dispatch({ type: 'SET_STEP', step: 'previous-week' });
-                  }}
-                >
-                  Edit previous week
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    dispatch({ type: 'RESET' });
-                    setWeeklyArchiveId(undefined);
-                  }}
-                  title="Create a new report from scratch"
-                >
-                  + New Report
-                </button>
-              </div>
-              <div className="report-export-buttons">
-                <ExportDropdown
-                  incidents={state.routedIncidents}
-                  reportData={state.reportData}
-                  baseFilename="SMAC_Incident_Report"
-                  targetElementId="weekly-closed-incident-report-card"
-                  onExportPng={handleExportPng}
-                />
-              </div>
-            </div>
-
-            <SLAReportTable
-              data={state.reportData}
-              onCellClick={handleCellClick}
-              routedIncidents={state.routedIncidents}
-              archiveId={weeklyArchiveId}
-            />
-          </div>
+          <SLAReportTable
+            data={state.reportData}
+            headingLevel={showWeeklyWorkflow ? 2 : 1}
+            onCellClick={handleCellClick}
+            routedIncidents={state.routedIncidents}
+            archiveId={weeklyArchive?.id}
+            archiveSavedAt={weeklyArchive?.savedAt}
+            onSaveReport={report => setWeeklyArchive({ id: report.id, savedAt: report.savedAt })}
+            onEditTicket={isAdmin(currentAccount) ? handleWeeklyTicketEdit : undefined}
+            exportAction={
+              <ReportExportButton
+                account={currentAccount}
+                incidents={state.routedIncidents}
+                reportData={state.reportData}
+                baseFilename="SMAC_Incident_Report"
+              />
+            }
+          />
         )}
       </div>
-
-      {/* Detail Modal */}
       <DetailModal
         isOpen={state.detailModal.isOpen}
         title={state.detailModal.title}

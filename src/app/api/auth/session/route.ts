@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   if (!getSuperAdmin()) return error('The super admin account must be set up before signing in.', 503);
   const credentials = getCredentials(body.username.trim().toLowerCase());
   if (credentials?.role === 'super-admin' && isUatVpnRequest()) {
-    return error('Use a QA admin account on the VPN. Super-admin sign-in is available on the UAT computer.', 403);
+    return error('Use a QA admin account at this address. For super-admin sign-in, open the local management page on the UAT computer.', 403);
   }
   const result = await authenticate(credentials, body.password);
   if (result === 'limited' || result === 'invalid' || !credentials) {

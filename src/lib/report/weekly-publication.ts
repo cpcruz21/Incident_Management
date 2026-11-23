@@ -1,4 +1,4 @@
-import type { TeamSLAResult, WeeklyReportData } from '@/types/sla';
+﻿import type { TeamSLAResult, WeeklyReportData } from '@/types/sla';
 import { sdpDisplayId } from '@/lib/sdp/request-id';
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -63,7 +63,6 @@ function requestIdsForCount(source: string[], count: number): string[] {
   return ids;
 }
 
-/** Include the SDP display IDs needed for current-week ticket lists. */
 export function toPublicWeeklyReport(data: WeeklyReportData): WeeklyReportData {
   const aggregate = (row: TeamSLAResult) => ({
     teamName: row.teamName, total: row.total, failed: row.failed, passed: row.passed, slaPassRate: row.slaPassRate,

@@ -79,7 +79,12 @@ function editor(initialData) {
       const tr = render().find(node => node.type === 'tr' && walk(node).some(item => item.type === 'textarea' && item.props['aria-label'] === `Recent update for ${id}`));
       await walk(tr).find(node => node.type === 'button' && text(node).includes('💾 Save')).props.onClick();
     },
-    async saveAll() { await render().find(node => node.type === 'button' && text(node).includes('Save Unsaved')).props.onClick(); },
+    async saveAll() {
+      const header = render().find(node => node.props?.title === 'Aging Incident Report' && node.props?.actions);
+      const button = walk(header?.props.actions).find(node => node.type === 'button' && text(node).includes('Save Unsaved'));
+      assert.ok(button, 'The report header should offer to save pending remarks');
+      await button.props.onClick();
+    },
     currentValue(id) { return render().find(node => node.type === 'textarea' && node.props['aria-label'] === `Recent update for ${id}`).props.value; },
     close() { Object.assign(React, originals); },
   };

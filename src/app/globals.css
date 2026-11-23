@@ -1,10 +1,10 @@
-:root {
-  /* Brand */
+﻿:root {
+  
   --color-primary: #1a56db;
   --color-primary-dark: #1e40af;
   --color-primary-light: #dbeafe;
 
-  /* Report Colors (matching reference image exactly) */
+  
   --report-header-blue: #ffffff;
   --report-header-first-response: #00ffff;
   --report-header-resolution: #00ff00;
@@ -23,14 +23,14 @@
   --sla-warning: #ffc000;
   --sla-critical: #ff0000;
 
-  /* UI Colors */
+  
   --border-active: #3b82f6;
 
   --success-bg: rgba(34, 197, 94, 0.1);
   --warning-bg: rgba(234, 179, 8, 0.1);
   --error-bg: rgba(239, 68, 68, 0.1);
 
-  /* Spacing */
+  
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 1rem;
@@ -38,20 +38,20 @@
   --space-xl: 2rem;
   --space-2xl: 3rem;
 
-  /* Radius */
+  
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-full: 9999px;
 
-  /* Shadows */
+  
   --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
 
-  /* Font */
+  
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-/* ─── RESET ──────────────────────────────────────────────── */
+
 *,
 *::before,
 *::after {
@@ -63,7 +63,7 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
-  overflow-x: hidden; /* prevent page-level horizontal scrollbar from wide table content */
+  overflow-x: hidden; 
 }
 
 body {
@@ -75,7 +75,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ─── APP LAYOUT ─────────────────────────────────────────── */
+
 .app-main {
   min-height: 100vh;
   display: flex;
@@ -143,7 +143,7 @@ body {
   color: var(--text-secondary);
 }
 
-/* ─── STEPPER ────────────────────────────────────────────── */
+
 .stepper-container {
   max-width: 900px;
   margin: var(--space-xl) auto;
@@ -236,7 +236,7 @@ body {
   color: var(--text-primary);
 }
 
-/* ─── CONTENT AREA ───────────────────────────────────────── */
+
 .app-content {
   flex: 1;
   max-width: 1400px;
@@ -272,7 +272,7 @@ body {
   margin: 0 auto;
 }
 
-/* ─── BUTTONS ────────────────────────────────────────────── */
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -340,99 +340,12 @@ body {
   box-shadow: 0 2px 12px rgba(5, 150, 105, 0.3);
 }
 
-.btn-export:hover {
+.btn-export:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 20px rgba(5, 150, 105, 0.4);
 }
 
-/* ─── EXPORT AS DROPDOWN (matching white inspo) ─────────── */
-.export-dropdown-container {
-  position: relative;
-  display: inline-block;
-}
 
-.export-dropdown-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #08704d, #0b6b65) !important;
-  color: #ffffff !important;
-  border: none !important;
-  border-radius: var(--radius-md, 8px);
-  padding: 8px 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 12px rgba(5, 150, 105, 0.3);
-  font-family: inherit;
-  height: 38px;
-}
-
-.export-dropdown-trigger:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(5, 150, 105, 0.4) !important;
-}
-
-.export-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  background: #ffffff !important;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  min-width: 235px;
-  white-space: nowrap;
-  padding: 4px 0;
-  z-index: 1000;
-  animation: dropdownFadeIn 0.15s ease;
-}
-
-@keyframes dropdownFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.export-dropdown-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 16px;
-  font-size: 0.85rem;
-  color: #374151;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-  font-family: inherit;
-}
-
-.export-dropdown-item:hover {
-  background: #f3f4f6;
-  color: #111827;
-}
-
-.export-dropdown-subitem {
-  padding-left: 22px;
-  color: var(--ui-success);
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.export-dropdown-subitem:hover {
-  background: #ecfdf5;
-  color: #047857;
-}
-
-/* ─── FILE UPLOAD ────────────────────────────────────────── */
 .upload-container {
   margin-bottom: var(--space-xl);
 }
@@ -549,7 +462,7 @@ body {
   }
 }
 
-/* ─── REPORT PERIOD INPUT ────────────────────────────────── */
+
 .period-input-section {
   margin-top: var(--space-lg);
   text-align: center;
@@ -589,7 +502,7 @@ body {
   color: var(--text-muted);
 }
 
-/* ─── ERROR BANNER ───────────────────────────────────────── */
+
 .error-banner {
   max-width: 1400px;
   margin: 0 auto var(--space-lg);
@@ -613,7 +526,7 @@ body {
   padding: 4px;
 }
 
-/* ─── VALIDATION ─────────────────────────────────────────── */
+
 .validation-container {
   max-width: 900px;
   margin: 0 auto;
@@ -793,7 +706,7 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
-/* ─── ROUTING ────────────────────────────────────────────── */
+
 .routing-container {
   max-width: 1380px;
   width: 100%;
@@ -815,7 +728,7 @@ body {
   margin-top: 4px;
 }
 
-/* Routing Stat Cards */
+
 .routing-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -986,7 +899,7 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-/* ─── PREVIOUS WEEK ──────────────────────────────────────── */
+
 .prevweek-container {
   max-width: 800px;
   margin: 0 auto;
@@ -1183,17 +1096,10 @@ body {
   border-top: 2px solid var(--border-color);
 }
 
-/* ─── REPORT ─────────────────────────────────────────────── */
+
 .report-step {
   max-width: 1200px;
   margin: 0 auto;
-}
-
-.report-actions-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-xl);
 }
 
 .report-export-buttons {
@@ -1201,7 +1107,7 @@ body {
   gap: var(--space-sm);
 }
 
-/* ─── SLA REPORT TABLE (pixel-accurate) ──────────────────── */
+
 .report-wrapper {
   overflow-x: auto;
   margin-bottom: var(--space-xl);
@@ -1249,7 +1155,7 @@ body {
   margin-bottom: 0;
 }
 
-/* Report Table */
+
 .report-table {
   width: 100%;
   border-collapse: collapse;
@@ -1267,7 +1173,7 @@ body {
   line-height: 1.35;
 }
 
-/* Header Groups */
+
 .col-technician {
   width: 145px;
   min-width: 145px;
@@ -1298,7 +1204,7 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* Sub-headers */
+
 .header-total {
   background: #ffffff !important;
   color: #0f172a !important;
@@ -1339,7 +1245,7 @@ body {
   width: 125px;
 }
 
-/* Data Rows */
+
 .report-data-row .cell-technician {
   background: #3b82f6;
   font-weight: 700;
@@ -1390,7 +1296,7 @@ body {
   background: #dbeafe !important;
 }
 
-/* SLA percentage high contrast readable colors */
+
 .sla-excellent {
   color: #15803d;
   font-weight: 800;
@@ -1418,7 +1324,7 @@ body {
   font-weight: 600;
 }
 
-/* Total Row */
+
 .report-total-row td {
   font-weight: 800;
   font-size: 0.95rem;
@@ -1463,10 +1369,6 @@ body {
   text-align: right;
 }
 
-/* ============================================================
-   EXECUTIVE ITSM DASHBOARD STYLING
-   ============================================================ */
-
 .itsm-report-wrapper {
   overflow-x: auto;
   margin-bottom: var(--space-xl);
@@ -1507,7 +1409,7 @@ body {
   margin: 0;
 }
 
-/* ── 1. Header ── */
+
 .itsm-header {
   background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
   padding: 24px 28px;
@@ -1615,7 +1517,7 @@ body {
   box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
 }
 
-/* ── 2. KPI Summary Cards ── */
+
 .itsm-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1776,7 +1678,7 @@ body {
   background: #ef4444;
 }
 
-/* ── 3. Weekly Trajectory Comparison ── */
+
 .itsm-comparison-section {
   padding: 16px 28px 20px;
   background: #f8fafc;
@@ -1941,7 +1843,7 @@ body {
   background: linear-gradient(90deg, #059669 0%, #10b981 100%);
 }
 
-/* ── 4. Detailed Team Performance Table ── */
+
 .itsm-table-section {
   padding: 24px 28px;
   background: #ffffff;
@@ -1987,9 +1889,7 @@ body {
   background: #ef4444;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   WEEKLY CLOSED INCIDENT EXECUTIVE TABLE (matches user specification)
-   ══════════════════════════════════════════════════════════════════ */
+
 .is-exporting-png,
 .is-exporting-png * {
   scrollbar-width: none !important;
@@ -2004,7 +1904,7 @@ body {
   height: 0 !important;
 }
 
-/* Utility action bar above table */
+
 .weekly-table-action-bar {
   display: flex;
   align-items: center;
@@ -2041,9 +1941,7 @@ body {
   cursor: not-allowed;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   OVERDUE STATUS COMPLETION TABLES (matches Image 2 user reference)
-   ══════════════════════════════════════════════════════════════════ */
+
 .weekly-overdue-section {
   margin-top: 32px;
   display: flex;
@@ -2112,7 +2010,7 @@ body {
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Inter, 'Helvetica Neue', Arial, sans-serif;
   font-size: 2rem;
   font-weight: 700;
-  color: #ff0000 !important; /* Bold Red percentage matching user reference */
+  color: #ff0000 !important; 
   width: 30%;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
@@ -2132,7 +2030,7 @@ body {
 }
 
 .weekly-company-name {
-  color: #0070c0; /* Blue corporate text from original report */
+  color: #0070c0; 
   font-weight: 700;
   font-size: 0.95rem;
 }
@@ -2150,7 +2048,7 @@ body {
   text-align: center;
 }
 
-/* Group Headers */
+
 .itsm-tr-groups th {
   padding: 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
@@ -2213,7 +2111,7 @@ body {
   color: #082f49;
 }
 
-/* Sub Headers */
+
 .itsm-tr-cols th {
   padding: 8px 10px;
   font-size: 0.76rem;
@@ -2256,7 +2154,7 @@ body {
   border-right: 2px solid #94a3b8 !important;
 }
 
-/* Table Rows */
+
 .itsm-row td {
   padding: 10px 12px;
   border-bottom: 1px solid #f1f5f9;
@@ -2356,7 +2254,7 @@ body {
   font-weight: 600;
 }
 
-/* SLA Status Pills */
+
 .sla-pill {
   display: inline-block;
   padding: 4px 10px;
@@ -2398,7 +2296,7 @@ body {
   color: #64748b;
 }
 
-/* Total Row */
+
 .itsm-tr-total {
   background: #0f172a !important;
   color: #ffffff;
@@ -2446,7 +2344,7 @@ body {
   color: #e2e8f0;
 }
 
-/* ── 5. Executive Insights & Recommended Actions ── */
+
 .itsm-insights-section {
   padding: 0 28px 24px;
   background: #ffffff;
@@ -2612,7 +2510,7 @@ body {
   color: #059669;
 }
 
-/* ── 6. Weekly Completion Section ── */
+
 .itsm-completion-section {
   padding: 0 28px 24px;
   background: #ffffff;
@@ -2701,7 +2599,7 @@ body {
   color: #0f172a;
 }
 
-/* ── 7. Executive Footer ── */
+
 .itsm-footer {
   background: #0f172a;
   color: #94a3b8;
@@ -2729,7 +2627,7 @@ body {
   color: #808080;
 }
 
-/* ─── MODAL ──────────────────────────────────────────────── */
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -2853,12 +2751,11 @@ body {
   padding: var(--space-lg);
 }
 
-/* ─── PRINT STYLES ───────────────────────────────────────── */
+
 @media print {
 
   .app-header,
   .stepper-container,
-  .report-actions-bar,
   .error-banner {
     display: none !important;
   }
@@ -2882,7 +2779,7 @@ body {
   }
 }
 
-/* ─── RESPONSIVE ─────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   .header-content {
     flex-direction: column;
@@ -2908,11 +2805,6 @@ body {
   }
 }
 
-/* ============================================================
-   PIN LOGIN SCREEN — SMAC Authentication
-   ============================================================ */
-
-/* Full-screen overlay */
 .pin-overlay {
   position: fixed;
   inset: 0;
@@ -2924,7 +2816,7 @@ body {
   outline: none;
 }
 
-/* Glassmorphism card */
+
 .pin-card {
   display: flex;
   flex-direction: column;
@@ -2952,7 +2844,7 @@ body {
   }
 }
 
-/* Brand section */
+
 .pin-brand {
   display: flex;
   flex-direction: column;
@@ -2986,7 +2878,7 @@ body {
   font-weight: 400;
 }
 
-/* PIN dot indicators */
+
 .pin-dots {
   display: flex;
   gap: 0.75rem;
@@ -3009,7 +2901,7 @@ body {
   transform: scale(1.15);
 }
 
-/* Shake animation on wrong PIN */
+
 .pin-shake {
   animation: pin-shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
@@ -3038,7 +2930,7 @@ body {
   }
 }
 
-/* Error message */
+
 .pin-error {
   font-size: 0.8rem;
   color: #f87171;
@@ -3059,7 +2951,7 @@ body {
   }
 }
 
-/* Keypad grid */
+
 .pin-keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3067,7 +2959,7 @@ body {
   width: 100%;
 }
 
-/* Individual keypad button */
+
 .pin-key {
   aspect-ratio: 1;
   border-radius: 12px;
@@ -3096,7 +2988,7 @@ body {
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Danger key (backspace) */
+
 .pin-key--danger {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.25);
@@ -3107,7 +2999,7 @@ body {
   background: rgba(239, 68, 68, 0.25);
 }
 
-/* Primary key (submit / login) */
+
 .pin-key--primary {
   background: linear-gradient(135deg, #5b6ef5 0%, #7c3aed 100%);
   border-color: transparent;
@@ -3120,7 +3012,7 @@ body {
   box-shadow: 0 8px 24px rgba(99, 102, 241, 0.55);
 }
 
-/* Hint text */
+
 .pin-hint {
   font-size: 0.75rem;
   color: #475569;
@@ -3132,7 +3024,7 @@ body {
   color: #94a3b8;
 }
 
-/* Logged-in user badge (shown in app header after login) */
+
 .header-user-badge {
   display: flex;
   align-items: center;
@@ -3163,11 +3055,6 @@ body {
   border-radius: 4px;
 }
 
-/* ============================================================
-   DASHBOARD — report selector
-   ============================================================ */
-
-/* ─── Shell / background ──────────────────────────────────── */
 .db-shell {
   min-height: 100vh;
   background: radial-gradient(circle at 82% 0%, #17375c 0%, transparent 32%), #091426;
@@ -3175,7 +3062,7 @@ body {
   color: #f6f9ff;
 }
 
-/* ─── Top bar ────────────────────────────────────────────── */
+
 .db-topbar {
   height: 64px;
   border-bottom: 1px solid #243650;
@@ -3240,14 +3127,14 @@ body {
   border-radius: 9999px;
 }
 
-/* ─── Page layout ─────────────────────────────────────────── */
+
 .db-page-wrap {
   max-width: 1240px;
   margin: 0 auto;
   padding: 2rem 2rem 3rem;
 }
 
-/* ─── Landing header ──────────────────────────────────────── */
+
 .db-landing-header {
   margin-bottom: 1.75rem;
   display: flex;
@@ -3282,7 +3169,7 @@ body {
   max-width: 640px;
 }
 
-/* ─── Cards grid ─────────────────────────────────────────── */
+
 .db-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3303,7 +3190,7 @@ body {
   }
 }
 
-/* ─── Report card ────────────────────────────────────────── */
+
 .db-report-card {
   display: flex;
   flex-direction: column;
@@ -3342,7 +3229,7 @@ body {
   background: linear-gradient(145deg, #17375e, #102440);
 }
 
-/* ─── Card internals ─────────────────────────────────────── */
+
 .db-card-top {
   display: flex;
   align-items: flex-start;
@@ -3429,7 +3316,7 @@ body {
   flex: 1;
 }
 
-/* ─── Open button ────────────────────────────────────────── */
+
 .db-open-btn {
   margin-top: 1.25rem;
   width: 100%;
@@ -3457,14 +3344,6 @@ body {
 .db-open-btn:active {
   transform: scale(0.97);
 }
-
-/* ============================================================
-   AGING TRENDS MODULE
-   ============================================================ */
-
-/* --- Layout & Headers ------------------------------------- */
-/* .aging-report-wrapper — defined below in the full-screen section */
-/* The wrapper uses overflow-x: auto to contain wide tables without causing a page-level scrollbar */
 
 .aging-report-canvas {
   background: #ffffff;
@@ -3506,7 +3385,7 @@ body {
   margin-top: 2px;
 }
 
-/* --- General Table Styles --------------------------------- */
+
 .aging-sla-table,
 .aging-dist-table {
   width: 100%;
@@ -3524,7 +3403,7 @@ body {
   vertical-align: middle;
 }
 
-/* --- SLA Compliance Table --------------------------------- */
+
 .aging-col-tech {
   width: 150px;
   min-width: 150px;
@@ -3613,7 +3492,7 @@ body {
   font-weight: 800;
 }
 
-/* --- Aging Distribution Table ----------------------------- */
+
 .aging-dist-main-header {
   background: #d9e1f2 !important;
   color: #000000 !important;
@@ -3696,10 +3575,6 @@ body {
   margin: 0;
 }
 
-/* ============================================================
-   WEEKLY COMPLETION TABLES
-   ============================================================ */
-
 .weekly-completion-container {
   display: flex;
   flex-direction: column;
@@ -3756,7 +3631,7 @@ body {
   font-size: 1.5rem;
 }
 
-/* Report Footers & Save Report Button */
+
 .report-footer,
 .aging-report-footer {
   display: flex !important;
@@ -3814,10 +3689,6 @@ body {
   font-size: 0.95rem !important;
 }
 
-/* ============================================================
-   REMARKS TABLE & AGING TAB SWITCHER
-   ============================================================ */
-
 .report-tab-switcher {
   display: inline-flex;
   background: var(--bg-card, #1e293b);
@@ -3865,10 +3736,6 @@ body {
   color: #ffffff;
 }
 
-/* Remarks Metadata Card matching Screenshot 1 */
-/* ============================================================
-   REPORT DATE & SUMMARY INFORMATION PANEL (ENHANCED UI)
-   ============================================================ */
 .remarks-meta-header-panel {
   display: flex;
   justify-content: flex-start;
@@ -3883,7 +3750,7 @@ body {
     "created total"
     "from    to";
   gap: 1px;
-  background: #334155; /* Subtle blue-gray divider */
+  background: #334155; 
   border: 1px solid #334155;
   border-radius: 8px;
   overflow: hidden;
@@ -3909,8 +3776,8 @@ body {
   align-items: center;
   justify-content: flex-start;
   padding: 8px 14px;
-  background: #0f172a; /* Subtle background contrast */
-  color: #cbd5e1; /* Clean light gray */
+  background: #0f172a; 
+  color: #cbd5e1; 
   font-weight: 600;
   font-size: 0.80rem;
   letter-spacing: 0.03em;
@@ -3929,11 +3796,11 @@ body {
   align-items: center;
   justify-content: center;
   padding: 8px 16px;
-  color: #f87171; /* Dim/soft red accent for cleaner, more refined aesthetics */
+  color: #f87171; 
   font-weight: 600;
   font-size: 0.88rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  white-space: nowrap; /* Prevent awkward multi-line wrapping */
+  white-space: nowrap; 
   flex: 1;
 }
 
@@ -3942,7 +3809,7 @@ body {
   font-size: 1.05rem;
 }
 
-/* Responsive: Adapt neatly on smaller screens without clipping */
+
 @media (max-width: 620px) {
   .report-summary-panel {
     grid-template-columns: 1fr;
@@ -3966,7 +3833,7 @@ body {
   }
 }
 
-/* Retain backward-compatible fallback for remarks-meta-card-table */
+
 .remarks-meta-wrapper {
   display: flex;
   justify-content: flex-start;
@@ -3997,31 +3864,19 @@ body {
   font-weight: 700 !important;
 }
 
-/* ============================================================
-   AGING REPORT — FULL-SCREEN DASHBOARD & ENHANCEMENTS
-   ============================================================ */
-
-/* Full-Screen Container Overrides (Strict Requirement 13) */
 .aging-fullscreen-dashboard {
   width: 100% !important;
   min-height: 100vh !important;
   background: var(--bg-primary, #0f172a);
 }
 
-.app-content.aging-report-fullscreen {
-  max-width: 100% !important;
-  width: 100% !important;
-  padding: 0 1.5rem 2rem 1.5rem !important;
-  margin: 0 !important;
-}
-
 .aging-report-wrapper {
   width: 100%;
-  overflow-x: auto;     /* contain wide tables — no page-level horizontal scroll */
+  overflow-x: auto;     
   margin-bottom: var(--space-xl);
 }
 
-/* Toast Notifications */
+
 .aging-toast-notification {
   position: fixed;
   top: 1.5rem;
@@ -4086,7 +3941,7 @@ body {
   opacity: 1;
 }
 
-/* Tab Switcher Container */
+
 .report-tab-switcher-container {
   display: flex;
   justify-content: space-between;
@@ -4138,7 +3993,7 @@ body {
   margin-left: 6px;
 }
 
-/* ═══════ KPI SUMMARY CARDS GRID ═══════ */
+
 .aging-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -4225,7 +4080,7 @@ body {
   100% { transform: scale(1); }
 }
 
-/* ═══════ HEADER PANEL & METADATA ═══════ */
+
 .remarks-meta-header-panel {
   display: flex;
   align-items: stretch;
@@ -4260,7 +4115,7 @@ body {
   line-height: 1.45;
 }
 
-/* ═══════ ADVANCED TOOLBAR ═══════ */
+
 .remarks-advanced-toolbar {
   display: flex;
   align-items: center;
@@ -4376,7 +4231,7 @@ body {
   color: #0f172a;
 }
 
-/* Status Bar */
+
 .remarks-status-bar {
   display: flex;
   justify-content: space-between;
@@ -4402,7 +4257,7 @@ body {
   font-size: 0.78rem;
 }
 
-/* ═══════ FULL-SCREEN RESPONSIVE TABLE (STRICT NO SLIDER) ═══════ */
+
 .remarks-table-scroll-wrap {
   width: 100%;
   max-width: 100%;
@@ -4426,7 +4281,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Sticky Table Header */
+
 .remarks-main-table thead th {
   position: sticky;
   top: 0;
@@ -4538,7 +4393,7 @@ body {
   word-break: break-word;
 }
 
-/* Department Dropdown inside Row */
+
 .remarks-dept-select {
   width: 100%;
   max-width: 100%;
@@ -4570,7 +4425,7 @@ body {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
-/* Responsible / Dependency Dropdown inside Row - Expanded for full visibility */
+
 .resp-select-container {
   display: flex;
   flex-direction: column;
@@ -4632,7 +4487,7 @@ body {
   text-align: center;
 }
 
-/* Aging Days Severity Badges */
+
 .aging-days-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -4664,16 +4519,16 @@ body {
   border: 1px solid #cbd5e1;
 }
 
-/* Recent Update Textarea & Metadata */
+
 .update-textarea-container {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-/* Cell with a saved recent update — neutral soft highlight */
+
 .remarks-cell-update.cell-has-update {
-  background: #f0f9ff !important; /* light blue-tint, not bright green */
+  background: #f0f9ff !important; 
 }
 
 .remarks-update-textarea {
@@ -4698,9 +4553,9 @@ body {
   color: #000000;
 }
 
-/* Textarea with content — neutral, readable style */
+
 .remarks-update-textarea.update-active {
-  background: #f0f9ff !important; /* same light blue-tint */
+  background: #f0f9ff !important; 
   color: #000000 !important;
   font-weight: 500;
 }
@@ -4716,7 +4571,7 @@ body {
   font-weight: 500;
 }
 
-/* Row Action & Save Button */
+
 .btn-row-save {
   padding: 4px 10px;
   border-radius: 6px;
@@ -4757,7 +4612,7 @@ body {
   color: #059669;
 }
 
-/* Empty State */
+
 .remarks-empty-cell {
   text-align: center;
   padding: 3rem 1.5rem !important;
@@ -4790,14 +4645,14 @@ body {
   margin: 0 0 8px 0;
 }
 
-/* Responsive Table Wrapper for Tab 1 */
+
 .aging-table-responsive-wrapper {
   width: 100%;
   overflow-x: auto;
   border-bottom: 2px solid #000000;
 }
 
-/* Footer layout */
+
 .footer-info {
   display: flex;
   align-items: center;
@@ -4811,7 +4666,7 @@ body {
   font-weight: 500;
 }
 
-/* ═══════ LOCKED READ-ONLY STYLES FOR PUBLIC DASHBOARD ═══════ */
+
 .remarks-locked-dept-badge {
   display: inline-block;
   padding: 4px 8px;
@@ -4853,7 +4708,7 @@ body {
   width: 100%;
 }
 
-/* Collapsed state: clamp to 3 lines */
+
 .remarks-locked-update-text {
   font-size: 0.79rem;
   line-height: 1.45;
@@ -4882,7 +4737,7 @@ body {
   -webkit-line-clamp: unset;
 }
 
-/* Show more / Show less toggle button */
+
 .update-expand-btn {
   display: inline-flex;
   align-items: center;
@@ -4937,11 +4792,6 @@ body {
   animation: livePulse 2s infinite ease-in-out;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   MONTHLY REPORT STYLES
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ── Report wrapper ── */
 .monthly-report-wrapper {
   width: 100%;
   max-width: 100%;
@@ -5014,7 +4864,7 @@ body {
   box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
 }
 
-/* ── Tab bar ── */
+
 .monthly-tab-bar {
   display: flex;
   align-items: center;
@@ -5085,7 +4935,7 @@ body {
   white-space: nowrap;
 }
 
-/* ── Tab content ── */
+
 .monthly-tab-content {
   border: 2px solid #16213e;
   border-top: none;
@@ -5094,7 +4944,7 @@ body {
   min-height: 400px;
 }
 
-/* ── Power BI Tab Panel ── */
+
 .monthly-powerbi-container {
   padding: 20px;
   display: flex;
@@ -5142,7 +4992,7 @@ body {
   border: 1px solid #1e3a5f;
   border-radius: 12px;
   overflow: hidden;
-  /* 16:10 ratio matching Power BI default embed */
+  
   padding-bottom: 62.25%;
   height: 0;
 }
@@ -5157,7 +5007,7 @@ body {
   display: block;
 }
 
-/* ── Ticket table wrapper ── */
+
 .monthly-ticket-table-wrap {
   padding: 20px;
 }
@@ -5214,7 +5064,7 @@ body {
   color: #64748b;
 }
 
-/* ── Data table ── */
+
 .monthly-table-scroll {
   overflow-x: auto;
   border-radius: 10px;
@@ -5288,10 +5138,10 @@ body {
 }
 
 .monthly-data-row.has-overdue {
-  /* subtle left-border indicator */
+  
 }
 
-/* Status cells */
+
 .cell-overdue-true {
   color: #ef4444 !important;
   font-weight: 700;
@@ -5313,7 +5163,7 @@ body {
   font-weight: 600;
 }
 
-/* ── Pagination ── */
+
 .monthly-pagination {
   display: flex;
   align-items: center;
@@ -5350,7 +5200,7 @@ body {
   font-weight: 600;
 }
 
-/* ── Empty state ── */
+
 .monthly-empty-state {
   text-align: center;
   padding: 4rem 2rem;
@@ -5358,10 +5208,6 @@ body {
   font-size: 1rem;
   font-weight: 500;
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   MONTHLY SLA DASHBOARD
-   ═══════════════════════════════════════════════════════════════ */
 
 .monthly-sla-dashboard {
   padding: 28px;
@@ -5374,7 +5220,7 @@ body {
   border: 1px solid #e2e8f0;
 }
 
-/* Title bar */
+
 .monthly-sla-title-bar {
   text-align: center;
   padding: 10px 0 18px;
@@ -5390,7 +5236,7 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* ── KPI Section ── */
+
 .monthly-kpi-section {
   margin-bottom: 28px;
   display: flex;
@@ -5455,7 +5301,7 @@ body {
   color: #fff;
 }
 
-/* ── Technician SLA Section ── */
+
 .monthly-tech-section {
   margin-bottom: 24px;
 }
@@ -5473,7 +5319,7 @@ body {
   text-align: center;
 }
 
-/* Header groups */
+
 .monthly-tech-header-groups .tech-name-header {
   background: #ffffcc;
   color: #000;
@@ -5495,7 +5341,7 @@ body {
   font-size: 0.88rem;
 }
 
-/* Sub-headers */
+
 .monthly-tech-header-cols th {
   background: #ffffcc;
   color: #000;
@@ -5503,7 +5349,7 @@ body {
   font-size: 0.84rem;
 }
 
-/* Data rows */
+
 .monthly-tech-data-row .tech-name-cell {
   background: #ffff00;
   color: #000;
@@ -5532,7 +5378,7 @@ body {
   font-weight: 700;
 }
 
-/* Pass Rate coloring */
+
 .tech-rate.sla-excellent {
   background: #00b050;
   color: #fff;
@@ -5562,7 +5408,7 @@ body {
   font-weight: 600;
 }
 
-/* Total row */
+
 .monthly-tech-total-row {
   background: #d9e2f3;
 }
@@ -5609,7 +5455,7 @@ body {
   color: #777;
 }
 
-/* ── Remarks Section ── */
+
 .monthly-remarks-section {
   margin-top: 24px;
   border-top: 2px solid #000;
@@ -5639,7 +5485,7 @@ body {
   color: #000;
 }
 
-/* ── Report footer ── */
+
 .monthly-report-footer {
   padding: 12px 24px;
   text-align: right;
@@ -5652,9 +5498,7 @@ body {
   margin: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   DASHBOARD VIEW STYLES
-   ═══════════════════════════════════════════════════════════════ */
+
 .dashboard-body { width: 100%; min-height: 100%; font-family: "DM Sans", sans-serif; background: #091426; color: #f6f9ff; }
 .dashboard-body.shell { width: 100%; min-height: 100vh; background: radial-gradient(circle at 82% 0%, #17375c 0%, transparent 32%), #091426; }
 .dashboard-body .topbar { height: 64px; border-bottom: 1px solid #243650; background: #0d1a2e; }
@@ -5672,9 +5516,7 @@ body {
 .dashboard-body .view { display: none; }
 .dashboard-body .view.active { display: block; animation: rise .35s ease both; }
 
-/* ═══════════════════════════════════════════════════════════════
-   REVISED ROOT CAUSE HIGHLIGHT & INLINE EDITING
-   ═══════════════════════════════════════════════════════════════ */
+
 .col-header-revised {
   background: #facc15 !important;
   color: #0f172a !important;
@@ -5826,10 +5668,6 @@ body {
   outline: none;
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   AGING REPORT OPTIMIZATIONS: KPI CHIPS & PAGINATION
-   ═══════════════════════════════════════════════════════════════ */
 
 .remarks-kpi-chips-bar {
   display: flex;

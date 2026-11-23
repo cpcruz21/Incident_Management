@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: light;
   --ui-page: #f2f6fa;
   --ui-surface: #ffffff;
@@ -19,41 +19,44 @@
   --ui-orange: #88360e;
   --ui-danger: #971e35;
   --theme-focus: #075cab;
-  --equicom-logo-bg: #ffffff;
-  --equicom-logo-border: #c1d1df;
-  --equicom-logo-shadow: 0 2px 5px rgba(16, 40, 63, .12);
+  --incident-glass-backdrop:
+    radial-gradient(ellipse at 19% 18%, #254d7c 0%, transparent 51%),
+    radial-gradient(ellipse at 83% 78%, #203f6e 0%, transparent 52%),
+    linear-gradient(145deg, #101c32, #080f1d 82%);
 }
 
-.public-dashboard[data-theme="night"] {
+:is(.public-dashboard, .admin-shell)[data-theme="night"] {
   color-scheme: dark;
-  --ui-page: #0f172a;
-  --ui-surface: #172337;
-  --ui-inset: #1e2e45;
-  --ui-selected: #2a4465;
-  --ui-border: #526a88;
-  --ui-panel-border: #526a88;
-  --ui-control-border: #7892b1;
-  --ui-wash: rgba(151, 183, 221, .1);
-  --ui-grid: #526a88;
-  --ui-shadow: rgba(0, 0, 0, .3);
-  --ui-text: #ffffff;
-  --ui-secondary: #f1f5f9;
-  --ui-muted: #cbd5e1;
-  --ui-link: #a0cbff;
-  --ui-violet: #d6baff;
-  --ui-success: #8be0b6;
-  --ui-warning: #f9d784;
-  --ui-orange: #ffc095;
-  --ui-danger: #ffa8b9;
-  --theme-focus: #a0cbff;
-  --analytics-series-strength: 62%;
-  --analytics-hover-brightness: 1.12;
-  --equicom-logo-bg: #172337;
-  --equicom-logo-border: #405673;
-  --equicom-logo-shadow: 0 2px 5px rgba(0, 0, 0, .3);
+  --ui-page: #0b1120;
+  --ui-shell: #111827;
+  --ui-surface: #172338;
+  --ui-inset: #1d2b40;
+  --ui-selected: #213954;
+  --ui-border: #2d3d54;
+  --ui-control-border: #697f9b;
+  --ui-wash: rgb(141 163 193 / .09);
+  --ui-grid: #31425a;
+  --ui-shadow: rgb(2 6 16 / .28);
+  --ui-text: #f1f5f9;
+  --ui-secondary: #cbd5e1;
+  --ui-muted: #9eafc6;
+  --ui-link: #88baff;
+  --ui-violet: #b6a7ed;
+  --ui-success: #63d6ad;
+  --ui-warning: #e8bf69;
+  --ui-orange: #f4a77d;
+  --ui-danger: #f7a0a9;
+  --theme-focus: #9ac6ff;
+  --glass-panel: linear-gradient(145deg, rgb(43 70 105 / .75), rgb(16 28 48 / .92) 78%);
+  --glass-panel-edge: rgb(164 202 245 / .28);
+  --glass-panel-shadow: inset 0 1px 0 rgb(218 237 255 / .09), 0 8px 24px rgb(3 10 24 / .26);
+  --glass-navigation: rgb(13 25 43 / .9);
+  --ui-panel-border: var(--glass-panel-edge);
+  --analytics-series-strength: 54%;
+  --analytics-hover-brightness: 1.13;
 }
 
-:root, .public-dashboard[data-theme="night"] {
+:root, :is(.public-dashboard, .admin-shell)[data-theme="night"] {
   --bg-primary: var(--ui-page);
   --bg-secondary: var(--ui-surface);
   --bg-card: var(--ui-surface);
@@ -66,9 +69,17 @@
   --success: var(--ui-success);
   --warning: var(--ui-warning);
   --error: var(--ui-danger);
+  --report-tint: color-mix(in srgb, var(--ui-link) 10%, var(--ui-surface));
+  --report-success: color-mix(in srgb, var(--ui-success) 12%, var(--ui-surface));
+  --report-danger: color-mix(in srgb, var(--ui-danger) 12%, var(--ui-surface));
   --shadow-sm: 0 1px 3px var(--ui-shadow);
   --shadow-md: 0 4px 12px var(--ui-shadow);
   --shadow-lg: 0 8px 32px var(--ui-shadow);
+}
+
+:root:has(:is(.public-dashboard, .admin-shell)[data-theme="night"]) {
+  color-scheme: dark;
+  scrollbar-color: #496384 #0d192b;
 }
 
 :where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
@@ -81,10 +92,21 @@
   opacity: 1;
 }
 
-.equicom-logo-art {
-  filter: url("#equicom-light-lettering");
+.incident-logo {
+  display: block;
+  object-fit: contain;
 }
-.public-dashboard[data-theme="night"] .equicom-logo-art { filter: none; }
+
+.incident-logo--header {
+  width: var(--incident-logo-size, 48px);
+  height: var(--incident-logo-size, 48px);
+  flex: none;
+  border-radius: 11px;
+}
+
+:is(.admin-shell, .public-dashboard)[data-theme="night"] .incident-logo--header {
+  background-image: radial-gradient(closest-side, var(--ui-selected), transparent);
+}
 
 .dashboard-theme-switch {
   --theme-pill-background: #f8fdfd;
@@ -102,13 +124,13 @@
   border-radius: 999px;
   background: var(--theme-pill-background);
 }
-.public-dashboard[data-theme="night"] .dashboard-theme-switch {
-  --theme-pill-background: #0d2b43;
-  --theme-pill-border: #24b9ac;
-  --theme-pill-text: #c1d9e9;
-  --theme-pill-hover: #1b415c;
-  --theme-pill-hover-text: #f0faff;
-  --theme-pill-focus: #d9fcf8;
+:is(.public-dashboard, .admin-shell)[data-theme="night"] .dashboard-theme-switch {
+  --theme-pill-background: var(--ui-shell);
+  --theme-pill-border: var(--ui-control-border);
+  --theme-pill-text: var(--ui-secondary);
+  --theme-pill-hover: var(--ui-inset);
+  --theme-pill-hover-text: var(--ui-text);
+  --theme-pill-focus: var(--theme-focus);
 }
 .dashboard-theme-switch button {
   display: grid;
@@ -129,49 +151,160 @@
   color: #e8f6ff;
   box-shadow: inset 0 0 0 1px #427697;
 }
+:is(.public-dashboard, .admin-shell)[data-theme="night"] .dashboard-theme-switch button[aria-pressed="true"] {
+  background: var(--ui-selected);
+  color: var(--ui-link);
+  box-shadow: none;
+}
+
+.live-header {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  z-index: 50;
+  height: var(--live-header-height);
+  background: var(--ui-inset);
+  border-bottom: 1px solid var(--ui-panel-border);
+  box-shadow: 0 4px 24px var(--ui-shadow);
+}
+.live-header-accent { height: 3px; background: linear-gradient(90deg, #2563eb, #7c3aed 50%, #06b6d4); }
 
 .live-header-brand { grid-area: brand; display: flex; align-items: center; gap: 14px; min-width: 0; }
-.live-header-actions {
-  grid-area: actions;
+.live-header-controls {
+  grid-area: controls;
+  justify-self: end;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+}
+
+.live-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  background: rgba(16,185,129,.12);
+  border: 1px solid rgba(16,185,129,.3);
+  border-radius: 999px;
+  color: var(--ui-success);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.live-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ui-success);
+  box-shadow: 0 0 0 3px rgba(16,185,129,.35);
+  animation: pulse 2s infinite;
 }
 
 .live-header-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  grid-template-areas: "brand navigation actions theme";
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "brand navigation controls";
   align-items: center;
-  min-height: 66px;
-  padding: 10px clamp(14px, 2.3%, 28px);
-  gap: 10px 16px;
+  height: calc(100% - 3px);
+  padding-inline: clamp(12px, 2%, 28px);
+  gap: 4px 16px;
 }
 
-.live-navigation { grid-area: navigation; justify-self: center; width: max-content; max-width: 100%; overflow-x: auto; }
-.live-content { max-width: 1600px; margin: 0 auto; padding: 28px clamp(14px, 2.5%, 32px) 60px; }
+.live-navigation {
+  grid-area: navigation;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid var(--ui-panel-border);
+  border-radius: 12px;
+  background: var(--ui-wash);
+}
+
+.live-navigation button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ui-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.live-navigation button:hover { background: var(--ui-selected); }
+.live-navigation button[aria-current="page"] { background: #2563eb; color: #fff; }
+.live-navigation button:focus-visible { outline-offset: -2px; }
+.live-navigation-icon,
+.live-navigation-icon img { display: block; width: 16px; height: 16px; object-fit: contain; }
+.live-navigation-icon { line-height: 16px; text-align: center; }
+.live-navigation-count {
+  width: 20px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--ui-wash);
+  font-size: 11px;
+  text-align: center;
+}
+.live-navigation button[aria-current="page"] .live-navigation-count { background: #173b9c; }
+
+.live-content { width: 100%; max-width: 1600px; margin: 0 auto; padding: 28px clamp(14px, 2.5%, 32px) 60px; }
+.live-report-select {
+  min-width: 0;
+  max-width: 100%;
+  width: 260px;
+  margin-inline-start: auto;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--ui-control-border);
+  border-radius: 8px;
+  background: var(--ui-inset);
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
 
 .analytics-chart-card { border: 1px solid var(--ui-panel-border, #000); }
 
-.public-dashboard { --ui-panel-border: #000; }
+html:has(.public-dashboard) { scrollbar-gutter: stable; }
 
-@media (max-width: 1240px) {
+.public-dashboard {
+  --ui-panel-border: #000;
+  --live-header-height: 70px;
+  padding-top: var(--live-header-height);
+}
+
+@media (max-width: 900px) {
+  .public-dashboard { --live-header-height: 112px; }
   .live-header-row {
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "brand theme"
-      "navigation navigation"
-      "actions actions";
+    grid-template-rows: minmax(0, 1fr) 44px;
+    grid-template-areas: "brand controls" "navigation navigation";
+    padding-block-end: 4px;
   }
-  .live-navigation { justify-self: start; }
 }
 
-@media (max-width: 600px) {
-  .live-navigation { width: 100%; }
+@media (max-width: 520px) {
+  .live-header-controls { gap: 8px; }
+  .live-status { padding: 9px; }
+  .live-status-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .live-navigation button { gap: 4px; padding-inline: 6px; font-size: 12px; }
+  .live-navigation-icon { display: none; }
 }
 
-/* Keep ticket identifiers easy to find across report tables and details. */
+
 .request-id-highlight {
   display: inline-block;
   padding: 2px 6px;
@@ -194,23 +327,19 @@ a.request-id-highlight { text-decoration: underline; text-underline-offset: 3px;
 a.request-id-highlight:hover { filter: brightness(1.1); }
 a.request-id-highlight:focus-visible { outline: 2px solid var(--theme-focus, #55c8f5); outline-offset: 3px; }
 
-/* ── Uniform App Footer (Admin & Live Dashboard) ── */
-.app-footer,
-.admin-footer {
+
+.app-footer {
   flex-shrink: 0;
   margin-top: auto;
   padding: 16px clamp(20px, 2vw, 36px);
-  border-top: 1px solid var(--ui-border, #173247);
-  background: var(--ui-surface, #051522);
-  color: var(--ui-secondary, #94a3b8);
+  color: var(--app-footer-text, var(--ui-muted));
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
   letter-spacing: 0.02em;
 }
 
-.app-footer p,
-.admin-footer p {
+.app-footer p {
   margin: 0;
   font-weight: 500;
 }

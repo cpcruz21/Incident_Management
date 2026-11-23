@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { PreviousWeekAging } from '@/types/aging';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
+import { SlaPercentageInput } from '@/components/report/SlaPercentageInput';
 import {
   getStoredReports,
   extractAgingFromStored,
@@ -40,7 +41,6 @@ export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeG
   }, [beforeGeneratedAt]);
 
   useEffect(() => {
-    // If initial values have no inputs, auto-fill from latest stored report if available
     const hasExisting = Object.values(initialValues.teamTotals).some((v) => v != null) ||
       [...Object.values(initialValues.sla?.firstResponse || {}), ...Object.values(initialValues.sla?.resolutionTime || {}),
         initialValues.sla?.firstResponseTotal, initialValues.sla?.resolutionTimeTotal].some((v) => v != null);
@@ -84,9 +84,7 @@ export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeG
     onSave(empty);
   };
 
-  const handleSLAChange = (section: 'firstResponse' | 'resolutionTime' | 'firstResponseTotal' | 'resolutionTimeTotal', team: string | null, rawValue: string) => {
-    const value = rawValue.trim() === '' ? null : Number(rawValue);
-    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 100)) return;
+  const handleSLAChange = (section: 'firstResponse' | 'resolutionTime' | 'firstResponseTotal' | 'resolutionTimeTotal', team: string | null, value: number | null) => {
     const sla = values.sla || { firstResponse: {}, resolutionTime: {}, firstResponseTotal: null, resolutionTimeTotal: null };
     const newValues = {
       ...values,
@@ -98,48 +96,18 @@ export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeG
     onSave(newValues);
   };
 
-  const handleTeamChange = (team: string, rawValue: string) => {
-    const newValues = { ...values, teamTotals: { ...values.teamTotals } };
-    const cleaned = rawValue.trim();
-
-    if (cleaned === '' || cleaned.toLowerCase() === 'n/a' || cleaned === '-') {
-      newValues.teamTotals[team] = null;
-    } else {
-      const num = parseInt(cleaned, 10);
-      if (!isNaN(num) && num >= 0) {
-        newValues.teamTotals[team] = num;
-      }
-    }
-
-    // Recalculate grand total
-    let grandTotal = 0;
-    let hasAny = false;
-    for (const t of REPORT_TEAMS) {
-      const v = newValues.teamTotals[t];
-      if (v !== null && v !== undefined) {
-        grandTotal += v;
-        hasAny = true;
-      }
-    }
-    newValues.grandTotal = hasAny ? grandTotal : null;
-
-    setValues(newValues);
-    onSave(newValues);
-  };
-
-  const handleGrandTotalChange = (rawValue: string) => {
+  const handleCountChange = (team: string | null, rawValue: string) => {
+    if (!/^\d*$/.test(rawValue)) return;
+    const count = rawValue === '' ? null : Number(rawValue);
+    if (count !== null && !Number.isSafeInteger(count)) return;
     const newValues = { ...values };
-    const cleaned = rawValue.trim();
-
-    if (cleaned === '' || cleaned.toLowerCase() === 'n/a') {
-      newValues.grandTotal = null;
+    if (team === null) {
+      newValues.grandTotal = count;
     } else {
-      const num = parseInt(cleaned, 10);
-      if (!isNaN(num) && num >= 0) {
-        newValues.grandTotal = num;
-      }
+      newValues.teamTotals = { ...values.teamTotals, [team]: count };
+      const counts = REPORT_TEAMS.map((team) => newValues.teamTotals[team]).filter((value) => value != null);
+      newValues.grandTotal = counts.length ? counts.reduce((sum, value) => sum + value, 0) : null;
     }
-
     setValues(newValues);
     onSave(newValues);
   };
@@ -219,7 +187,7 @@ export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeG
       <div className="prevweek-info-banner">
         <span className="info-icon">✨</span>
         <p>
-          Leave missing values blank. SLA rates must be between 0 and 100. Overall SLA rates are based on all tickets, so they are not averaged from team percentages.
+          Enter SLA rates from 0 to 100 with up to two decimal places. Leave missing values blank. Overall SLA rates are based on all tickets.
         </p>
       </div>
 
@@ -240,19 +208,21 @@ export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeG
                 <td>
                   <input
                     type="text"
+                    inputMode="numeric"
                     className="sla-input"
                     placeholder="-"
                     value={formatValue(values.teamTotals[team])}
                     aria-label={`${team} last week aging IRs`}
-                    onChange={(e) => handleTeamChange(team, e.target.value)}
+                    onChange={(e) => handleCountChange(team, e.target.value)}
                   />
                 </td>
                 {(['firstResponse', 'resolutionTime'] as const).map((section) => (
                   <td key={section}>
-                    <input type="number" min="0" max="100" step="any" className="sla-input" placeholder="N/A"
-                      aria-label={`${team} last week ${section === 'firstResponse' ? 'First Response' : 'Resolution'} SLA`}
-                      value={values.sla?.[section][team] ?? ''}
-                      onChange={(e) => handleSLAChange(section, team, e.target.value)} />
+                    <SlaPercentageInput
+                      label={`${team} last week ${section === 'firstResponse' ? 'First Response' : 'Resolution'} SLA`}
+                      value={values.sla?.[section][team]}
+                      onValueChange={(value) => handleSLAChange(section, team, value)}
+                    />
                   </td>
                 ))}
               </tr>
@@ -262,18 +232,22 @@ export function AgingPreviousWeekInput({ initialValues, autoFill = true, beforeG
               <td>
                 <input
                   type="text"
+                  inputMode="numeric"
                   className="sla-input sla-input-total"
                   placeholder="-"
                   value={formatValue(values.grandTotal)}
-                  onChange={(e) => handleGrandTotalChange(e.target.value)}
+                  aria-label="Overall last week aging IRs"
+                  onChange={(e) => handleCountChange(null, e.target.value)}
                 />
               </td>
               {(['firstResponseTotal', 'resolutionTimeTotal'] as const).map((section) => (
                 <td key={section}>
-                  <input type="number" min="0" max="100" step="any" className="sla-input sla-input-total" placeholder="N/A"
-                    aria-label={`Overall last week ${section === 'firstResponseTotal' ? 'First Response' : 'Resolution'} SLA`}
-                    value={values.sla?.[section] ?? ''}
-                    onChange={(e) => handleSLAChange(section, null, e.target.value)} />
+                  <SlaPercentageInput
+                    total
+                    label={`Overall last week ${section === 'firstResponseTotal' ? 'First Response' : 'Resolution'} SLA`}
+                    value={values.sla?.[section]}
+                    onValueChange={(value) => handleSLAChange(section, null, value)}
+                  />
                 </td>
               ))}
             </tr>

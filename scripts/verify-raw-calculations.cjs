@@ -10,7 +10,8 @@ const aging = require('../src/lib/aging/calculator.ts');
 const sla = require('../src/lib/sla/calculator.ts');
 const { calculateAgingReport } = require('../src/lib/aging/report.ts');
 const { getImportedSLAStatus } = require('../src/lib/sla/status.ts');
-const { filterClosedTickets } = require('../src/lib/monthly/calculator.ts');
+const { calculateMonthlyReport, filterClosedTickets } = require('../src/lib/monthly/calculator.ts');
+const { applyRouting } = require('../src/lib/routing/routing-engine.ts');
 
 function raw(id, created, fr, rt, team = 'ECS SDS', status = 'Open') {
   return { RequestID: id, Technician: team, Category: 'Software', 'Request Status': status,
@@ -41,6 +42,25 @@ async function verify() {
   assert.equal(mapping.overdueStatus, 'Overdue');
   const mapped = mapAllRows(parsed.data, mapping);
   assert.equal(mapped.incidents.length, 9);
+
+  const posSubCategory = 'POS Services Operations Issues';
+  const posRows = [
+    { ...raw('POS-HRAD', '11-09-2026 10:00', 'FALSE', 'FALSE', 'ECS HRAD'), Category: 'Operational Issues', 'Sub-Category': posSubCategory },
+    { ...raw('OTHER-HRAD', '11-09-2026 10:00', 'FALSE', 'FALSE', 'ECS HRAD'), Category: 'Operational Issues', 'Sub-Category': 'Other Operations Issues' },
+    { ...raw('POS-PSD', '11-09-2026 10:00', 'FALSE', 'FALSE', 'ECS PSD'), Category: 'Operational Issues', 'Sub-Category': posSubCategory },
+  ];
+  const posMapping = { ...DEFAULT_COLUMN_MAPPING, ...autoDetectMapping(Object.keys(posRows[0])) };
+  const posIncidents = mapAllRows(posRows, posMapping).incidents;
+  const { routedIncidents: routedPosIncidents, summary: posRouting } = applyRouting(posIncidents);
+  assert.deepEqual(posRouting.results.map(({ autoAssignedGroup, finalAssignedTeam }) => [autoAssignedGroup, finalAssignedTeam]), [
+    ['ECS HR', 'ECS HR'],
+    ['ECS ADMIN', 'ECS ADMIN'],
+    ['ECS PSD', 'ECS PSD'],
+  ]);
+  assert.equal(routedPosIncidents[0].assignedTeam, 'ECS HR');
+  assert.equal(routedPosIncidents[0].sourceTeam, 'ECS HRAD');
+  assert.equal(routedPosIncidents[0].rawData.Technician, 'ECS HRAD');
+
   mapped.incidents.find(i => i.requestId === 'APPROVED').acceptableFirstResponseApproval = { approvedBy: 'Admin', approvedAt: asOf.toISOString() };
   const original = JSON.stringify(mapped.incidents);
   const result = calculateAgingReport(mapped.incidents, 'Test snapshot', { teamTotals: {}, grandTotal: null }, asOf);
@@ -59,6 +79,18 @@ async function verify() {
   const frozen = mapped.incidents.map(i => Object.freeze({ ...i }));
   assert.doesNotThrow(() => sla.calculateSLAReport(frozen));
   assert.equal(sla.calculateSLAReport(frozen).firstResponseTotal.total, 9, 'Weekly totals must include every team');
+
+  const { incidents: timestampTickets, validationSummary: timestampValidation } = mapAllRows([{
+    ...raw('TIMESTAMPS', '11-09-2026 08:30', '', '', 'ECS SDS', 'Closed'),
+    'Responded Date': '11-09-2026 09:00', 'Completed Time': '11-09-2026 13:00',
+  }, rows[0]], { ...DEFAULT_COLUMN_MAPPING, ...autoDetectMapping(parsed.columns) });
+  assert.ok(timestampValidation.warnings[0].messages.some(message => message.includes('calculated from timestamps')));
+  const monthly = calculateMonthlyReport(timestampTickets, 'November 2026', undefined, asOf);
+  assert.deepEqual(monthly.technicianTotals.frFailedIds, ['TIMESTAMPS', 'OFFICE']);
+  assert.deepEqual(monthly.technicianTotals.rtFailedIds, ['TIMESTAMPS']);
+  assert.equal(monthly.slaReport.firstResponseTotal.total, 2);
+  assert.equal(monthly.slaReport.resolutionTimeTotal.total, 1);
+  assert.equal(monthly.kpis[1].totalIRs, 1);
 
   // No threshold inference may override valid imported booleans or numeric FALSE/TRUE.
   const boolIncident = { ...mapped.incidents[0], rawFirstResponseStatus: undefined, rawResolutionStatus: undefined,

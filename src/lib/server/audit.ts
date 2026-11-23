@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+﻿import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { Account } from '@/lib/auth';
 import { AUDIT_ACTION_LABELS, type AuditAction, type AuditEntry, type AuditOutcome, type AuditPage, type AuditTarget } from '@/types/audit';
@@ -6,7 +6,6 @@ import { dataFile } from './data-files';
 
 let writeFailed = false;
 
-/** Construct a small allowlisted record. Never accept request bodies or credentials. */
 export function recordAudit(actor: Account | null, action: AuditAction, target: AuditTarget, outcome: AuditOutcome = 'success', reason?: AuditEntry['reason']) {
   const timestamp = new Date().toISOString();
   const entry: AuditEntry = {
@@ -19,8 +18,6 @@ export function recordAudit(actor: Account | null, action: AuditAction, target: 
     mkdirSync(dataFile('audit', ''), { recursive: true });
     appendFileSync(dataFile('audit', `events-${timestamp.slice(0, 10)}.jsonl`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
   } catch {
-    // A failed audit write must not turn a completed mutation into a misleading
-    // failed response. Surface degraded logging to the super admin instead.
     writeFailed = true;
     console.error('Audit event could not be recorded. Check audit storage permissions and free space.');
   }

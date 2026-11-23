@@ -1,45 +1,36 @@
-
-import type { Incident, ValidationSummary, ColumnMapping } from '@/types/incident';
+﻿import type { Incident, ValidationSummary, ColumnMapping } from '@/types/incident';
 import type { RoutingConfig, RoutingSummary } from '@/types/routing';
 import type { AgingReportData, PreviousWeekAging } from '@/types/aging';
 import { DEFAULT_COLUMN_MAPPING } from '@/types/incident';
 import { DEFAULT_ROUTING_CONFIG, REPORT_TEAMS } from '@/lib/routing/routing-engine';
+import { applyReportTicketEdit, type ReportTicketEdit } from '@/lib/report/ticket-edits';
 
-/** Aging workflow steps */
 export type AgingStep = 'upload' | 'validation' | 'routing' | 'previous-week' | 'report';
 
-/** Aging module state */
 export interface AgingState {
   currentStep: AgingStep;
 
-  // Upload
   fileName: string | null;
   rawData: Record<string, unknown>[] | null;
   detectedColumns: string[];
   columnMapping: ColumnMapping;
 
-  // Validation
   incidents: Incident[];
   validationSummary: ValidationSummary | null;
 
-  // Routing
   routingConfig: RoutingConfig;
   routedIncidents: Incident[];
   routingSummary: RoutingSummary | null;
 
-  // Previous Week
   previousWeekAging: PreviousWeekAging;
 
-  // Report
   reportData: AgingReportData | null;
   reportPeriod: string;
   reportAsOf: string;
 
-  // UI
   isProcessing: boolean;
   error: string | null;
 
-  // Detail modal
   detailModal: {
     isOpen: boolean;
     title: string;
@@ -47,7 +38,6 @@ export interface AgingState {
   };
 }
 
-/** Action types */
 export type AgingAction =
   | { type: 'SET_STEP'; step: AgingStep }
   | { type: 'SET_FILE'; fileName: string; rawData: Record<string, unknown>[]; columns: string[] }
@@ -57,6 +47,7 @@ export type AgingAction =
   | { type: 'SET_ROUTING_RESULT'; incidents: Incident[]; summary: RoutingSummary }
   | { type: 'SET_PREVIOUS_WEEK'; previousWeek: PreviousWeekAging }
   | { type: 'SET_REPORT_DATA'; data: AgingReportData }
+  | { type: 'SET_REPORT_TICKETS'; data: AgingReportData; routedIncidents: Incident[]; edit: ReportTicketEdit }
   | { type: 'SET_REPORT_PERIOD'; period: string }
   | { type: 'SET_REPORT_AS_OF'; value: string }
   | { type: 'SET_PROCESSING'; isProcessing: boolean }
@@ -85,7 +76,6 @@ function createEmptyPreviousWeekAging(): PreviousWeekAging {
   return { teamTotals, grandTotal: null };
 }
 
-/** Initial state */
 export const agingInitialState: AgingState = {
   currentStep: 'upload',
   fileName: null,
@@ -110,7 +100,6 @@ export const agingInitialState: AgingState = {
   },
 };
 
-/** State reducer */
 export function agingReducer(state: AgingState, action: AgingAction): AgingState {
   switch (action.type) {
     case 'SET_STEP':
@@ -122,6 +111,9 @@ export function agingReducer(state: AgingState, action: AgingAction): AgingState
         fileName: action.fileName,
         rawData: action.rawData,
         detectedColumns: action.columns,
+        routedIncidents: [],
+        routingSummary: null,
+        reportData: null,
         error: null,
       };
 
@@ -143,6 +135,7 @@ export function agingReducer(state: AgingState, action: AgingAction): AgingState
         ...state,
         routedIncidents: action.incidents,
         routingSummary: action.summary,
+        reportData: null,
       };
 
     case 'SET_PREVIOUS_WEEK':
@@ -150,6 +143,14 @@ export function agingReducer(state: AgingState, action: AgingAction): AgingState
 
     case 'SET_REPORT_DATA':
       return { ...state, reportData: action.data };
+
+    case 'SET_REPORT_TICKETS':
+      return {
+        ...state,
+        incidents: applyReportTicketEdit(state.incidents, action.edit),
+        routedIncidents: action.routedIncidents,
+        reportData: action.data,
+      };
 
     case 'SET_REPORT_PERIOD':
       return { ...state, reportPeriod: action.period };

@@ -15,16 +15,18 @@ export function listArchive() {
   return reportCategories.flatMap(readArchive).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
-export function storeArchive(reports: StoredReport[], importLegacy: boolean) {
+export function storeArchive(reports: StoredReport[], importLegacy: boolean, expectedSavedAt?: string): boolean {
   for (const category of reportCategories) {
     const incoming = reports.filter((report) => report.type === category);
     if (!incoming.length) continue;
     const records = new Map(readArchive(category).map((report) => [report.id, report]));
+    if (expectedSavedAt !== undefined && records.get(incoming[0].id)?.savedAt !== expectedSavedAt) return false;
     for (const report of incoming) {
       if (!importLegacy || !records.has(report.id)) records.set(report.id, report);
     }
     writeJson(archiveFile(category), Array.from(records.values()));
   }
+  return true;
 }
 
 export function removeFromArchive(category: StoredReport['type'], id: string) {
@@ -46,6 +48,7 @@ export function isStoredReport(value: unknown): value is StoredReport {
     typeof report.title === 'string' && typeof report.period === 'string' &&
     typeof report.savedAt === 'string' && Number.isFinite(Date.parse(report.savedAt)) &&
     typeof report.savedAtFormatted === 'string' &&
+    (report.privateOnly === undefined || typeof report.privateOnly === 'boolean') &&
     !!report.reportData && typeof report.reportData === 'object' && !Array.isArray(report.reportData) &&
     (report.routedIncidents === undefined || Array.isArray(report.routedIncidents));
 }

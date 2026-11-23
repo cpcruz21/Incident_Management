@@ -1,9 +1,7 @@
-/** Raw data as parsed directly from Excel/CSV */
-export interface RawIncidentRow {
+﻿export interface RawIncidentRow {
   [key: string]: string | number | undefined;
 }
 
-/** Column mapping configuration */
 export interface ColumnMapping {
   requestId: string;
   technician: string;
@@ -23,7 +21,6 @@ export interface ColumnMapping {
   recentUpdate?: string;
 }
 
-/** Default column mapping matching ServiceDesk Plus exports */
 export const DEFAULT_COLUMN_MAPPING: ColumnMapping = {
   requestId: 'RequestID',
   technician: 'Technician',
@@ -43,38 +40,27 @@ export const DEFAULT_COLUMN_MAPPING: ColumnMapping = {
   recentUpdate: 'Recent Update',
 };
 
-/** Normalized Incident model — the core internal representation */
 export interface Incident {
   requestId: string;
 
-  /** The team that originally received/inputted this incident */
   sourceTeam: string;
 
-  /** The incident category */
   category: string;
 
-  /** The incident subcategory */
   subCategory?: string;
 
-  /** The incident item */
   item?: string;
 
-  /** Requesting department */
   department?: string;
 
-  /** Incident description / summary */
   description?: string;
 
-  /** Manual recent update / status notes */
   recentUpdate?: string;
 
-  /** The final team responsible for SLA reporting (after routing) */
   assignedTeam: string;
 
-  /** Reason for the routing decision */
   routingReason: string;
 
-  /** Whether the incident was rerouted from original assignment */
   wasReassigned: boolean;
 
   priority?: string;
@@ -84,33 +70,25 @@ export interface Incident {
   respondedDate?: Date;
   completedTime?: Date;
 
-  /** Whether the first response SLA was missed */
   firstResponseOverdue: boolean;
 
-  /** Manual monthly FR exception, confirmed by an administrator. Raw SLA data stays unchanged. */
   acceptableFirstResponseApproval?: {
     approvedBy: string;
     approvedAt: string;
   };
 
-  /** Whether the resolution SLA was missed */
   resolutionOverdue: boolean;
 
-  /** Raw First Response Overdue / SLA status from the file (e.g. TRUE/FALSE) */
   rawFirstResponseStatus?: string | number | boolean;
 
-  /** Raw Resolution Overdue / SLA status from the file (e.g. TRUE/FALSE) */
   rawResolutionStatus?: string | number | boolean;
 
-  /** Original raw data for traceability */
   rawData: RawIncidentRow;
 
-  /** Revised Root Cause adjustments (admin manual input) */
   revisedRootCauseType?: string;
   revisedIdentifiedRootCause?: string;
 }
 
-/** Validation result for a single incident */
 export interface ValidationResult {
   incident: Partial<Incident>;
   isValid: boolean;
@@ -118,7 +96,6 @@ export interface ValidationResult {
   warnings: string[];
 }
 
-/** Summary of all validation results */
 export interface ValidationSummary {
   totalRecords: number;
   validRecords: number;

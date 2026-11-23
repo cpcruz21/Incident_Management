@@ -1,0 +1,241 @@
+.incident-overview { container-type: inline-size; }
+.incident-overview[data-compact] {
+  --overview-gap: 10px;
+  --overview-card-padding: clamp(12px, 1.5cqi, 18px);
+  --overview-plot-height: clamp(115px, calc(18cqi - 40px), 220px);
+  --overview-donut-width: 350px;
+}
+.incident-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--overview-gap, var(--home-gap, 16px));
+}
+.incident-activity,
+.incident-breakdown {
+  min-width: 0;
+  padding: var(--overview-card-padding, clamp(14px, 2cqi, 22px));
+  border: 1px solid var(--home-card-border, color-mix(in srgb, var(--ui-border) 72%, var(--ui-surface)));
+  border-radius: 12px;
+  background: var(--ui-surface);
+  box-shadow: var(--home-card-shadow, 0 1px 2px var(--ui-shadow), 0 3px 6px var(--ui-shadow));
+}
+.incident-overview h2 { margin: 0; font-size: 17px; line-height: 1.35; letter-spacing: -.015em; }
+.incident-trend-scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 8px;
+  margin: 12px 0 0;
+}
+.incident-trend-scoreboard > div { min-width: 0; padding: 8px 10px; border-radius: 8px; background: var(--ui-inset); }
+.incident-trend-scoreboard dt,
+.incident-trend-scoreboard dd + dd { color: var(--ui-muted); font-size: 12px; line-height: 1.3; }
+.incident-trend-scoreboard dd { margin: 2px 0 0; }
+.incident-trend-scoreboard dt + dd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ui-link);
+  font-size: 16px;
+  font-weight: 720;
+}
+.incident-trend-scoreboard dd[data-direction="down"] { color: var(--ui-danger); }
+.incident-trend {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 9px;
+  margin: 23px 0 0;
+}
+.incident-trend-axis {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-block: -.65em;
+  color: var(--ui-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.incident-trend-plot { position: relative; height: var(--overview-plot-height, clamp(140px, 20.6cqi, 220px)); min-width: 0; color: var(--ui-link); }
+.incident-trend-plot svg { display: block; width: 100%; height: 100%; }
+.incident-trend-plot line {
+  stroke: color-mix(in srgb, var(--ui-grid) 72%, var(--ui-surface));
+  stroke-dasharray: 2 3;
+}
+.incident-trend-line { fill: none; stroke: currentColor; stroke-width: 2.25px; stroke-linecap: round; }
+.incident-trend-point {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.incident-trend-point::before {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--ui-surface);
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
+.incident-trend-point[aria-pressed="true"]::before {
+  width: 11px;
+  height: 11px;
+  box-shadow: 0 0 0 2px currentColor;
+}
+.incident-trend-point span {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  display: none;
+  width: max-content;
+  max-width: 150px;
+  padding: 4px 8px;
+  transform: translateX(-50%);
+  border-radius: 5px;
+  background: var(--ui-text);
+  color: var(--ui-surface);
+  font-size: 12px;
+  font-weight: 650;
+  pointer-events: none;
+}
+.incident-trend-point[data-high="true"] span { top: calc(100% + 2px); bottom: auto; }
+.incident-trend-point:first-of-type span { left: 0; transform: none; }
+.incident-trend-point:last-of-type span { right: 0; left: auto; transform: none; }
+.incident-trend-point:is(:hover, :focus) { z-index: 2; }
+.incident-trend-point:is(:hover, :focus) span { display: block; }
+.incident-trend-months {
+  display: flex;
+  grid-column: 2;
+  gap: 2px;
+  margin-top: 10px;
+  color: var(--ui-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+}
+.incident-trend-months span { flex: 1 1 0; min-width: 0; }
+.incident-trend-empty { display: grid; place-items: center; min-height: 175px; margin: 12px 0 0; color: var(--ui-muted); text-align: center; }
+.incident-breakdown {
+  --status-open: #1873b5;
+  --status-closed: #18a69d;
+  --status-pending: #d89b20;
+  --status-pending-review: #bf7133;
+  --status-on-hold: #546271;
+  --status-awaiting: #aa621f;
+  --status-resolved: #6fac77;
+  --status-missing: #7a8c9d;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+}
+:is(.admin-shell, .public-dashboard)[data-theme="night"] .incident-breakdown {
+  --status-open: #77bcff;
+  --status-closed: #63d6bd;
+  --status-pending: #edbe68;
+  --status-pending-review: #ec9e74;
+  --status-on-hold: #8795a7;
+  --status-awaiting: #df9e52;
+  --status-resolved: #8dc491;
+  --status-missing: #a3b3c5;
+}
+.incident-breakdown-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  align-items: center;
+  flex: 1;
+  gap: 11px;
+  margin-top: 17px;
+}
+.incident-donut-chart { position: relative; justify-self: center; width: min(100%, var(--overview-donut-width, 360px)); }
+.incident-donut-chart > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.incident-donut-chart polyline { fill: none; stroke: color-mix(in srgb, var(--ui-grid) 55%, var(--ui-muted)); }
+.incident-donut-target { fill: none; stroke: transparent; pointer-events: stroke; cursor: pointer; }
+.incident-donut-target:hover { stroke: #fff3; }
+.incident-status-donut {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--ui-grid);
+  box-shadow: inset 0 -16px 20px -16px #08233166, inset 0 1px 4px #fff5;
+  text-align: center;
+}
+.incident-status-donut > div {
+  display: grid;
+  align-content: center;
+  aspect-ratio: 1;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--ui-surface);
+}
+.incident-status-donut strong { font-size: clamp(19px, 6cqi, 29px); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.incident-status-donut div > span { color: var(--ui-muted); font-size: 11px; }
+.incident-donut-callout {
+  position: absolute;
+  min-inline-size: 52px;
+  transform: translateY(-50%);
+  color: var(--ui-muted);
+  font-size: 11px;
+  line-height: 1.15;
+}
+.incident-donut-callout[data-side="left"] { text-align: right; padding-right: 2px; }
+.incident-donut-callout[data-side="right"] { padding-left: 2px; }
+.incident-donut-callout strong { color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.incident-donut-callout span {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.incident-statuses { display: grid; align-content: center; gap: 13px; margin: 0; padding: 0; list-style: none; }
+.incident-status-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  color: var(--ui-secondary);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+}
+button.incident-status-row { width: 100%; padding: 0; border: 0; border-radius: 4px; background: none; cursor: pointer; }
+button.incident-status-row:hover > span:first-child { text-decoration: underline; }
+.incident-status-row > span:first-child { overflow-wrap: anywhere; }
+.incident-status-row strong { color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.incident-status-track { grid-column: 1 / -1; height: 7px; border-radius: 999px; background: var(--ui-wash); }
+.incident-status-track > span { display: block; height: 100%; border-radius: inherit; background-image: linear-gradient(90deg, #15253026, transparent); }
+.incident-status-empty { margin: 0; color: var(--ui-muted); font-size: 14px; }
+.incident-overview[data-compact] h2 { font-size: 15px; }
+.incident-overview[data-compact] .incident-trend-scoreboard { margin-top: 7px; }
+.incident-overview[data-compact] .incident-trend-scoreboard > div { padding: 5px 8px; }
+.incident-overview[data-compact] .incident-trend-scoreboard dt + dd {
+  display: inline-flex;
+  margin-inline-end: 4px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+.incident-overview[data-compact] .incident-trend-scoreboard dd + dd { display: inline; }
+.incident-overview[data-compact] .incident-trend { margin-top: 17px; }
+.incident-overview[data-compact] .incident-breakdown-layout { margin-top: 5px; }
+.incident-overview[data-compact] .incident-statuses { gap: 9px; }
+.incident-overview[data-compact] .incident-status-row { gap: 3px 6px; font-size: 12px; }
+.incident-overview[data-compact] .incident-status-track { height: 6px; }
+@container (max-width: 335px) {
+  .incident-breakdown-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 740px) {
+  .incident-overview-grid { grid-template-columns: minmax(0, 1fr); }
+}

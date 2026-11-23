@@ -1,8 +1,5 @@
-'use client';
+﻿'use client';
 
-/**
- * Global Filter Bar for IR Analytics Dashboard
- */
 
 import React from 'react';
 import type { IRDashboardFilters, DateFilterField } from '@/types/ir-analytics';
@@ -65,22 +62,6 @@ export function IRFilterBar({
     onChange({ ...filters, [key]: value });
   }
 
-  function reset() {
-    onChange({
-      dateFrom: '',
-      dateTo: '',
-      dateField: 'createdDate',
-      technician: '',
-      status: '',
-      incidentType: '',
-      department: '',
-      agingCategory: '',
-      search: '',
-      inactivityThreshold: 7,
-      includeResolved: false,
-    });
-  }
-
   const dateFieldLabels: Record<DateFilterField, string> = {
     createdDate: 'Created Date',
     lastUpdated: 'Last Updated',
@@ -117,27 +98,7 @@ export function IRFilterBar({
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={reset}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--ui-border, #334e68)',
-              color: 'var(--ui-secondary, #94a3b8)',
-              borderRadius: '6px',
-              padding: '5px 12px',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Reset Filters
-          </button>
-        </div>
       </div>
-
-      {/* Row 1: Search + Date range */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
         <FilterField label="Search (Ticket ID / IR ID)">
           <input
@@ -176,8 +137,6 @@ export function IRFilterBar({
           />
         </FilterField>
       </div>
-
-      {/* Row 2: Entity filters */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
         <FilterField label="Technician">
           <select value={filters.technician} onChange={(e) => update('technician', e.target.value)} style={selectStyle}>
@@ -227,8 +186,6 @@ export function IRFilterBar({
           </select>
         </FilterField>
       </div>
-
-      {/* Row 3: Inactivity settings */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
         <FilterField label="Inactivity Threshold (days)">
           <input
@@ -254,8 +211,6 @@ export function IRFilterBar({
           </label>
         </div>
       </div>
-
-      {/* Active filter chips */}
       {activeFilterCount > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--ui-border, #1e3a5f)' }}>
           {filters.search && <FilterChip label={`Search: "${filters.search}"`} onRemove={() => update('search', '')} />}

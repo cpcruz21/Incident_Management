@@ -1,5 +1,4 @@
-
-import type { Incident } from '@/types/incident';
+﻿import type { Incident } from '@/types/incident';
 import type {
   AgingBucket,
   TeamAgingResult,
@@ -13,9 +12,6 @@ import { AGING_BUCKET_ORDER } from '@/types/aging';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import { getIncidentTeam, getReportTeamOrder } from '@/lib/report/teams';
 
-
-
-// Helper to safely convert any Date, string, or number to a valid Date object
 export function toValidDate(val: unknown): Date | null {
   if (val === undefined || val === null || val === '' || typeof val === 'boolean') return null;
   if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
@@ -85,7 +81,6 @@ export function toValidDate(val: unknown): Date | null {
     return null;
   }
 
-  // Zoned ISO timestamps and named-month formats retain their explicit timezone.
   const iso = strVal.match(/^(\d{4})-(\d{2})-(\d{2})T/);
   if (iso && (Number(iso[2]) < 1 || Number(iso[2]) > 12 || Number(iso[3]) < 1 || Number(iso[3]) > new Date(Number(iso[1]), Number(iso[2]), 0).getDate())) return null;
   const parsed = new Date(strVal);
@@ -114,11 +109,9 @@ export function isISSTeam(teamName?: string | null, inc?: Incident): boolean {
 export function isCreatedOutsideOfficeHours(inc: Incident): boolean {
   let created: Date | null = null;
 
-  // 1. Check raw "Created Time"
   if (inc.rawData?.['Created Time']) {
     created = toValidDate(inc.rawData['Created Time']);
   }
-  // Check any rawData key matching created time
   if (!created && inc.rawData) {
     for (const [k, v] of Object.entries(inc.rawData)) {
       if (/created\s*time/i.test(k) && v) {
@@ -127,7 +120,6 @@ export function isCreatedOutsideOfficeHours(inc: Incident): boolean {
       }
     }
   }
-  // 2. Fall back to inc.createdTime
   if (!created && inc.createdTime) {
     created = toValidDate(inc.createdTime);
   }
@@ -145,7 +137,6 @@ export function isCreatedOutsideOfficeHours(inc: Incident): boolean {
   return timeInMinutes < 510 || timeInMinutes >= 1050;
 }
 
-// Determine which aging bucket an incident falls into based on its age in calendar days
 function classifyAge(createdTime: unknown, referenceDate: unknown): AgingBucket {
   const created = toValidDate(createdTime);
   const ref = toValidDate(referenceDate) || new Date();
@@ -161,10 +152,8 @@ function classifyAge(createdTime: unknown, referenceDate: unknown): AgingBucket 
   return 'sameday';
 }
 
-// Filter incidents to only open/pending (not completed or resolved) following ITIL standards
 export function filterOpenIncidents(incidents: Incident[]): Incident[] {
   return incidents.filter((inc) => {
-    // 1. Check rawData request status if available
     let statusText = (inc.requestStatus || '').toLowerCase().trim();
     if (!statusText && inc.rawData) {
       for (const [k, v] of Object.entries(inc.rawData)) {
@@ -175,14 +164,11 @@ export function filterOpenIncidents(incidents: Incident[]): Incident[] {
       }
     }
 
-    // The imported request status wins, including reopened/assigned/unresolved tickets
-    // that still carry an earlier completion timestamp.
     if (statusText) return !/^(closed?|resolved?|completed?|cancelled|canceled)\b/.test(statusText);
     return !toValidDate(inc.completedTime);
   });
 }
 
-// Aging Distribution Calculation 
 function createEmptyBuckets(): Record<AgingBucket, number> {
   return {
     '>1month': 0,
@@ -210,7 +196,6 @@ export function calculateAgingDistribution(
   teamOrder: string[] = REPORT_TEAMS,
   referenceDate: Date = new Date()
 ): TeamAgingResult[] {
-  // Group incidents by team
   const grouped: Record<string, Incident[]> = {};
   for (const inc of incidents) {
     const team = getIncidentTeam(inc);
@@ -246,7 +231,6 @@ export function calculateAgingDistribution(
   return results;
 }
 
-//SLA Compliance Calculation
 
 import {
   evaluateFirstResponseOverdue,
@@ -282,7 +266,6 @@ export function calculateAgingSLA(
     const rtPassedIds: string[] = [];
 
     for (const inc of teamIncidents) {
-      // First Response SLA
       const frFailed = evaluateFirstResponseOverdue(inc, team, referenceDate);
       if (frFailed) {
         frFailedIds.push(inc.requestId);
@@ -290,7 +273,6 @@ export function calculateAgingSLA(
         frPassedIds.push(inc.requestId);
       }
 
-      // Resolution Time SLA
       const rtFailed = evaluateResolutionOverdue(inc, referenceDate);
       if (rtFailed) {
         rtFailedIds.push(inc.requestId);
@@ -348,7 +330,6 @@ export function calculateAgingSLA(
   return { rows, totals };
 }
 
-//Previous Week Auto-Calculation 
 
 export function calculatePreviousWeekAging(
   incidents: Incident[],
@@ -371,14 +352,12 @@ export function calculatePreviousWeekAging(
   };
 }
 
-// Utility
 
 export function formatSLAPercentage(value: number | null): string {
   if (value === null) return 'N/A';
   return `${value.toFixed(2)}%`;
 }
 
-// Split open incidents into this-week and last-week
 export function splitAgingByWeek(
   incidents: Incident[]
 ): { currentWeek: Incident[]; previousWeek: Incident[] } {
@@ -392,7 +371,6 @@ export function splitAgingByWeek(
     return { currentWeek: incidents, previousWeek: [] };
   }
 
-  // Find Monday of max date's week
   const day = maxDate.getDay();
   const diff = maxDate.getDate() - day + (day === 0 ? -6 : 1);
   const currentWeekStart = new Date(maxDate);
@@ -402,9 +380,6 @@ export function splitAgingByWeek(
   const previousWeekStart = new Date(currentWeekStart);
   previousWeekStart.setDate(previousWeekStart.getDate() - 7);
 
-  // All incidents that were still open as of current week
-  // and all that were still open as of previous week
-  // For aging, we use createdTime to determine when the ticket was first logged
   const currentWeek: Incident[] = [];
   const previousWeek: Incident[] = [];
 
@@ -412,10 +387,8 @@ export function splitAgingByWeek(
     const d = toValidDate(inc.createdTime);
     if (!d) continue;
 
-    // If created before the end of current week and still not completed, it's aging in current week
     currentWeek.push(inc);
 
-    // If created before the previous week start, it was also aging in previous week
     if (d < currentWeekStart) {
       previousWeek.push(inc);
     }
@@ -424,7 +397,6 @@ export function splitAgingByWeek(
   return { currentWeek, previousWeek };
 }
 
-/** Calendar aging days, shared by distribution buckets and the Remarks table. */
 export function calculateAgingDays(createdTime: unknown, referenceDate: unknown = new Date()): number {
   const created = toValidDate(createdTime);
   const ref = toValidDate(referenceDate) || new Date();
@@ -434,22 +406,9 @@ export function calculateAgingDays(createdTime: unknown, referenceDate: unknown 
   return Math.max(0, Math.round((referenceDay - createdDay) / (1000 * 60 * 60 * 24)));
 }
 
-/**
- * Format Responsible or Dependency based on routing final assigned team + ticket context.
- * Returns the sub-team name (ISS MT, POS DB, SDS, etc.) — not the ECS-level team.
- *
- * Mapping:
- *   ECS ISS          → ISS Binondo (if "binondo" in context) or ISS MT
- *   ECS SDS          → POS DB (if POS/terminal in context) or SDS
- *   ECS ADMIN        → ECS HRAD
- *   ECS HR           → HR
- *   ECS ISMS Support → ISMS Support
- *   ECS PSD          → PSD
- */
 export function formatResponsibleOrDependency(incident: Incident): string {
   const assignedTeam = incident.assignedTeam || incident.sourceTeam || 'Not Assigned';
 
-  // Build context string from all available text fields for sub-team detection
   const allText = [
     incident.sourceTeam,
     incident.category,
@@ -467,13 +426,11 @@ export function formatResponsibleOrDependency(incident: Incident): string {
     .join(' ')
     .toLowerCase();
 
-  // Route to sub-team based on assigned ECS team + context
   switch (assignedTeam) {
     case 'ECS ISS':
       return allText.includes('binondo') ? 'ISS Binondo' : 'ISS MT';
 
     case 'ECS SDS':
-      // If POS-related content, assign to POS DB; otherwise SDS
       if (allText.includes('pos') || allText.includes('terminal'))
         return 'POS DB';
       return 'SDS';
@@ -494,7 +451,6 @@ export function formatResponsibleOrDependency(incident: Incident): string {
       break;
   }
 
-  // Handle legacy / unmapped source team names
   const lower = assignedTeam.toLowerCase();
   if (lower.includes('iss')) return allText.includes('binondo') ? 'ISS Binondo' : 'ISS MT';
   if (lower.includes('pos') || lower === 'pos db') return 'POS DB';
@@ -507,9 +463,6 @@ export function formatResponsibleOrDependency(incident: Incident): string {
   return assignedTeam;
 }
 
-/**
- * Build the complete Remarks Table data for all open aging incidents (limit removed for comprehensive live checking)
- */
 export function buildRemarksTableData(
   incidents: Incident[],
   referenceDate: unknown = new Date(),
@@ -518,7 +471,6 @@ export function buildRemarksTableData(
 ): RemarksTableData {
   const refDate = toValidDate(referenceDate) || new Date();
 
-  // Only open incidents from the raw dataset are included (excluding CABS or RRG)
   const openIncidents = filterOpenIncidents(incidents).filter((inc) => {
     const isExcluded = (val: unknown): boolean => {
       if (!val) return false;
@@ -543,7 +495,6 @@ export function buildRemarksTableData(
     return true;
   });
 
-  // All open aging incidents sorted by aging days descending (no >= 8 restriction, counted accordingly)
   const eligible = openIncidents
     .map((inc) => {
       const created = toValidDate(inc.createdTime) || refDate;
@@ -551,27 +502,22 @@ export function buildRemarksTableData(
       return { inc, days };
     })
     .filter((item) => item.days >= minAgingDays)
-    .sort((a, b) => b.days - a.days); // Sort descending by aging days
+    .sort((a, b) => b.days - a.days);
 
   const rows: AgingRemarksRow[] = eligible.map(({ inc, days }) => {
-    // 1. Request ID
     const requestId = inc.requestId;
 
-    // 2. Department
     const department =
       inc.department ||
       String(inc.rawData['Department'] || inc.rawData['department'] || inc.rawData['Dept'] || '').trim() ||
       'Not Assigned';
 
-    // 3. Category
     const category = inc.category || '';
 
-    // 4. Sub Category
     const subCategory =
       inc.subCategory ||
       String(inc.rawData['Sub Category'] || inc.rawData['Subcategory'] || inc.rawData['subcategory'] || '').trim();
 
-    // 5. Description
     const description =
       inc.description ||
       String(
@@ -583,10 +529,8 @@ export function buildRemarksTableData(
         ''
       ).trim();
 
-    // 6. Aging Days
     const agingDays = days;
 
-    // 7. Recent Update (preserved if exists in uploaded data)
     const recentUpdate =
       inc.recentUpdate ||
       String(
@@ -598,7 +542,6 @@ export function buildRemarksTableData(
         ''
       ).trim();
 
-    // 8. Responsible or Dependency (automatically based on routing final technician)
     const responsibleOrDependency = formatResponsibleOrDependency(inc);
 
     return {
@@ -613,7 +556,6 @@ export function buildRemarksTableData(
     };
   });
 
-  // Calculate Header Dates matching Screenshot 1
   const createdOnFormatted = refDate.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',

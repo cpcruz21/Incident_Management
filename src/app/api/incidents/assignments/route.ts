@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { getAdminSession, requireAdmin } from '@/lib/server/auth';
 import { recordAudit } from '@/lib/server/audit';
 
@@ -38,7 +38,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // Check if bulk save or single item save
     if (Array.isArray(body)) {
       const validationErrors: { requestId: string; error: string }[] = [];
       const validItems: StoredIncidentAssignment[] = [];
@@ -71,7 +70,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Single item update
     const { requestId, department, responsibleOrDependency, recentUpdate, updatedBy } = body;
 
     if (!requestId) {

@@ -9,9 +9,12 @@ export interface DeleteIRProps {
     incidents: Incident[];
     onDelete: (requestId: string) => void;
     id?: string;
+    reportName?: string;
+    saveInstruction?: string;
 }
 
-export function DeleteIR({ incidents, onDelete, id: initialId }: DeleteIRProps) {
+export function DeleteIR({ incidents, onDelete, id: initialId, reportName = 'monthly report',
+    saveInstruction = 'Archive or publish the report to save this change.' }: DeleteIRProps) {
     const formId = useId();
     const [requestId, setRequestId] = useState(initialId || '');
     const [candidate, setCandidate] = useState<Incident | null>(null);
@@ -49,7 +52,7 @@ export function DeleteIR({ incidents, onDelete, id: initialId }: DeleteIRProps) 
         try {
             const deletedId = candidate.requestId;
             onDelete(deletedId);
-            setMessage(`${deletedId} was removed from this monthly report. Archive or publish the report to save this change.`);
+            setMessage(`${deletedId} was removed from this ${reportName}. ${saveInstruction}`);
             setRequestId('');
             setCandidate(null);
             setConfirmed(false);
@@ -65,7 +68,7 @@ export function DeleteIR({ incidents, onDelete, id: initialId }: DeleteIRProps) 
                 <Trash2 size={18} aria-hidden="true" />
                 <span>Delete Request ID</span>
             </h3>
-            <p>Validate a ticket in this report, then confirm its deletion from this monthly report.</p>
+            <p>Validate a ticket in this report, then confirm its deletion from this {reportName}.</p>
             <form onSubmit={validate} className="acceptable-fr-form">
                 <label htmlFor={`${formId}-request-id`}>Request ID</label>
                 <input
@@ -106,7 +109,7 @@ export function DeleteIR({ incidents, onDelete, id: initialId }: DeleteIRProps) 
                             onChange={(event) => setConfirmed(event.target.checked)}
                             style={{ marginTop: '3px' }}
                         />
-                        <span>I have verified this ticket and confirm it should be removed from this monthly report.</span>
+                        <span>I have verified this ticket and confirm it should be removed from this {reportName}.</span>
                     </label>
                     <button
                         type="button"

@@ -1,5 +1,5 @@
-import type { Incident } from '@/types/incident';
-import type { TeamSLAResult, SLAReport, WeeklyCompletion } from '@/types/sla';
+﻿import type { Incident } from '@/types/incident';
+import type { TeamSLAResult, SLAReport, WeeklyCompletion, WeeklyReportData } from '@/types/sla';
 import { REPORT_TEAMS } from '@/lib/routing/routing-engine';
 import { toValidDate, isCreatedOutsideOfficeHours, isISSTeam } from '@/lib/aging/calculator';
 import { getImportedSLAStatus } from './status';
@@ -57,15 +57,15 @@ export function parsePriority(priorityStr?: string | number | null): PriorityLev
 
 export const SLA_THRESHOLDS = {
   firstResponse: {
-    P1: 15,          // 15 mins
-    P2: 30,          // 30 mins
-    P3: 4 * 60,      // 4 hours (240 mins)
-    P4: 8 * 60,      // 8 hours (480 mins)
-    default: 4 * 60, // 4 hours
+    P1: 15,
+    P2: 30,
+    P3: 4 * 60,
+    P4: 8 * 60,
+    default: 4 * 60,
   },
   resolution: {
-    P1: 4 * 60,        // 4 hours (240 mins)
-    P2: 24 * 60,       // 24 hours (1,440 mins)
+    P1: 4 * 60,
+    P2: 24 * 60,
     P3: 3 * 24 * 60,   // 3 days = 72 hours (4,320 mins)
     P4: 5 * 24 * 60,   // 5 days = 120 hours (7,200 mins)
     default: 3 * 24 * 60, // 3 days
@@ -128,13 +128,11 @@ export function evaluateFirstResponseOverdue(
     return false;
   }
 
-  // 1. Check raw SDP status
   const rawStatus = getImportedSLAStatus(inc, 'firstResponse');
   if (rawStatus !== null) {
     return rawStatus;
   }
 
-  // 2. Compute from timestamps using SLA matrix
   const created = toValidDate(inc.createdTime);
   if (!created) return false;
 
@@ -153,21 +151,15 @@ export function evaluateFirstResponseOverdue(
   return elapsedMins > thresholdMins;
 }
 
-/**
- * Evaluates Resolution Time SLA for an incident.
- * Uses SDP raw overdue status if present; otherwise accurately computes against SLA matrix.
- */
 export function evaluateResolutionOverdue(
   inc: Incident,
   referenceDate: Date = new Date()
 ): boolean {
-  // 1. Check raw SDP status
   const rawStatus = getImportedSLAStatus(inc, 'resolution');
   if (rawStatus !== null) {
     return rawStatus;
   }
 
-  // 2. Compute from timestamps using SLA matrix (24/7 calendar elapsed minutes)
   const created = toValidDate(inc.createdTime);
   if (!created) return false;
 
@@ -178,14 +170,13 @@ export function evaluateResolutionOverdue(
   return elapsedMins > thresholdMins;
 }
 
-// First Response SLA per Team
-function calculateFirstResponseSLA(teamName: string, incidents: Incident[]): TeamSLAResult {
+function calculateFirstResponseSLA(teamName: string, incidents: Incident[], referenceDate: Date): TeamSLAResult {
   const total = incidents.length;
   const failedIncidentIds: string[] = [];
   const passedIncidentIds: string[] = [];
 
   for (const inc of incidents) {
-    const isOverdue = evaluateFirstResponseOverdue(inc, teamName);
+    const isOverdue = evaluateFirstResponseOverdue(inc, teamName, referenceDate);
 
     if (isOverdue) {
       failedIncidentIds.push(inc.requestId);
@@ -210,14 +201,13 @@ function calculateFirstResponseSLA(teamName: string, incidents: Incident[]): Tea
   };
 }
 
-// Resolution Time SLA per Team
-function calculateResolutionSLA(teamName: string, incidents: Incident[]): TeamSLAResult {
+function calculateResolutionSLA(teamName: string, incidents: Incident[], referenceDate: Date): TeamSLAResult {
   const total = incidents.length;
   const failedIncidentIds: string[] = [];
   const passedIncidentIds: string[] = [];
 
   for (const inc of incidents) {
-    const isOverdue = evaluateResolutionOverdue(inc);
+    const isOverdue = evaluateResolutionOverdue(inc, referenceDate);
 
     if (isOverdue) {
       failedIncidentIds.push(inc.requestId);
@@ -242,7 +232,6 @@ function calculateResolutionSLA(teamName: string, incidents: Incident[]): TeamSL
   };
 }
 
-// Calculation of Rows based on the data
 function calculateTotalRow(teamResults: TeamSLAResult[]): TeamSLAResult {
   let totalIncidents = 0;
   let totalFailed = 0;
@@ -274,7 +263,6 @@ function calculateTotalRow(teamResults: TeamSLAResult[]): TeamSLAResult {
   };
 }
 
-// Group per Team
 function groupByTeam(incidents: Incident[]): Record<string, Incident[]> {
   const groups: Record<string, Incident[]> = {};
 
@@ -289,10 +277,10 @@ function groupByTeam(incidents: Incident[]): Record<string, Incident[]> {
   return groups;
 }
 
-// SLA Completion
 export function calculateSLAReport(
   incidents: Incident[],
-  teamOrder: string[] = REPORT_TEAMS
+  teamOrder: string[] = REPORT_TEAMS,
+  referenceDate: Date = new Date()
 ): SLAReport {
   const grouped = groupByTeam(incidents);
 
@@ -301,8 +289,8 @@ export function calculateSLAReport(
 
   for (const team of getReportTeamOrder(incidents, teamOrder)) {
     const teamIncidents = grouped[team] || [];
-    firstResponse.push(calculateFirstResponseSLA(team, teamIncidents));
-    resolutionTime.push(calculateResolutionSLA(team, teamIncidents));
+    firstResponse.push(calculateFirstResponseSLA(team, teamIncidents, referenceDate));
+    resolutionTime.push(calculateResolutionSLA(team, teamIncidents, referenceDate));
   }
 
   const firstResponseTotal = calculateTotalRow(firstResponse);
@@ -316,13 +304,11 @@ export function calculateSLAReport(
   };
 }
 
-// Percentage format
 export function formatSLAPercentage(value: number | null): string {
   if (value === null) return 'N/A';
   return `${value.toFixed(2)}%`;
 }
 
-// Split incidents into Current Week and Previous Week
 export function splitIncidentsByWeek(
   incidents: Incident[]
 ): { currentWeek: Incident[]; previousWeek: Incident[] } {
@@ -367,9 +353,9 @@ export function splitIncidentsByWeek(
   return { currentWeek, previousWeek };
 }
 
-// Weekly Completion for FR & Resolution
 export function calculateWeeklyCompletion(
-  incidents: Incident[]
+  incidents: Incident[],
+  referenceDate: Date = new Date()
 ): WeeklyCompletion {
   if (incidents.length === 0) {
     return {
@@ -384,14 +370,14 @@ export function calculateWeeklyCompletion(
   const rtFailedIds: string[] = [];
 
   for (const inc of incidents) {
-    const frOverdue = evaluateFirstResponseOverdue(inc, inc.assignedTeam || inc.sourceTeam);
+    const frOverdue = evaluateFirstResponseOverdue(inc, inc.assignedTeam || inc.sourceTeam, referenceDate);
     if (frOverdue) {
       frFailedIds.push(inc.requestId);
     } else {
       frPassedIds.push(inc.requestId);
     }
 
-    const rtOverdue = evaluateResolutionOverdue(inc);
+    const rtOverdue = evaluateResolutionOverdue(inc, referenceDate);
     if (rtOverdue) {
       rtFailedIds.push(inc.requestId);
     } else {
@@ -420,5 +406,16 @@ export function calculateWeeklyCompletion(
       passedIncidentIds: rtPassedIds,
       failedIncidentIds: rtFailedIds,
     },
+  };
+}
+
+export function refreshWeeklyTicketTotals(data: WeeklyReportData, incidents: Incident[]): WeeklyReportData {
+  const referenceDate = toValidDate(data.generatedAt) ?? undefined;
+  const currentWeek = calculateSLAReport(incidents, data.teamOrder, referenceDate);
+  return {
+    ...data,
+    currentWeek,
+    weeklyCompletion: calculateWeeklyCompletion(incidents, referenceDate),
+    teamOrder: currentWeek.firstResponse.map((row) => row.teamName),
   };
 }

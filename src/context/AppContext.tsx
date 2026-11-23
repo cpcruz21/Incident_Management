@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { createContext, useContext, useReducer, type ReactNode } from 'react';
 import { appReducer, initialState, type AppState, type AppAction } from '@/lib/store';

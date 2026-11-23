@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
@@ -62,7 +62,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
 
       const ws = wb.Sheets[sheetName];
 
-      // Try to find a header row in the first 20 rows
       const rawArr = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' });
       let headerRowIdx = 0;
       for (let i = 0; i < Math.min(rawArr.length, 20); i++) {
@@ -90,7 +89,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
       setRawRows(jsonData);
       setFileName(file.name);
 
-      // Auto-detect mapping
       const detected = autoDetectIRMapping(cols);
       setMapping(detected);
 
@@ -141,7 +139,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
     <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--ui-text, #f8fafc)', marginBottom: '12px' }}>{text}</h3>
   );
 
-  // ── Step: Upload ──
   if (step === 'upload') {
     return (
       <WizardWrapper onClose={onClose} title="Import Data" step={1} totalSteps={4}>
@@ -179,8 +176,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
             ⚠️ {parseError}
           </div>
         )}
-
-        {/* Previous import batches */}
         {existingBatches.length > 0 && (
           <div style={{ marginTop: '24px' }}>
             {sectionHeader('Previous Import Batches')}
@@ -203,7 +198,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
     );
   }
 
-  // ── Step: Preview ──
   if (step === 'preview') {
     const previewRows = rawRows.slice(0, 5);
     return (
@@ -251,7 +245,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
     );
   }
 
-  // ── Step: Column Mapping ──
   if (step === 'mapping') {
     const fields = Object.keys(FIELD_LABELS) as (keyof IRColumnMapping)[];
     return (
@@ -301,7 +294,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
     );
   }
 
-  // ── Step: Confirm ──
   if (step === 'confirm') {
     const mappedFields = Object.entries(mapping).filter(([, v]) => v);
     return (
@@ -342,7 +334,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
     );
   }
 
-  // ── Step: Done ──
   if (step === 'done' && batchResult) {
     const { batch } = batchResult;
     return (
@@ -381,7 +372,6 @@ export function ImportWizard({ existingTickets, existingBatches, onImportComplet
   return null;
 }
 
-// ── Sub-components ──
 
 function WizardWrapper({
   children,
@@ -432,7 +422,6 @@ function WizardWrapper({
           overflow: 'hidden',
         }}
       >
-        {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--ui-border, #243650)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ui-text, #f8fafc)', margin: 0 }}>{title}</h2>
@@ -444,13 +433,9 @@ function WizardWrapper({
             <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--ui-muted, #64748b)', cursor: 'pointer', fontSize: '18px', padding: '4px' }}>×</button>
           )}
         </div>
-
-        {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
           {children}
         </div>
-
-        {/* Footer */}
         {(onBack || onNext) && (
           <div style={{ padding: '12px 20px', borderTop: '1px solid var(--ui-border, #243650)', display: 'flex', justifyContent: 'space-between' }}>
             {onBack ? (

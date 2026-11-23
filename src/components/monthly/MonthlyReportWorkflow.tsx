@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useReducer, useCallback, useState, useEffect } from 'react';
 import type { Account } from '@/lib/auth';
@@ -6,25 +6,29 @@ import { isAdmin } from '@/lib/auth';
 import type { ColumnMapping, Incident } from '@/types/incident';
 import type { MonthlyReportData } from '@/types/monthly';
 
-import { parseFile } from '@/lib/excel/parser';
-import { autoDetectMapping, mapAllRows } from '@/lib/excel/mapper';
-import { approveAcceptableFR, calculateMonthlyReport } from '@/lib/monthly/calculator';
+import { readIncidentUpload } from '@/lib/excel/incident-upload';
+import { toValidDate } from '@/lib/aging/calculator';
+import { approveAcceptableFR, calculateMonthlyReport, refreshStoredMonthlyReport } from '@/lib/monthly/calculator';
+import { updateMonthlyRootCause, type MonthlyRootCauseField } from '@/lib/monthly/root-cause';
 
-import { FileUpload } from '@/components/upload/FileUpload';
 import { Stepper } from '@/components/ui/Stepper';
 import { ReportWorkflowHeader } from '@/components/report/ReportWorkflowHeader';
+import { ReportSetup } from '@/components/report/ReportSetup';
 import { ValidationSummaryView } from '@/components/validation/ValidationSummary';
 import { MonthlyReportTable } from '@/components/monthly/MonthlyReportTable';
-import { ExportDropdown } from '@/components/report/ExportDropdown';
+import { MonthlyPeriodPicker, type MonthlyPeriodSelection } from '@/components/monthly/MonthlyPeriodPicker';
+import { ReportExportButton } from '@/components/report/ReportExportButton';
 import { DetailModal } from '@/components/report/DetailModal';
-import { saveReport } from '@/lib/storage/report-storage';
+import { saveReport, type StoredReport } from '@/lib/storage/report-storage';
 import { persistServerMonthlyReport } from '@/lib/api/client';
 
 import { DEFAULT_COLUMN_MAPPING } from '@/types/incident';
 
-// ─── Local state ────────────────────────────────────────────
 
 type MonthlyStep = 'upload' | 'validation' | 'report';
+type MonthlyArchiveTarget = Pick<StoredReport, 'id' | 'title' | 'period' | 'savedAt'> & {
+  syncPublished: boolean;
+};
 
 interface MonthlyState {
   step: MonthlyStep;
@@ -35,7 +39,8 @@ interface MonthlyState {
   incidents: Incident[];
   validationSummary: import('@/types/incident').ValidationSummary | null;
   reportData: MonthlyReportData | null;
-  reportPeriod: string;
+  archiveTarget: MonthlyArchiveTarget | null;
+  reportPeriod: MonthlyPeriodSelection;
   storageDestination: 'both' | 'local' | 'server';
   isProcessing: boolean;
   error: string | null;
@@ -48,16 +53,17 @@ type MonthlyAction =
   | { type: 'SET_MAPPING'; mapping: ColumnMapping }
   | { type: 'SET_VALIDATION'; incidents: Incident[]; summary: import('@/types/incident').ValidationSummary }
   | { type: 'SET_REPORT'; data: MonthlyReportData }
+  | { type: 'SET_ARCHIVE_TARGET'; target: MonthlyArchiveTarget }
   | { type: 'SET_ACCEPTABLE_FR'; incidents: Incident[]; data: MonthlyReportData }
   | { type: 'DELETE_INCIDENT'; incidents: Incident[]; data: MonthlyReportData }
-  | { type: 'SET_PERIOD'; period: string }
+  | { type: 'SET_PERIOD'; period: MonthlyPeriodSelection }
   | { type: 'SET_STORAGE_DESTINATION'; destination: 'both' | 'local' | 'server' }
   | { type: 'SET_PROCESSING'; val: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | {
     type: 'UPDATE_INCIDENT_FIELD';
     requestId: string;
-    field: 'Revised Root Cause Type' | 'Revised Identified Root Cause';
+    field: MonthlyRootCauseField;
     value: string;
   }
   | { type: 'OPEN_MODAL'; title: string; ids: string[] }
@@ -73,7 +79,8 @@ const init: MonthlyState = {
   incidents: [],
   validationSummary: null,
   reportData: null,
-  reportPeriod: '',
+  archiveTarget: null,
+  reportPeriod: { month: '', year: '' },
   storageDestination: 'both',
   isProcessing: false,
   error: null,
@@ -83,10 +90,21 @@ const init: MonthlyState = {
 function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
   switch (action.type) {
     case 'SET_STEP': return { ...state, step: action.step, error: null };
-    case 'SET_FILE': return { ...state, fileName: action.fileName, rawData: action.rawData, columns: action.columns, error: null };
+    case 'SET_FILE':
+      return {
+        ...state,
+        fileName: action.fileName,
+        rawData: action.rawData,
+        columns: action.columns,
+        reportData: null,
+        archiveTarget: null,
+        detailModal: init.detailModal,
+        error: null,
+      };
     case 'SET_MAPPING': return { ...state, columnMapping: action.mapping };
     case 'SET_VALIDATION': return { ...state, incidents: action.incidents, validationSummary: action.summary };
     case 'SET_REPORT': return { ...state, reportData: action.data };
+    case 'SET_ARCHIVE_TARGET': return { ...state, archiveTarget: action.target };
     case 'SET_ACCEPTABLE_FR': return { ...state, incidents: action.incidents, reportData: action.data };
     case 'DELETE_INCIDENT': return { ...state, incidents: action.incidents, reportData: action.data };
     case 'SET_PERIOD': return { ...state, reportPeriod: action.period };
@@ -94,25 +112,9 @@ function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
     case 'SET_PROCESSING': return { ...state, isProcessing: action.val };
     case 'SET_ERROR': return { ...state, error: action.error };
     case 'UPDATE_INCIDENT_FIELD': {
-      const updateList = (list: Incident[]) =>
-        list.map((inc) => {
-          if (inc.requestId === action.requestId) {
-            const raw = { ...(inc.rawData || {}), [action.field]: action.value };
-            return {
-              ...inc,
-              rawData: raw,
-              revisedRootCauseType:
-                action.field === 'Revised Root Cause Type'
-                  ? action.value
-                  : inc.revisedRootCauseType,
-              revisedIdentifiedRootCause:
-                action.field === 'Revised Identified Root Cause'
-                  ? action.value
-                  : inc.revisedIdentifiedRootCause,
-            };
-          }
-          return inc;
-        });
+      const updateList = (list: Incident[]) => list.map((inc) => inc.requestId === action.requestId
+        ? updateMonthlyRootCause(inc, action.field, action.value)
+        : inc);
 
       return {
         ...state,
@@ -133,7 +135,6 @@ function reducer(state: MonthlyState, action: MonthlyAction): MonthlyState {
   }
 }
 
-// ─── Steps config ───────────────────────────────────────────
 
 const STEPS: readonly { id: MonthlyStep; label: string }[] = [
   { id: 'upload', label: 'Upload' },
@@ -141,146 +142,130 @@ const STEPS: readonly { id: MonthlyStep; label: string }[] = [
   { id: 'report', label: 'Report' },
 ];
 
-// ─── Component ──────────────────────────────────────────────
 
 interface MonthlyReportWorkflowProps {
   account: Account;
-  onBack: () => void;
-  initialStoredReport?: {
+  initialStoredReport?: Omit<MonthlyArchiveTarget, 'syncPublished'> & {
     data: MonthlyReportData;
     incidents?: Incident[];
-    period?: string;
+    privateOnly?: boolean;
   } | null;
 }
 
 export function MonthlyReportWorkflow({
   account,
-  onBack,
   initialStoredReport,
 }: MonthlyReportWorkflowProps) {
   const [state, dispatch] = useReducer(reducer, init);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const { month, year } = state.reportPeriod;
+  const reportPeriod = month && year ? `${month} ${year}` : '';
 
-  // Load initial stored report if provided
   useEffect(() => {
     if (initialStoredReport?.data) {
-      dispatch({ type: 'SET_REPORT', data: initialStoredReport.data });
-      if (initialStoredReport.incidents) {
-        dispatch({
-          type: 'SET_VALIDATION',
-          incidents: initialStoredReport.incidents,
-          summary: {
-            totalRecords: initialStoredReport.incidents.length,
-            validRecords: initialStoredReport.incidents.length,
-            invalidRecords: 0,
-            errors: [],
-            warnings: [],
-            detectedColumns: [],
-            detectedSourceTeams: [],
-            detectedCategories: [],
-          },
-        });
-      }
-      if (initialStoredReport.period) {
-        dispatch({ type: 'SET_PERIOD', period: initialStoredReport.period });
-      }
+      const { id, title, period, savedAt } = initialStoredReport;
+      const data = refreshStoredMonthlyReport(initialStoredReport.data, initialStoredReport.incidents);
+      const incidents = initialStoredReport.incidents?.length ? initialStoredReport.incidents : data.allTickets ?? [];
+      dispatch({ type: 'SET_REPORT', data: { ...data, allTickets: incidents, closedTickets: data.closedTickets ?? [] } });
+      dispatch({ type: 'SET_ARCHIVE_TARGET', target: { id, title, period, savedAt, syncPublished: !initialStoredReport.privateOnly } });
+      dispatch({ type: 'SET_STORAGE_DESTINATION', destination: 'local' });
+      dispatch({
+        type: 'SET_VALIDATION',
+        incidents,
+        summary: {
+          totalRecords: incidents.length,
+          validRecords: incidents.length,
+          invalidRecords: 0,
+          errors: [],
+          warnings: [],
+          detectedColumns: [],
+          detectedSourceTeams: [],
+          detectedCategories: [],
+        },
+      });
+      const [month = '', year = ''] = (initialStoredReport.period || initialStoredReport.data.reportPeriod || '').trim().split(/\s+/);
+      dispatch({ type: 'SET_PERIOD', period: { month, year } });
       dispatch({ type: 'SET_STEP', step: 'report' });
+      setSaved(false);
     }
   }, [initialStoredReport]);
 
-  // File upload
   const handleFileSelected = useCallback(async (file: File) => {
     dispatch({ type: 'SET_PROCESSING', val: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      const result = await parseFile(file);
-      if (!result.success) {
-        dispatch({ type: 'SET_ERROR', error: result.errors.join('. ') });
-        dispatch({ type: 'SET_PROCESSING', val: false });
-        return;
-      }
-
-      dispatch({
-        type: 'SET_FILE',
-        fileName: file.name,
-        rawData: result.data as Record<string, unknown>[],
-        columns: result.columns,
-      });
-
-      const detected = autoDetectMapping(result.columns);
-      const fullMapping: ColumnMapping = { ...state.columnMapping, ...detected };
-      dispatch({ type: 'SET_MAPPING', mapping: fullMapping });
-
-      const { incidents, validationSummary } = mapAllRows(result.data, fullMapping);
+      const { data, columns, mapping, incidents, validationSummary } = await readIncidentUpload(file);
+      dispatch({ type: 'SET_FILE', fileName: file.name, rawData: data, columns });
+      dispatch({ type: 'SET_MAPPING', mapping });
       dispatch({ type: 'SET_VALIDATION', incidents, summary: validationSummary });
       dispatch({ type: 'SET_STEP', step: 'validation' });
-    } catch (err) {
-      dispatch({ type: 'SET_ERROR', error: `Failed to process file: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       dispatch({ type: 'SET_PROCESSING', val: false });
     }
-  }, [state.columnMapping]);
+  }, []);
 
-  // Generate report directly from raw incidents (no routing engine)
   const handleGenerateReport = useCallback(() => {
-    const period = state.reportPeriod || new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const report = calculateMonthlyReport(state.incidents, period);
+    if (!reportPeriod) return;
+    const report = calculateMonthlyReport(state.incidents, reportPeriod);
     dispatch({ type: 'SET_REPORT', data: report });
     dispatch({ type: 'SET_STEP', step: 'report' });
-  }, [state.incidents, state.reportPeriod]);
+    setSaved(false);
+    setSaveError('');
+  }, [state.incidents, reportPeriod]);
 
-  // Step click navigation
   const handleStepClick = useCallback((step: MonthlyStep) => {
     if (step === 'upload') {
       dispatch({ type: 'SET_STEP', step: 'upload' });
-    } else if (step === 'validation' && state.validationSummary) {
+    } else if (step === 'validation' && state.validationSummary && reportPeriod) {
       dispatch({ type: 'SET_STEP', step: 'validation' });
     } else if (step === 'report' && state.reportData) {
       dispatch({ type: 'SET_STEP', step: 'report' });
     }
-  }, [state.validationSummary, state.reportData]);
+  }, [state.validationSummary, state.reportData, reportPeriod]);
 
-  // Cell click (drill-down)
   const handleCellClick = useCallback((title: string, ids: string[]) => {
     dispatch({ type: 'OPEN_MODAL', title, ids });
   }, []);
 
-  // Update incident revision field (admin manual adjustment)
   const handleUpdateIncident = useCallback(
     (
       requestId: string,
-      field: 'Revised Root Cause Type' | 'Revised Identified Root Cause',
+      field: MonthlyRootCauseField,
       value: string
     ) => {
+      if (!isAdmin(account)) return;
       dispatch({
         type: 'UPDATE_INCIDENT_FIELD',
         requestId,
         field,
         value,
       });
+      setSaved(false);
     },
-    []
+    [account]
   );
 
-  // Confirm an admin FR exception and refresh all dependent monthly metrics.
   const handleAddAcceptableFR = useCallback((requestId: string) => {
     if (!isAdmin(account) || !state.reportData) throw new Error('Admin access is required.');
+    const referenceDate = toValidDate(state.reportData.generatedAt) ?? undefined;
     const incidents = approveAcceptableFR(
       state.incidents.length > 0 ? state.incidents : state.reportData.allTickets,
       requestId,
-      account.name
+      account.name,
+      referenceDate
     );
-    const calculated = calculateMonthlyReport(incidents, state.reportData.reportPeriod, state.reportData.teamOrder);
+    const calculated = calculateMonthlyReport(incidents, state.reportData.reportPeriod, state.reportData.teamOrder, referenceDate);
     dispatch({
       type: 'SET_ACCEPTABLE_FR',
       incidents,
       data: { ...state.reportData, ...calculated, reportTitle: state.reportData.reportTitle },
     });
-    setSaveStatus('idle');
+    setSaved(false);
   }, [account, state.incidents, state.reportData]);
 
-  // Delete an incident record from this monthly report and refresh all dependent monthly metrics.
   const handleDeleteIncident = useCallback((requestId: string) => {
     if (!isAdmin(account) || !state.reportData) throw new Error('Admin access is required.');
     const currentIncidents = state.incidents.length > 0 ? state.incidents : state.reportData.allTickets;
@@ -293,212 +278,171 @@ export function MonthlyReportWorkflow({
     const calculated = calculateMonthlyReport(
       remainingIncidents,
       state.reportData.reportPeriod,
-      state.reportData.teamOrder
+      state.reportData.teamOrder,
+      toValidDate(state.reportData.generatedAt) ?? undefined
     );
     dispatch({
       type: 'DELETE_INCIDENT',
       incidents: remainingIncidents,
       data: { ...state.reportData, ...calculated, reportTitle: state.reportData.reportTitle },
     });
-    setSaveStatus('idle');
+    setSaved(false);
   }, [account, state.incidents, state.reportData]);
 
-  // Save and Publish to Live Dashboard
-  const handleSaveAndPublish = useCallback(async () => {
-    if (!state.reportData) return;
-    setSaveStatus('saving');
-    try {
-      const period = state.reportPeriod || state.reportData.reportPeriod || 'Monthly Period';
-      const title = state.reportData.reportTitle || `Monthly Overall Ticket Report - ${period}`;
-      const id = `monthly-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
+  const { archiveTarget, reportData, incidents } = state;
+  const handleSaveReport = useCallback(async (destination: MonthlyState['storageDestination']) => {
+    if (saving || !isAdmin(account) || !reportData) return;
+    setSaving(true);
+    setSaveError('');
+    setSaved(false);
+    const period = archiveTarget?.period ?? (reportData.reportPeriod || 'Monthly Period');
+    const title = archiveTarget?.title ?? (reportData.reportTitle || `Monthly Overall Ticket Report - ${period}`);
+    const id = archiveTarget?.id ?? `monthly-${period.toLowerCase().replace(/[^a-z0-9]/g, '-') || Date.now()}`;
+    const syncPublished = archiveTarget?.syncPublished ?? false;
 
-      if (state.storageDestination !== 'server') {
-        await saveReport({
-          id,
+    try {
+      let published: boolean;
+      if (destination !== 'server') {
+        const record = await saveReport({
+          id: destination === 'local' ? archiveTarget?.id : id,
           type: 'monthly',
           title,
           period,
           author: account.name,
-          reportData: state.reportData,
-          routedIncidents: state.incidents,
+          privateOnly: destination === 'local' && !syncPublished ? true : undefined,
+          reportData,
+          routedIncidents: incidents,
+          expectedSavedAt: archiveTarget?.savedAt,
+          monthlyPublication: destination === 'both' ? 'publish' : syncPublished ? 'update' : undefined,
         });
-      }
-
-      if (state.storageDestination !== 'local') {
-        const published = await persistServerMonthlyReport({
+        published = record.publication === 'updated';
+        dispatch({
+          type: 'SET_ARCHIVE_TARGET',
+          target: { id: record.id, title, period, savedAt: record.savedAt, syncPublished: syncPublished || published },
+        });
+        if (record.publication === 'failed') throw new Error('Saved to Archive. The public dashboard update failed. Try saving again.');
+      } else {
+        published = await persistServerMonthlyReport({
           id,
           title,
           period,
           savedBy: account.name,
           savedAt: new Date().toISOString(),
-          reportData: state.reportData,
-          routedIncidents: state.incidents,
+          reportData,
+          routedIncidents: incidents,
         });
-        if (!published) throw new Error(state.storageDestination === 'both'
-          ? 'Archived, but publication failed. Try saving again.'
-          : 'Could not publish the monthly report.');
+        if (!published) throw new Error('Could not publish the monthly report.');
       }
 
-      // 3. Notify real-time broadcast channel
-      try {
-        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-          const bc = new BroadcastChannel('smac_reports_sync');
-          bc.postMessage({ type: 'report_saved', reportType: 'monthly', id });
-          bc.close();
-        }
-      } catch { }
-
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 3500);
-    } catch (err) {
-      console.error('Error saving monthly report:', err);
-      dispatch({ type: 'SET_ERROR', error: err instanceof Error ? err.message : 'Could not save the monthly report.' });
-      setSaveStatus('idle');
+      if (published) {
+        try {
+          if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+            const bc = new BroadcastChannel('smac_report_updates');
+            bc.postMessage({ type: 'report_saved', reportType: 'monthly', id });
+            bc.close();
+          }
+        } catch { }
+      }
+      setSaved(destination !== 'server');
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Could not save the monthly report.');
+    } finally {
+      setSaving(false);
     }
-  }, [state.reportData, state.reportPeriod, state.storageDestination, state.incidents, account.name]);
+  }, [archiveTarget, reportData, incidents, saving, account]);
+
+  const resetReport = () => {
+    dispatch({ type: 'RESET' });
+    setSaved(false);
+    setSaveError('');
+  };
+
+  const showingReport = state.step === 'report' && Boolean(state.reportData);
+  const showWorkflow = !showingReport || state.rawData !== null;
 
   return (
-    <main className="app-main monthly-report-workflow">
-      <ReportWorkflowHeader
-        title="Monthly Overall Ticket Report"
-        fileName={state.fileName}
-        busy={state.isProcessing}
-        onBack={onBack}
-        onReset={() => dispatch({ type: 'RESET' })}
-      />
-      <Stepper
-        steps={STEPS}
-        currentStep={state.step}
-        onStepClick={handleStepClick}
-        busy={state.isProcessing}
-        availableSteps={state.validationSummary ? ['upload', 'validation'] : ['upload']}
-      />
-
-      {/* Error */}
+    <main className="app-main" data-report-setup={state.step === 'upload' || undefined}>
+      {showWorkflow && (
+        <>
+          <ReportWorkflowHeader
+            title="Generate Monthly Report"
+            fileName={state.fileName}
+            busy={state.isProcessing || saving}
+            onReset={resetReport}
+          />
+          <Stepper
+            steps={STEPS}
+            currentStep={state.step}
+            onStepClick={handleStepClick}
+            busy={state.isProcessing || saving}
+            availableSteps={state.validationSummary && reportPeriod ? ['upload', 'validation'] : ['upload']}
+          />
+        </>
+      )}
       {state.error && (
         <div className="error-banner report-workflow-error" role="alert">
           <span>{state.error}</span>
           <button type="button" aria-label="Dismiss error" onClick={() => dispatch({ type: 'SET_ERROR', error: null })}>✕</button>
         </div>
       )}
-
-      {/* Content */}
-      <div className="app-content">
-        {/* STEP 1: Upload */}
+      <div className={showingReport ? 'app-content report-results-content' : 'app-content'}>
         {state.step === 'upload' && (
-          <section className="report-setup" aria-labelledby="report-setup-title">
-            <h2 id="report-setup-title">Report setup</h2>
-            <div className="report-setup-fields">
-              <div className="report-setup-field">
-                <label htmlFor="monthly-period">
-                  Report month
-                </label>
-                <select
-                  id="monthly-period"
-                  value={state.reportPeriod}
-                  onChange={(e) => dispatch({ type: 'SET_PERIOD', period: e.target.value })}
-                >
-                  <option value="">Select month</option>
-                  {(() => {
-                    const opts: React.ReactNode[] = [];
-                    const now = new Date();
-                    for (let i = 0; i < 24; i++) {
-                      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                      opts.push(<option key={label} value={label}>{label}</option>);
-                    }
-                    return opts;
-                  })()}
-                </select>
-              </div>
-              <div className="report-setup-field">
-                <label htmlFor="storage-destination">
-                  Save report to
-                </label>
-                <select
-                  id="storage-destination"
-                  value={state.storageDestination}
-                  onChange={(e) =>
-                    dispatch({
-                      type: 'SET_STORAGE_DESTINATION',
-                      destination: e.target.value as 'both' | 'local' | 'server',
-                    })
-                  }
-                >
-                  <option value="both">Archive and publish</option>
-                  <option value="server">Publish to public dashboard</option>
-                  <option value="local">Private archive only</option>
-                </select>
-              </div>
+          <ReportSetup onFileSelected={handleFileSelected} isProcessing={state.isProcessing}
+            disabledReason={reportPeriod ? undefined : 'Select the month and year to upload.'}>
+            <MonthlyPeriodPicker value={state.reportPeriod} disabled={state.isProcessing}
+              onChange={period => dispatch({ type: 'SET_PERIOD', period })} />
+            <div className="report-setup-field">
+              <label htmlFor="storage-destination">Save report to</label>
+              <select
+                id="storage-destination"
+                value={state.storageDestination}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'SET_STORAGE_DESTINATION',
+                    destination: e.target.value as 'both' | 'local' | 'server',
+                  })
+                }
+              >
+                <option value="both">Archive and publish</option>
+                <option value="server">Publish to public dashboard</option>
+                <option value="local">Private archive only</option>
+              </select>
             </div>
-            <FileUpload onFileSelected={handleFileSelected} isProcessing={state.isProcessing} />
-          </section>
+          </ReportSetup>
         )}
-
-        {/* STEP 2: Validation */}
         {state.step === 'validation' && state.validationSummary && (
           <ValidationSummaryView
             summary={state.validationSummary}
-            isMonthly={true}
             onProceed={handleGenerateReport}
             onBack={() => dispatch({ type: 'SET_STEP', step: 'upload' })}
-            reportPeriod={state.reportPeriod}
-            onPeriodChange={(period) => dispatch({ type: 'SET_PERIOD', period })}
           />
         )}
-
-        {/* STEP 3: Report */}
         {state.step === 'report' && state.reportData && (
-          <div className="report-step">
-            <div className="report-actions-bar">
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    if (!state.rawData) {
-                      onBack();
-                    } else {
-                      dispatch({ type: 'SET_STEP', step: 'validation' });
-                    }
-                  }}
-                >
-                  {state.rawData ? '← Back' : '← Back to Dashboard'}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => dispatch({ type: 'RESET' })}
-                  title="Create a new report from scratch"
-                >
-                  + New Report
-                </button>
-              </div>
-              {isAdmin(account) && (
-                <ExportDropdown
-                  incidents={state.incidents}
-                  reportData={state.reportData}
-                  baseFilename="SMAC_Monthly_Incident_Report"
-                  targetElementId="monthly-report-canvas"
-                />
-              )}
-            </div>
-
-            <MonthlyReportTable
-              data={state.reportData}
-              onCellClick={handleCellClick}
-              routedIncidents={state.incidents}
-              isAdmin={isAdmin(account)}
-              onUpdateIncident={handleUpdateIncident}
-              onAddAcceptableFR={handleAddAcceptableFR}
-              onDeleteIncident={handleDeleteIncident}
-              onArchiveReport={handleSaveAndPublish}
-              onSaveReport={handleSaveAndPublish}
-              isArchived={saveStatus === 'saved'}
-            />
-          </div>
+          <MonthlyReportTable
+            data={state.reportData}
+            headingLevel={showWorkflow ? 2 : 1}
+            onCellClick={handleCellClick}
+            routedIncidents={state.incidents}
+            isAdmin={isAdmin(account)}
+            onUpdateIncident={handleUpdateIncident}
+            onAddAcceptableFR={handleAddAcceptableFR}
+            onDeleteIncident={handleDeleteIncident}
+            onSaveReport={() => handleSaveReport(state.storageDestination)}
+            onSaveChanges={() => handleSaveReport(state.storageDestination)}
+            isArchived={saved}
+            saving={saving}
+            saveError={saveError}
+            exportAction={
+              <ReportExportButton
+                account={account}
+                incidents={state.incidents}
+                reportData={state.reportData}
+                baseFilename="SMAC_Monthly_Incident_Report"
+              />
+            }
+          />
         )}
       </div>
-
-      {/* Detail Modal */}
       <DetailModal
         isOpen={state.detailModal.isOpen}
         title={state.detailModal.title}

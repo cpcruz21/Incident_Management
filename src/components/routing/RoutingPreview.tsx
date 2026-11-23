@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useMemo } from 'react';
 import type { RoutingSummary } from '@/types/routing';
@@ -48,8 +48,6 @@ export function RoutingPreview({ summary, onProceed, onBack }: RoutingPreviewPro
           </div>
         </div>
       </div>
-
-      {/* Stats Cards */}
       <div className="routing-stats">
         <div className="stat-card stat-total">
           <span className="stat-value">{summary.totalRecords}</span>
@@ -64,8 +62,6 @@ export function RoutingPreview({ summary, onProceed, onBack }: RoutingPreviewPro
           <span className="stat-label">Kept in Source Team</span>
         </div>
       </div>
-
-      {/* Controls Bar */}
       <div
         className="routing-filters"
         style={{
@@ -118,8 +114,6 @@ export function RoutingPreview({ summary, onProceed, onBack }: RoutingPreviewPro
           />
         </div>
       </div>
-
-      {/* Routing Table */}
       <div className="routing-table-wrapper" style={{ marginTop: '1rem' }}>
         <table className="routing-table">
           <thead>
@@ -176,8 +170,6 @@ export function RoutingPreview({ summary, onProceed, onBack }: RoutingPreviewPro
           </tbody>
         </table>
       </div>
-
-      {/* Actions */}
       <div className="routing-actions" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between' }}>
         <button className="btn btn-secondary" onClick={onBack}>
           ← Back to Validation

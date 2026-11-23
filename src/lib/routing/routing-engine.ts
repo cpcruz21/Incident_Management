@@ -1,7 +1,6 @@
-import type { Incident } from '@/types/incident';
+﻿import type { Incident } from '@/types/incident';
 import type { RoutingRule, RoutingConfig, RoutingResult, RoutingSummary } from '@/types/routing';
 
-// Technician
 export const REPORT_TEAMS = [
   'ECS HR',
   'ECS ADMIN',
@@ -11,7 +10,26 @@ export const REPORT_TEAMS = [
   'ECS ISMS Support',
 ];
 
-// Default routing rules — ordered by priority (lower number = checked first)
+const ECS_HRAD_POS_OPERATIONS_RULE: RoutingRule = {
+  id: 'ecs-hrad-pos-operations-to-hr',
+  name: 'ECS HRAD POS Operations → ECS HR',
+  description: 'POS Services Operations incidents handled by ECS HRAD are assigned to ECS HR',
+  priority: 9,
+  conditions: {
+    sourceTeams: ['ECS HRAD'],
+    categories: ['Operational Issues'],
+    categoryMatch: 'exact',
+    subCategories: [
+      'POS Services Operation',
+      'POS Services Operations',
+      'POS Services Operation Issues',
+      'POS Services Operations Issues',
+    ],
+  },
+  assignedTeam: 'ECS HR',
+  enabled: true,
+};
+
 export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
   {
     id: 'facility-to-admin',
@@ -111,9 +129,9 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
     assignedTeam: 'ECS PSD',
     enabled: true,
   },
+  ECS_HRAD_POS_OPERATIONS_RULE,
 ];
 
-// Technician 
 export const DEFAULT_TEAM_MAPPING: Record<string, string> = {
   'ISS Binondo': 'ECS ISS',
   'ISS MT': 'ECS ISS',
@@ -130,14 +148,22 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   reportTeams: REPORT_TEAMS,
 };
 
-function matchesRule(incident: Incident, rule: RoutingRule): boolean {
+function normalizeRoutingValue(value?: string): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function matchesRule(
+  incident: Pick<Incident, 'sourceTeam' | 'category' | 'subCategory'>,
+  rule: RoutingRule
+): boolean {
   if (!rule.enabled) return false;
 
   const { conditions } = rule;
 
   if (conditions.sourceTeams && conditions.sourceTeams.length > 0) {
+    const sourceTeam = normalizeRoutingValue(incident.sourceTeam);
     const sourceMatch = conditions.sourceTeams.some(
-      (team) => team.toLowerCase() === incident.sourceTeam.toLowerCase()
+      (team) => normalizeRoutingValue(team) === sourceTeam
     );
     if (!sourceMatch) return false;
   }
@@ -151,9 +177,9 @@ function matchesRule(incident: Incident, rule: RoutingRule): boolean {
   }
 
   if (conditions.categories && conditions.categories.length > 0) {
-    const categoryLower = incident.category.toLowerCase();
+    const categoryLower = normalizeRoutingValue(incident.category);
     const categoryMatch = conditions.categories.some((cat) => {
-      const catLower = cat.toLowerCase();
+      const catLower = normalizeRoutingValue(cat);
       if (conditions.categoryMatch === 'exact') {
         return categoryLower === catLower;
       }
@@ -162,7 +188,19 @@ function matchesRule(incident: Incident, rule: RoutingRule): boolean {
     if (!categoryMatch) return false;
   }
 
+  if (conditions.subCategories?.length) {
+    const subCategory = normalizeRoutingValue(incident.subCategory);
+    if (!conditions.subCategories.some((name) => normalizeRoutingValue(name) === subCategory)) return false;
+  }
+
   return true;
+}
+
+export function matchesEcsHradPosOperations(
+  { category, subCategory }: Pick<Incident, 'category' | 'subCategory'>,
+  technician: string
+): boolean {
+  return matchesRule({ category, subCategory, sourceTeam: technician }, ECS_HRAD_POS_OPERATIONS_RULE);
 }
 
 export function resolveAssignedTeam(

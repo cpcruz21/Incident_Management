@@ -1,5 +1,4 @@
-// Server only: OAuth secrets and access tokens must never enter client components.
-import { sdpDisplayId } from '@/lib/sdp/request-id';
+﻿import { sdpDisplayId } from '@/lib/sdp/request-id';
 
 export class SdpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -97,7 +96,6 @@ async function lookup(displayId: string, retry = true): Promise<string> {
   return matches[0].id;
 }
 
-/** Resolve the export's display ID and redirect to the tenant's normal signed-in UI. */
 export async function resolveSdpRequest(requestId: string): Promise<string> {
   const displayId = sdpDisplayId(requestId);
   if (!displayId) throw new SdpError(400, 'Enter a valid Request ID, such as IR-53184.');

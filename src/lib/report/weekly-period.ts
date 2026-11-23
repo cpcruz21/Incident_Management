@@ -1,4 +1,4 @@
-const MONTHS = [
+﻿const MONTHS = [
   'january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december',
 ];
@@ -28,11 +28,19 @@ export function formatWeeklyReportRange(period = ''): { from?: string; to?: stri
   const weekOf = /^week of\s+(.+)$/i.exec(label);
   if (weekOf) {
     const end = parseCalendarDate(weekOf[1]);
-    if (!end) return {};
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - 7);
-    // The report strip uses the same weekly cutoff as the Aging report.
-    return { from: `${formatDate(start)} 13:00`, to: `${formatDate(end)} 13:00` };
+    if (end) {
+      const start = new Date(end);
+      start.setUTCDate(start.getUTCDate() - 7);
+      return { from: `${formatDate(start)} 13:00`, to: `${formatDate(end)} 13:00` };
+    }
+  }
+
+  const compact = /\b([a-z]+)\s+(\d{1,2})\s*[-–—]\s*(\d{1,2}),?\s+(\d{4})$/i.exec(label);
+  if (compact) {
+    const [, month, firstDay, lastDay, year] = compact;
+    const start = parseCalendarDate(`${month} ${firstDay}, ${year}`);
+    const end = parseCalendarDate(`${month} ${lastDay}, ${year}`);
+    return start && end && start <= end ? { from: formatDate(start), to: formatDate(end) } : {};
   }
 
   const parts = label.split(/\s+-\s+|\s*[–—]\s*/);

@@ -1,5 +1,4 @@
-
-import * as XLSX from 'xlsx';
+﻿import * as XLSX from 'xlsx';
 import type { RawIncidentRow } from '@/types/incident';
 
 export interface ParseResult {
@@ -11,7 +10,13 @@ export interface ParseResult {
   errors: string[];
 }
 
-export async function parseFile(file: File): Promise<ParseResult> {
+function incidentHeader(row: string[]) {
+  const text = row.join(' ').toLowerCase();
+  return (text.includes('request') || text.includes('id')) &&
+    (text.includes('technician') || text.includes('category') || text.includes('priority'));
+}
+
+export async function parseFile(file: File, isHeader = incidentHeader): Promise<ParseResult> {
   const errors: string[] = [];
 
   try {
@@ -22,7 +27,6 @@ export async function parseFile(file: File): Promise<ParseResult> {
       dateNF: 'yyyy-mm-dd hh:mm:ss',
     });
 
-    // Use the first sheet
     const sheetName = workbook.SheetNames[0];
     if (!sheetName) {
       return {
@@ -37,22 +41,13 @@ export async function parseFile(file: File): Promise<ParseResult> {
 
     const sheet = workbook.Sheets[sheetName];
 
-    // Find the real header row by scanning the first 20 rows for expected column names
-    const rawArray = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
-    let headerRowIndex = 0;
-
-    for (let i = 0; i < Math.min(rawArray.length, 20); i++) {
-      const row = rawArray[i];
-      if (Array.isArray(row)) {
-        const rowStr = row.join(' ').toLowerCase();
-        // Look for common ServiceDesk Plus headers
-        if ((rowStr.includes('request') || rowStr.includes('id')) &&
-          (rowStr.includes('technician') || rowStr.includes('category') || rowStr.includes('priority'))) {
-          headerRowIndex = i;
-          break;
-        }
-      }
-    }
+    const bounds = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+    const sample = XLSX.utils.sheet_to_json<string[]>(sheet, {
+      header: 1,
+      defval: '',
+      range: { s: bounds.s, e: { ...bounds.e, r: Math.min(bounds.e.r, bounds.s.r + 19) } },
+    });
+    const headerRowIndex = bounds.s.r + Math.max(0, sample.findIndex(row => isHeader(row.map(String))));
 
     const jsonData = XLSX.utils.sheet_to_json<RawIncidentRow>(sheet, {
       defval: '',
@@ -71,7 +66,6 @@ export async function parseFile(file: File): Promise<ParseResult> {
       };
     }
 
-    // Extract column names from the first row
     const columns = Object.keys(jsonData[0]);
 
     return {
@@ -95,9 +89,6 @@ export async function parseFile(file: File): Promise<ParseResult> {
   }
 }
 
-/**
- * Parse raw text (CSV/TSV pasted data) into raw row data
- */
 export function parseText(text: string): ParseResult {
   try {
     const workbook = XLSX.read(text, {
@@ -119,7 +110,6 @@ export function parseText(text: string): ParseResult {
 
     const sheet = workbook.Sheets[sheetName];
 
-    // Find the real header row by scanning the first 20 rows for expected column names
     const rawArray = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
     let headerRowIndex = 0;
 
@@ -127,7 +117,6 @@ export function parseText(text: string): ParseResult {
       const row = rawArray[i];
       if (Array.isArray(row)) {
         const rowStr = row.join(' ').toLowerCase();
-        // Look for common ServiceDesk Plus headers
         if ((rowStr.includes('request') || rowStr.includes('id')) &&
           (rowStr.includes('technician') || rowStr.includes('category') || rowStr.includes('priority'))) {
           headerRowIndex = i;

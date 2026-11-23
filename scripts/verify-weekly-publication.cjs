@@ -11,6 +11,7 @@ let denied = true;
 auth.requireAdmin = () => denied ? NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 }) : null;
 auth.getAdminSession = () => ({ id: 'test-admin', name: 'Test Admin', role: 'admin', username: 'test-admin' });
 const route = require('../src/app/api/reports/weekly/route.ts');
+const archiveRoute = require('../src/app/api/reports/archive/route.ts');
 const { isWeeklyReportData, toPublicWeeklyReport } = require('../src/lib/report/weekly-publication.ts');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
@@ -39,7 +40,9 @@ const request = body => new Request('http://localhost:3000/api/reports/weekly', 
 
 async function verify() {
   fs.mkdirSync(path.join(process.env.SMAC_DATA_DIR, 'weekly'));
-  fs.writeFileSync(path.join(process.env.SMAC_DATA_DIR, 'weekly', 'archive.json'), JSON.stringify([{ ...payload, id: 'private-only' }]));
+  fs.writeFileSync(path.join(process.env.SMAC_DATA_DIR, 'weekly', 'archive.json'), JSON.stringify([{
+    ...payload, id: 'private-only', type: 'weekly', savedAt: reportData.generatedAt, savedAtFormatted: 'Fixture date',
+  }]));
   const initial = route.GET();
   assert.equal(initial.headers.get('cache-control'), 'no-store');
   assert.deepEqual((await initial.json()).reports, []);
@@ -74,10 +77,11 @@ async function verify() {
 
   const onCellClick = () => {};
   const admin = renderToStaticMarkup(React.createElement(SLAReportTable, { data: failedData, onCellClick }));
-  assert.match(admin, /Publish to dashboard/);
+  assert.match(admin, /Archive report/);
+  assert.doesNotMatch(admin, /Publish to dashboard|class="weekly-module-period"/);
   assert.match(admin, /aria-label="ECS SDS — First Response Passed, 1 incident"/);
   const guest = renderToStaticMarkup(React.createElement(SLAReportTable, { data: published, onCellClick, isPublicView: true }));
-  assert.doesNotMatch(guest, /Publish to dashboard|Archive Report/);
+  assert.doesNotMatch(guest, /Publish to dashboard|Archive report/i);
   assert.match(guest, /Weekly SLA Report/);
   assert.match(guest, /class="weekly-module-period">Week 1/);
   assert.doesNotMatch(guest, /class="weekly-report-banner"/);
@@ -118,13 +122,52 @@ async function verify() {
   assert.match(summary(empty), /weekly-sla-summary-rate">N\/A/);
   assert.doesNotMatch(summary(empty), /NaN|Infinity/);
   const dashboard = renderToStaticMarkup(React.createElement(PublicDashboard));
-  const labels = ['Dashboard', 'Weekly SLA', 'Aging', 'Monthly'].map(label => dashboard.indexOf(`<span>${label}</span>`));
-  assert.ok(labels.every(index => index >= 0));
-  assert.deepEqual(labels, [...labels].sort((a, b) => a - b));
+  assert.match(dashboard, /<header class="live-header">/);
+  const nav = dashboard.match(/<nav class="live-navigation"[^>]*>.*?<\/nav>/)?.[0];
+  assert.ok(nav, 'Report navigation belongs in the fixed header');
+  assert.match(nav, /Dashboard.*Weekly SLA.*Aging.*Monthly/);
+  assert.doesNotMatch(nav, /<select/);
   assert.doesNotMatch(dashboard, /Export PNG/);
+
+  const october = 'Week of October 19, 2026';
+  const november = 'Week of November 23, 2026';
+  const octoberData = { ...reportData, reportPeriod: october, generatedAt: '2026-10-19T05:00:00.000Z' };
+  const novemberData = { ...reportData, reportPeriod: november, generatedAt: '2026-11-23T05:00:00.000Z' };
+  assert.equal((await route.POST(request({ ...payload, id: 'live-november', period: november, reportData: novemberData }))).status, 200);
+  assert.equal((await route.POST(request({ ...payload, id: 'live-october', period: october, reportData: octoberData }))).status, 200);
+
+  const archiveEntry = {
+    id: 'archive-october', type: 'weekly', title: 'October weekly', period: october,
+    savedAt: '2026-10-19T05:00:00.000Z', savedAtFormatted: 'October 19, 2026',
+    reportData: octoberData, routedIncidents: payload.routedIncidents,
+  };
+  assert.equal((await archiveRoute.POST(request({ reports: [archiveEntry] }))).status, 204);
+  const editedEntry = {
+    ...archiveEntry,
+    savedAt: '2026-11-23T06:00:00.000Z',
+    savedAtFormatted: 'November 23, 2026',
+    reportData: { ...failedData, reportPeriod: october, generatedAt: octoberData.generatedAt },
+  };
+  const save = { reports: [editedEntry], expectedSavedAt: archiveEntry.savedAt, weeklyPublication: true };
+  const rejected = await archiveRoute.POST(request({ ...save, importLegacy: true }));
+  assert.equal(rejected.status, 400);
+  const synced = await archiveRoute.POST(request(save));
+  assert.deepEqual(await synced.json(), { publication: 'updated' });
+  assert.equal((await archiveRoute.POST(request(save))).status, 409);
+
+  const afterSync = (await route.GET().json()).reports;
+  const dates = afterSync.filter(report => report.period === november || report.period === october);
+  assert.deepEqual(dates.map(report => [report.id, report.period]), [['live-november', november], ['live-october', october]]);
+  assert.equal(dates[1].reportData.generatedAt, octoberData.generatedAt);
+  assert.equal(dates[1].reportData.currentWeek.firstResponseTotal.total, 3);
+  assert.doesNotMatch(JSON.stringify(dates[1]), /PRIVATE-INCIDENT|PRIVATE-DESCRIPTION|routedIncidents|savedBy/);
+  const octoberArchive = (await archiveRoute.GET().json()).reports.find(report => report.id === archiveEntry.id);
+  assert.equal(octoberArchive.period, october);
+  assert.equal(octoberArchive.savedAt, editedEntry.savedAt);
+  assert.equal(octoberArchive.routedIncidents[0].requestId, 'PRIVATE-INCIDENT');
 
   const archived = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/weekly/archive.json'), 'utf8'));
   for (const record of archived) assert.ok(isWeeklyReportData(record.reportData), `Stored weekly report ${record.period} must be publishable`);
-  console.log('Weekly publication checks passed: archive isolation, authentication, period history, ticket drill-downs, SDP links, and public controls.');
+  console.log('Weekly publication checks passed: archive isolation, authentication, period history, same-date archive synchronization, stale-save rejection, and public controls.');
 }
 verify().catch(error => { console.error(error); process.exitCode = 1; });

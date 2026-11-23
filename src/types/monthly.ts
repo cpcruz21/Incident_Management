@@ -1,10 +1,8 @@
-/** Monthly Report – Type definitions */
+﻿import type { Incident } from './incident';
+import type { SLAReport } from './sla';
+import { getTechnician } from '@/lib/monthly/technician';
+import { isMonthlyClosedTicket } from '@/lib/monthly/ticket-status';
 
-import type { Incident } from './incident';
-import type { SLAReport, TeamSLAResult } from './sla';
-
-// ─── Column sets ──────────────────────────────────────────────
-/** The full column list for the "All Tickets" sheet */
 export const ALL_TICKETS_COLUMNS = [
   'RequestID',
   'Technician',
@@ -47,7 +45,6 @@ export const ALL_TICKETS_COLUMNS = [
   'Remarks',
 ] as const;
 
-/** The column list for the "Closed Tickets" sheet */
 export const CLOSED_TICKETS_COLUMNS = [
   'RequestID',
   'Technician',
@@ -88,7 +85,6 @@ export const CLOSED_TICKETS_COLUMNS = [
   'Remarks',
 ] as const;
 
-/** Acceptable First Response specific columns */
 export const FIRST_RESPONSE_COLUMNS = [
   'Request ID',
   'Technician',
@@ -101,11 +97,20 @@ export const FIRST_RESPONSE_COLUMNS = [
   'Did it exceed 24 hrs ? FALSE',
 ] as const;
 
-/** Helper: extract column value from an incident */
-export function getIncidentMonthlyValue(inc: Incident, colName: string): string {
-  const lc = colName.toLowerCase().replace(/[\r\n\s:?_]/g, '');
+function monthlyColumnKey(name: string): string {
+  return name.toLowerCase().replace(/[\r\n\s:?_]/g, '');
+}
 
-  // Special overrides for First Response metrics
+export function isRevisedRootCauseColumn(name: string): boolean {
+  const key = monthlyColumnKey(name);
+  return key === 'revisedrootcausetype' || key === 'revisedidentifiedrootcause';
+}
+
+export function getIncidentMonthlyValue(inc: Incident, colName: string): string {
+  const lc = monthlyColumnKey(colName);
+  if (lc === 'technician') return getTechnician(inc);
+  if (isRevisedRootCauseColumn(colName) && !isMonthlyClosedTicket(inc)) return '';
+
   if (lc === 'firstresponseoverduestatus') {
     if (inc.rawData) {
       for (const [k, v] of Object.entries(inc.rawData)) {
@@ -137,11 +142,10 @@ export function getIncidentMonthlyValue(inc: Incident, colName: string): string 
       return String(inc.rawData[colName]);
     }
     for (const [k, v] of Object.entries(inc.rawData)) {
-      if (k.toLowerCase().replace(/[\r\n\s:?_]/g, '') === lc) {
+      if (monthlyColumnKey(k) === lc) {
         return v !== undefined && v !== null ? String(v) : '';
       }
     }
-    // Match common column aliases
     if (lc === 'subcat') {
       const v = inc.rawData['Sub Category'] || inc.rawData['SubCategory'] || inc.rawData['Sub-Category'];
       if (v !== undefined && v !== null) return String(v);
@@ -159,7 +163,6 @@ export function getIncidentMonthlyValue(inc: Incident, colName: string): string 
   const key = lc;
   switch (key) {
     case 'requestid': return inc.requestId || '';
-    case 'technician': return inc.assignedTeam || inc.sourceTeam || '';
     case 'category': return inc.category || '';
     case 'subcat':
     case 'subcategory': return inc.subCategory || '';
@@ -180,22 +183,18 @@ export function getIncidentMonthlyValue(inc: Incident, colName: string): string 
   }
 }
 
-// ─── Monthly report data model ───────────────────────────────
 
-/** KPI target row shown in the SLA summary */
 export interface MonthlyKPI {
-  label: string;          // e.g. "Target Response Time"
-  targetPercent: number;  // e.g. 85
+  label: string;
+  targetPercent: number;
   countOfPassed: number;
   totalIRs: number;
   percentageResult: number;
 }
 
-/** SLA per-technician row */
 export interface MonthlyTechnicianSLA {
   technician: string;
 
-  // First Response
   frTotal: number;
   frFailed: number;
   frPassed: number;
@@ -204,7 +203,6 @@ export interface MonthlyTechnicianSLA {
   frPassedIds: string[];
   frTotalIds: string[];
 
-  // Resolution Time
   rtTotal: number;
   rtFailed: number;
   rtPassed: number;
@@ -214,48 +212,36 @@ export interface MonthlyTechnicianSLA {
   rtTotalIds: string[];
 }
 
-/** Root cause breakdown row */
 export interface RootCauseRow {
   rootCause: string;
   count: number;
   incidentIds: string[];
 }
 
-/** Full monthly report data */
 export interface MonthlyReportData {
   reportTitle: string;
   reportPeriod: string;
   generatedAt: Date;
 
-  /** All tickets in the period */
   allTickets: Incident[];
 
-  /** Only closed/resolved tickets */
   closedTickets: Incident[];
 
-  /** KPI summary */
   kpis: MonthlyKPI[];
 
-  /** Per-technician SLA breakdown */
   technicianSLA: MonthlyTechnicianSLA[];
 
-  /** Technician totals row */
   technicianTotals: MonthlyTechnicianSLA;
 
-  /** Root cause breakdown */
   rootCauses: RootCauseRow[];
 
-  /** Underlying SLA report (re-use existing calculator) */
   slaReport: SLAReport;
 
-  /** Generated remarks text */
   remarks: string;
 
-  /** Ordered list of teams */
   teamOrder: string[];
 }
 
-// ──────── Root Cause Factors & Identified Root Causes ──────────────────────────
 
 export const ROOT_CAUSE_FACTORS: Record<string, string[]> = {
   'Human Factors': [
@@ -304,7 +290,6 @@ export const ROOT_CAUSE_FACTORS: Record<string, string[]> = {
 
 export const ROOT_CAUSE_TYPES = Object.keys(ROOT_CAUSE_FACTORS);
 
-/** Find the parent Root Cause Type for a given Identified Root Cause string */
 export function findRootCauseType(identifiedCause: string): string | undefined {
   if (!identifiedCause) return undefined;
   const clean = identifiedCause.trim().toLowerCase();

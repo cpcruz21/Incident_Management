@@ -1,10 +1,7 @@
+﻿import type { PreviousWeekSLA } from './sla';
 
-import type { PreviousWeekSLA } from './sla';
-
-/** Aging time bucket identifiers (from oldest to newest) */
 export type AgingBucket = '>1month' | '2-4weeks' | '1-2weeks' | '4-6days' | '1-3days' | 'sameday';
 
-/** Human-readable labels for each aging bucket */
 export const AGING_BUCKET_LABELS: Record<AgingBucket, string> = {
   '>1month': '> 1 month',
   '2-4weeks': '2 – 4 weeks',
@@ -23,20 +20,14 @@ export const AGING_BUCKET_ORDER: AgingBucket[] = [
   'sameday',
 ];
 
-/** Aging distribution for a single team */
 export interface TeamAgingResult {
   teamName: string;
-  /** Count per aging bucket */
   buckets: Record<AgingBucket, number>;
-  /** Incident IDs per bucket (for drill-down) */
   bucketIncidentIds: Record<AgingBucket, string[]>;
-  /** Total aging IRs for this team */
   totalAging: number;
-  /** All incident IDs included */
   incidentIds: string[];
 }
 
-/** SLA row for the aging SLA compliance table */
 export interface AgingSLARow {
   teamName: string;
   totalIRs: number;
@@ -54,11 +45,9 @@ export interface AgingSLARow {
     failedIds: string[];
     passedIds: string[];
   };
-  /** All incident IDs for this team */
   incidentIds: string[];
 }
 
-/** SLA totals for the bottom row */
 export interface AgingSLATotals {
   totalIRs: number;
   firstResponse: {
@@ -73,17 +62,14 @@ export interface AgingSLATotals {
   };
 }
 
-/** Previous week aging totals (per team) */
 export interface PreviousWeekAging {
-  teamTotals: Record<string, number | null>; // teamName → total aging count or null
+  teamTotals: Record<string, number | null>;
   grandTotal: number | null;
-  /** Optional for compatibility with reports saved before SLA comparisons were added. */
   sla?: PreviousWeekSLA;
   sourcePeriod?: string;
   sourceReportId?: string;
 }
 
-/** A single row in the Remarks Table */
 export interface AgingRemarksRow {
   requestId: string;
   department: string;
@@ -98,7 +84,6 @@ export interface AgingRemarksRow {
   isUnsaved?: boolean;
 }
 
-/** A high-impact incident recorded in the aging report */
 export interface HighImpactIncident {
   requestId: string;
   department: string;
@@ -114,7 +99,6 @@ export interface HighImpactIncident {
   addedAt?: string;
 }
 
-/** Remarks Table complete metadata and rows */
 export interface RemarksTableData {
   createdOn: string;
   periodFrom: string;
@@ -123,33 +107,24 @@ export interface RemarksTableData {
   rows: AgingRemarksRow[];
 }
 
-/** Complete Aging Report data combining all tables */
 export interface AgingReportData {
-  /** Stable identity: creating another report must not replace this snapshot. */
   reportId?: string;
   reportTitle: string;
   reportPeriod: string;
   generatedAt: Date;
-  /** Timestamp used for all aging days, buckets, and timestamp-based SLA fallbacks. */
   asOf?: Date;
 
-  /** SLA compliance table data */
   slaRows: AgingSLARow[];
   slaTotals: AgingSLATotals;
 
-  /** Aging distribution table data */
   agingRows: TeamAgingResult[];
   agingGrandTotal: number;
 
-  /** Previous week totals for comparison */
   previousWeek: PreviousWeekAging;
 
-  /** Remarks Table data for all open aging incidents */
   remarksTable?: RemarksTableData;
 
-  /** High impact incidents designated by admin */
   highImpactIncidents?: HighImpactIncident[];
 
-  /** Ordered list of teams */
   teamOrder: string[];
 }

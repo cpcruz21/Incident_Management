@@ -1,6 +1,5 @@
-import type { MonthlyKPI, MonthlyTechnicianSLA } from '@/types/monthly';
+﻿import type { MonthlyKPI, MonthlyTechnicianSLA } from '@/types/monthly';
 
-/** Explain the current month's results without assuming a previous-month trend. */
 export function generateMonthlyRemarks(
   kpis: MonthlyKPI[],
   rows: MonthlyTechnicianSLA[],
