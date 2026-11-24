@@ -33,7 +33,7 @@ echo =====================================================================
 echo   DASHBOARD READY FOR LOCAL NETWORK (LAN - NO VPN NEEDED)
 echo =====================================================================
 echo.
-powershell -NoProfile -Command "Write-Host 'Server Local IP addresses:'; (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress | ForEach-Object { Write-Host '  --> http://' $_ ':3000/public-dashboard' -ForegroundColor Green }"
+powershell -NoProfile -Command "Write-Host 'Server Local IP addresses:'; (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress | ForEach-Object { Write-Host '  --> http://' $_ ':3100/public-dashboard' -ForegroundColor Green }"
 echo.
 echo Press Ctrl+C in this window to stop the server.
 echo =====================================================================
