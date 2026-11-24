@@ -2,7 +2,9 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const username = (process.argv[2] || 'smac-admin').toLowerCase();
+const isReset = process.argv.includes('--reset') || process.argv.includes('-r');
+const rawUsername = process.argv.filter(arg => !arg.startsWith('-'))[2] || 'smac-admin';
+const username = rawUsername.toLowerCase();
 if (!/^[a-z0-9._-]{3,64}$/.test(username)) {
   throw new Error('Use 3 to 64 letters, numbers, periods, underscores or hyphens.');
 }
@@ -19,10 +21,10 @@ try {
   writeFileSync(accountFile, JSON.stringify({
     id: 'super-admin', name: 'SMAC Admin', role: 'super-admin',
     username, salt, hash, sessionKey: randomBytes(32).toString('hex'),
-  }), { flag: 'wx', mode: 0o600 });
+  }), { flag: isReset ? 'w' : 'wx', mode: 0o600 });
 } catch (error) {
   if (error.code !== 'EEXIST') throw error;
-  console.error('The super admin account already exists. Use User Management to change its password.');
+  console.error('The super admin account already exists. Use User Management or run `npm run reset:superadmin` to reset its password.');
   process.exit(1);
 }
-console.log(`Username: ${username}\nGenerated password: ${password}`);
+console.log(`[Super Admin ${isReset ? 'Password Reset' : 'Created'}]\nUsername: ${username}\nGenerated password: ${password}`);

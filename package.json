@@ -8,7 +8,8 @@
     "start": "next start -H 0.0.0.0 -p 3000",
     "start:lan": "next start -H 0.0.0.0 -p 3000",
     "lint": "next lint",
-    "setup:admin": "node scripts/setup-admin.mjs"
+    "setup:admin": "node scripts/setup-admin.mjs",
+    "reset:superadmin": "node scripts/setup-admin.mjs --reset"
   },
   "dependencies": {
     "html-to-image": "^1.11.11",

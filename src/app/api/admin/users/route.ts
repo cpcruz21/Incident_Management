@@ -49,7 +49,7 @@ export async function PATCH(request: Request) {
   }
   const account = listAccounts().find(item => item.id === body.id);
   if (!account) return NextResponse.json({ error: 'The account no longer exists.' }, { status: 404 });
-  if (account.role !== 'admin') return NextResponse.json({ error: 'Use your own account settings to change the super-admin password.' }, { status: 403 });
+  if (account.role !== 'admin' && account.role !== 'super-admin') return NextResponse.json({ error: 'Invalid account role.' }, { status: 403 });
   const credentials = getCredentials(account.username);
   if (!credentials) return NextResponse.json({ error: 'The account no longer exists.' }, { status: 404 });
   const updated = await changePassword(credentials, body.password);

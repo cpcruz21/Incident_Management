@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { CheckCircle2, Eye, EyeOff, Loader2, Search } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Loader2, RefreshCw, Search } from 'lucide-react';
 import type { Account } from '@/lib/auth';
 import { accountFormErrors, accountPasswordErrors } from '@/lib/users/account-form';
 import { MIN_PASSWORD_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/users/password-policy';
@@ -11,6 +11,9 @@ import './user-management-page.css';
 
 export function UserManagement({ account, personalOnly = false }: { account: Account; personalOnly?: boolean }) {
   const isSuperAdmin = account.role === 'super-admin';
+  const [personalSelected, setPersonalSelected] = useState<{ account: Account; action: 'password' | 'delete' } | null>(null);
+  const [personalMessage, setPersonalMessage] = useState('');
+
   return (
     <div className="users-workspace users-management">
       <header className="users-page-header">
@@ -25,10 +28,35 @@ export function UserManagement({ account, personalOnly = false }: { account: Acc
             <div><dt>Name</dt><dd>{account.name}</dd></div>
             <div><dt>Username</dt><dd>{account.username}</dd></div>
             <div><dt>Role</dt><dd>{isSuperAdmin ? 'Super administrator' : 'Administrator'}</dd></div>
+            {isSuperAdmin && (
+              <div style={{ marginTop: '14px' }}>
+                <button
+                  type="button"
+                  className="admin-secondary"
+                  onClick={() => {
+                    setPersonalMessage('');
+                    setPersonalSelected({ account, action: 'password' });
+                  }}
+                >
+                  <RefreshCw size={14} aria-hidden="true" /> Reset superadmin password
+                </button>
+                {personalMessage && <p className="users-account-message" role="status" style={{ padding: '8px 0 0' }}>{personalMessage}</p>}
+              </div>
+            )}
           </dl>
           <PasswordForm />
         </div>
       </section>}
+      {personalSelected && (
+        <AccountActionDialog
+          account={personalSelected.account}
+          action={personalSelected.action}
+          onClose={() => setPersonalSelected(null)}
+          onUpdated={() => {
+            setPersonalMessage('Superadmin password reset successfully.');
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -122,7 +150,34 @@ function AdminAccounts({ currentAccount }: { currentAccount: Account }) {
             <td>{item.name}{item.id === currentAccount.id && <span className="users-current"> (you)</span>}</td>
             <td>{item.username}</td>
             <td>{item.role === 'super-admin' ? 'Super admin' : 'Admin'}</td>
-            <td>{item.role === 'admin' ? <div className="users-table-actions"><button type="button" className="admin-text-button" aria-label={`Reset password for ${item.name}`} onClick={() => { setAccountMessage(''); setSelected({ account: item, action: 'password' }); }}>Reset password</button><button type="button" className="admin-text-button users-delete-action" aria-label={`Delete account for ${item.name}`} onClick={() => { setAccountMessage(''); setSelected({ account: item, action: 'delete' }); }}>Delete</button></div> : <span className="users-no-action">—</span>}</td>
+            <td>
+              <div className="users-table-actions">
+                <button
+                  type="button"
+                  className="admin-text-button"
+                  aria-label={`Reset password for ${item.name}`}
+                  onClick={() => {
+                    setAccountMessage('');
+                    setSelected({ account: item, action: 'password' });
+                  }}
+                >
+                  Reset password
+                </button>
+                {item.role === 'admin' ? (
+                  <button
+                    type="button"
+                    className="admin-text-button users-delete-action"
+                    aria-label={`Delete account for ${item.name}`}
+                    onClick={() => {
+                      setAccountMessage('');
+                      setSelected({ account: item, action: 'delete' });
+                    }}
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
+            </td>
           </tr>)}</tbody></table></div>}
           {!filtered.length && <div className="users-empty"><p>{query ? 'No accounts match your search.' : 'No accounts to display.'}</p>{query && <button type="button" className="admin-text-button" onClick={() => setSearch('')}>Clear search</button>}</div>}
         </>}
